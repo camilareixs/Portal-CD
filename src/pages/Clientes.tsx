@@ -9,32 +9,20 @@ type Cliente = {
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([])
-  
   const [nome, setNome] = useState("")
   const [cpf, setCpf] = useState("")
   const [celular, setCelular] = useState("")
 
   function cadastrar() {
-    if (!nome || !cpf) {
-      alert("Preencha nome e CPF 💛")
-      return
-    }
+    if (!nome || !cpf) return
 
     const existe = clientes.find(c => c.cpf === cpf)
+    if (existe) return
 
-    if (existe) {
-      alert("Cliente já cadastrado ✨")
-      return
-    }
-
-    const novo = {
-      id: Date.now().toString(),
-      nome,
-      cpf,
-      celular
-    }
-
-    setClientes([...clientes, novo])
+    setClientes([
+      ...clientes,
+      { id: Date.now().toString(), nome, cpf, celular }
+    ])
 
     setNome("")
     setCpf("")
@@ -44,34 +32,47 @@ export default function Clientes() {
   return (
     <div>
 
-      <h1 style={{
-        fontSize: 32,
-        color: "#2b2b2b",
-        marginBottom: 30
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 50
       }}>
-        👗 Clientes
-      </h1>
+        <h1 style={{
+          fontSize: 40,
+          margin: 0,
+          color: "#111"
+        }}>
+          Clientes
+        </h1>
 
-      <div style={formCard}>
-        <h3 style={{ marginBottom: 15 }}>Cadastrar nova cliente ✨</h3>
-
-        <input placeholder="Nome completo" value={nome} onChange={e => setNome(e.target.value)} style={input}/>
-        <input placeholder="CPF" value={cpf} onChange={e => setCpf(e.target.value)} style={input}/>
-        <input placeholder="Celular" value={celular} onChange={e => setCelular(e.target.value)} style={input}/>
-
-        <button onClick={cadastrar} style={btn}>
-          💛 Cadastrar Cliente
+        <button style={addBtn} onClick={cadastrar}>
+          + Nova Cliente
         </button>
       </div>
 
-      <div style={{ marginTop: 40 }}>
+      {/* FORM LINHA */}
+      <div style={{
+        display: "flex",
+        gap: 15,
+        marginBottom: 50
+      }}>
+        <input placeholder="Nome" value={nome} onChange={e=>setNome(e.target.value)} style={input}/>
+        <input placeholder="CPF" value={cpf} onChange={e=>setCpf(e.target.value)} style={input}/>
+        <input placeholder="Celular" value={celular} onChange={e=>setCelular(e.target.value)} style={input}/>
+      </div>
+
+      {/* GRID CLIENTES */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))",
+        gap: 20
+      }}>
         {clientes.map(c => (
           <div key={c.id} style={clienteCard}>
-            <div>
-              <strong>{c.nome}</strong>
-              <p style={{ margin: 0 }}>CPF: {c.cpf}</p>
-              <p style={{ margin: 0 }}>📱 {c.celular}</p>
-            </div>
+            <strong>{c.nome}</strong>
+            <p>{c.cpf}</p>
+            <p>{c.celular}</p>
           </div>
         ))}
       </div>
@@ -80,39 +81,28 @@ export default function Clientes() {
   )
 }
 
-const formCard = {
-  background: "#fff3c4",
-  padding: 25,
-  borderRadius: 20,
-  maxWidth: 500,
-  boxShadow: "0 8px 20px rgba(0,0,0,0.05)"
-}
-
 const input = {
-  display: "block",
-  width: "100%",
-  padding: 12,
-  marginTop: 10,
-  borderRadius: 12,
-  border: "1px solid #f0e6c0"
+  flex: 1,
+  padding: 14,
+  borderRadius: 10,
+  border: "1px solid #e5e5e5",
+  background: "#fff"
 }
 
-const btn = {
-  marginTop: 20,
-  width: "100%",
-  padding: 14,
-  borderRadius: 14,
+const addBtn = {
+  background: "#c6a75e",
   border: "none",
-  background: "linear-gradient(90deg,#e6b800,#ffd54f)",
-  fontWeight: 600,
-  cursor: "pointer"
+  color: "#fff",
+  padding: "14px 26px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: 600
 }
 
 const clienteCard = {
   background: "#fff",
-  padding: 18,
-  borderRadius: 16,
-  marginTop: 12,
-  maxWidth: 500,
-  boxShadow: "0 6px 14px rgba(0,0,0,0.04)"
+  padding: 22,
+  borderRadius: 14,
+  border: "1px solid #ececec",
+  transition: "0.2s"
 }
