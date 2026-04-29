@@ -1,0 +1,53 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Pega o código
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2. Node atualizado (OBRIGATÓRIO pro Vite)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3. Instala dependências
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Instala Capacitor
+      - name: Install Capacitor
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      # 5. Build do React (Vite)
+      - name: Build web app
+        run: npm run build
+
+      # 6. Sync Capacitor com Android
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # 7. Dar permissão no Gradle
+      - name: Make Gradlew executable
+        run: chmod +x android/gradlew
+
+      # 8. Gerar APK
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      # 9. Salvar APK como artefato
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: camiduda-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
