@@ -205,6 +205,11 @@ const saldoCupom = cupomsDisponiveis * 150
       })
       .eq("id", clienteSel.id)
 
+    if (erroCliente) {
+  alert("Erro ao atualizar cliente: " + erroCliente.message)
+  return
+}
+
       if (valorCupom > 0) {
         const quantidadeCupons = Math.ceil(valorCupom / 150)
       
