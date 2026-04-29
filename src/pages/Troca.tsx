@@ -158,8 +158,14 @@ const header={display:"flex",justifyContent:"space-between",marginBottom:30}
 const title={fontFamily:"Playfair Display",fontSize:42,margin:0}
 const sub={color:"#8a8a8a"}
 
-const novoBtn={background:"linear-gradient(135deg,#d4b05f,#b8963a)",color:"#fff",border:"none",padding:"14px 28px",borderRadius:12}
-
+const novoBtn={
+    background:"linear-gradient(135deg,#d4b05f,#b8963a)",
+    color:"#fff",
+    border:"none",
+    padding:"14px 28px",
+    borderRadius:12,
+    cursor:"pointer"
+  }
 const dashGrid={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:22,marginBottom:30}
 const dashCard={background:"#fff",padding:26,borderRadius:20,border:"1px solid #f1efe9"}
 const dashLabel={fontSize:13,color:"#9a978f",marginBottom:6,display:"block"}

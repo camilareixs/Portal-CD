@@ -8,167 +8,151 @@ type Cliente = {
   pontos: number
   cidade: string
   estado: string
+  rua: string
+  criadoEm: string
 }
 
 export default function Clientes(){
 
   const [clientes,setClientes] = useState<Cliente[]>([
-    {id:"1",nome:"Ana Souza",cpf:"111",celular:"9999",pontos:8,cidade:"São Paulo",estado:"SP"},
-    {id:"2",nome:"Mariana Lima",cpf:"222",celular:"8888",pontos:2,cidade:"Santo André",estado:"SP"},
-    {id:"3",nome:"Carla Mendes",cpf:"333",celular:"7777",pontos:10,cidade:"Rio",estado:"RJ"}
+    {id:"1",nome:"Ana Souza",cpf:"111",celular:"9999",pontos:18,cidade:"São Paulo",estado:"SP",rua:"Rua A",criadoEm:"2024-01-10"},
+    {id:"2",nome:"Mariana Lima",cpf:"222",celular:"8888",pontos:2,cidade:"Santo André",estado:"SP",rua:"Rua B",criadoEm:"2024-02-02"},
+    {id:"3",nome:"Carla Mendes",cpf:"333",celular:"7777",pontos:27,cidade:"Rio",estado:"RJ",rua:"Rua C",criadoEm:"2024-03-15"}
   ])
 
-  const [modal,setModal] = useState(false)
-  const [hovered,setHovered] = useState<string|null>(null)
-
   const [busca,setBusca] = useState("")
-  const [estadoFiltro,setEstadoFiltro] = useState("")
   const [cidadeFiltro,setCidadeFiltro] = useState("")
-  const [sortDesc,setSortDesc] = useState(true)
+  const [estadoFiltro,setEstadoFiltro] = useState("")
+  const [ordenacao,setOrdenacao] = useState("ranking")
 
-  const [nome,setNome] = useState("")
-  const [cpf,setCpf] = useState("")
-  const [celular,setCelular] = useState("")
-  const [cidade,setCidade] = useState("")
-  const [estado,setEstado] = useState("")
+  const [selected,setSelected] = useState<Cliente | null>(null)
+  const [editing,setEditing] = useState(false)
+  const [creating,setCreating] = useState(false)
 
-  function cadastrar(){
+  const [form,setForm] = useState<Partial<Cliente>>({})
+  const [novo,setNovo] = useState<Partial<Cliente>>({})
 
-    if(!nome || !cpf) return
-
-    setClientes([
-      ...clientes,
-      {
-        id:Date.now().toString(),
-        nome,
-        cpf,
-        celular,
-        cidade,
-        estado,
-        pontos:0
-      }
-    ])
-
-    setModal(false)
-    setNome("")
-    setCpf("")
-    setCelular("")
-    setCidade("")
-    setEstado("")
+  function calc(pontos:number){
+    return {
+      cupons: Math.floor(pontos/10),
+      resto: pontos % 10
+    }
   }
 
-  const lista = clientes
-    .filter(c =>
-      c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-      c.cpf.includes(busca)
-    )
-    .filter(c => !estadoFiltro || c.estado === estadoFiltro)
-    .filter(c => !cidadeFiltro || c.cidade === cidadeFiltro)
-    .sort((a,b)=> sortDesc ? b.pontos-a.pontos : a.pontos-b.pontos)
+  const cidades = Array.from(new Set(clientes.map(c=>c.cidade)))
+  const estados = Array.from(new Set(clientes.map(c=>c.estado)))
 
-  const totalClientes = clientes.length
-  const proximos = clientes.filter(c=>c.pontos>=8 && c.pontos<10).length
-  const cupons = clientes.filter(c=>c.pontos>=10).length
+  let lista = [...clientes]
+
+  if(ordenacao === "ranking" || ordenacao === "pontos"){
+    lista.sort((a,b)=>b.pontos - a.pontos)
+  }
+
+  if(ordenacao === "alfabetica"){
+    lista.sort((a,b)=>a.nome.localeCompare(b.nome))
+  }
+
+  lista = lista
+    .filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()))
+    .filter(c => !cidadeFiltro || c.cidade === cidadeFiltro)
+    .filter(c => !estadoFiltro || c.estado === estadoFiltro)
+
+  function salvarEdicao(){
+    if(!selected) return
+    setClientes(clientes.map(c => c.id === selected.id ? {...c,...form} : c))
+    setEditing(false)
+    setSelected(null)
+  }
+
+  function criarCliente(){
+    if(!novo.nome) return
+
+    setClientes([
+      {
+        id: Date.now().toString(),
+        nome: novo.nome || "",
+        cpf: novo.cpf || "",
+        celular: novo.celular || "",
+        cidade: novo.cidade || "",
+        estado: novo.estado || "",
+        rua: novo.rua || "",
+        pontos: 0,
+        criadoEm: new Date().toISOString().split("T")[0]
+      },
+      ...clientes
+    ])
+
+    setCreating(false)
+    setNovo({})
+  }
 
   return(
-    <div>
+    <div style={container}>
 
       {/* HEADER */}
       <div style={header}>
-        <div>
-          <h1 style={title}>Clientes</h1>
-          <span style={subtitle}>Fidelidade e relacionamento</span>
-        </div>
+        <h1 style={title}>Clientes</h1>
 
-        <button style={novoBtn} onClick={()=>setModal(true)}>
-          Novo Cliente
+        <button
+          style={primaryBtn}
+          onClick={()=>setCreating(true)}
+          onMouseEnter={e=>e.currentTarget.style.background="#fff3c4"}
+          onMouseLeave={e=>e.currentTarget.style.background="#fffbe6"}
+        >
+          Novo cliente
         </button>
-      </div>
-
-      {/* SUMMARY */}
-      <div style={summaryGrid}>
-        <SummaryCard label="Total Clientes" value={totalClientes}/>
-        <SummaryCard label="Próximos do Resgate" value={proximos}/>
-        <SummaryCard label="Cupons Disponíveis" value={cupons}/>
       </div>
 
       {/* FILTROS */}
       <div style={filters}>
         <input
-          placeholder="Buscar cliente"
+          placeholder="Buscar cliente..."
           value={busca}
           onChange={e=>setBusca(e.target.value)}
-          style={search}
+          style={{...input,flex:2}}
         />
 
-        <select
-          value={estadoFiltro}
-          onChange={e=>setEstadoFiltro(e.target.value)}
-          style={dropdown}
-        >
-          <option value="">Estado</option>
-          <option>SP</option>
-          <option>RJ</option>
-          <option>MG</option>
+        <select value={cidadeFiltro} onChange={e=>setCidadeFiltro(e.target.value)} style={select}>
+          <option value="">Cidade</option>
+          {cidades.map(c=><option key={c}>{c}</option>)}
         </select>
 
-        <input
-          placeholder="Cidade"
-          value={cidadeFiltro}
-          onChange={e=>setCidadeFiltro(e.target.value)}
-          style={filter}
-        />
+        <select value={estadoFiltro} onChange={e=>setEstadoFiltro(e.target.value)} style={select}>
+          <option value="">Estado</option>
+          {estados.map(e=><option key={e}>{e}</option>)}
+        </select>
+
+        <select value={ordenacao} onChange={e=>setOrdenacao(e.target.value)} style={select}>
+          <option value="ranking">Ranking</option>
+          <option value="alfabetica">A–Z</option>
+          <option value="pontos">Pontos</option>
+        </select>
       </div>
 
-      {/* TABELA */}
-      <div style={table}>
-        <div style={tableHeader}>
-          <span>Nome</span>
-          <span>CPF</span>
-          <span>Celular</span>
-          <span onClick={()=>setSortDesc(!sortDesc)} style={{cursor:"pointer"}}>Pontos</span>
-          <span>Status</span>
-          <span>Cidade</span>
-          <span></span>
-        </div>
+      {/* GRID */}
+      <div style={grid}>
+        {lista.map((c,index)=>{
 
-        {lista.map(c=>{
-
-          const status =
-            c.pontos >= 10
-              ? "Cupom disponível"
-              : c.pontos >= 8
-              ? "Quase lá"
-              : "Acumulando"
+          const {cupons,resto} = calc(c.pontos)
+          const pct = (resto/10)*100
 
           return(
-            <div
-              key={c.id}
-              style={{
-                ...row,
-                background:hovered===c.id ? "#faf9f6" : "#fff"
-              }}
-              onMouseEnter={()=>setHovered(c.id)}
-              onMouseLeave={()=>setHovered(null)}
-            >
-              <span>{c.nome}</span>
-              <span>{c.cpf}</span>
-              <span>{c.celular}</span>
+            <div key={c.id} style={card} onClick={()=>{setSelected(c);setForm(c)}}>
 
-              <CircularPoints pontos={c.pontos}/>
+              {ordenacao === "ranking" && index < 3 && (
+                <span style={rank}>#{index+1}</span>
+              )}
 
-              <StatusBadge status={status}/>
-              <span>{c.cidade}</span>
+              <div style={name}>{c.nome}</div>
+              <div style={muted}>{c.cidade}</div>
 
-              <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                <span>{c.estado}</span>
+              <div style={coupon}>🎟 {cupons}</div>
 
-                {hovered===c.id && (
-                  <button style={actionBtn}>
-                    Lançar
-                  </button>
-                )}
+              <div style={progressBg}>
+                <div style={{...progressFill,width:`${pct}%`}}/>
               </div>
+
+              <div style={mutedSmall}>{resto}/10</div>
 
             </div>
           )
@@ -176,21 +160,65 @@ export default function Clientes(){
       </div>
 
       {/* MODAL */}
-      {modal && (
-        <div style={overlay}>
-          <div style={modalCard}>
-            <h2 style={{fontFamily:"Playfair Display"}}>Novo Cliente</h2>
+      {(selected || creating) && (
+        <div style={overlay} onClick={()=>{setSelected(null);setCreating(false);setEditing(false)}}>
 
-            <input placeholder="Nome" value={nome} onChange={e=>setNome(e.target.value)} style={input}/>
-            <input placeholder="CPF" value={cpf} onChange={e=>setCpf(e.target.value)} style={input}/>
-            <input placeholder="Celular" value={celular} onChange={e=>setCelular(e.target.value)} style={input}/>
-            <input placeholder="Cidade" value={cidade} onChange={e=>setCidade(e.target.value)} style={input}/>
-            <input placeholder="Estado" value={estado} onChange={e=>setEstado(e.target.value)} style={input}/>
+          <div style={modal} onClick={e=>e.stopPropagation()}>
 
-            <div style={{display:"flex",gap:10,marginTop:20}}>
-              <button style={cancelBtn} onClick={()=>setModal(false)}>Cancelar</button>
-              <button style={saveBtn} onClick={cadastrar}>Cadastrar</button>
-            </div>
+            {/* DETALHES */}
+            {selected && !editing && (
+              <>
+                <h2 style={modalTitle}>{selected.nome}</h2>
+
+                <Info label="CPF" value={selected.cpf}/>
+                <Info label="Celular" value={selected.celular}/>
+                <Info label="Rua" value={selected.rua}/>
+                <Info label="Cidade" value={selected.cidade}/>
+                <Info label="Estado" value={selected.estado}/>
+
+                <div style={modalActions}>
+                  <button style={secondaryBtn} onClick={()=>setEditing(true)}>Editar</button>
+                  <button style={primaryBtnSmall}>Nova compra</button>
+                </div>
+              </>
+            )}
+
+            {/* EDITAR */}
+            {selected && editing && (
+              <>
+                <h2 style={modalTitle}>Editar cliente</h2>
+
+                <input style={inputSpacing} value={form.nome||""} onChange={e=>setForm({...form,nome:e.target.value})}/>
+                <input style={inputSpacing} value={form.cpf||""} onChange={e=>setForm({...form,cpf:e.target.value})}/>
+                <input style={inputSpacing} value={form.celular||""} onChange={e=>setForm({...form,celular:e.target.value})}/>
+                <input style={inputSpacing} value={form.rua||""} onChange={e=>setForm({...form,rua:e.target.value})}/>
+                <input style={inputSpacing} value={form.cidade||""} onChange={e=>setForm({...form,cidade:e.target.value})}/>
+                <input style={inputSpacing} value={form.estado||""} onChange={e=>setForm({...form,estado:e.target.value})}/>
+
+                <div style={modalActions}>
+                  <button style={secondaryBtn} onClick={()=>setEditing(false)}>Cancelar</button>
+                  <button style={primaryBtnSmall} onClick={salvarEdicao}>Salvar</button>
+                </div>
+              </>
+            )}
+
+            {/* NOVO */}
+            {creating && (
+              <>
+                <h2 style={modalTitle}>Novo cliente</h2>
+
+                <input style={inputSpacing} placeholder="Nome" onChange={e=>setNovo({...novo,nome:e.target.value})}/>
+                <input style={inputSpacing} placeholder="CPF" onChange={e=>setNovo({...novo,cpf:e.target.value})}/>
+                <input style={inputSpacing} placeholder="Celular" onChange={e=>setNovo({...novo,celular:e.target.value})}/>
+                <input style={inputSpacing} placeholder="Rua" onChange={e=>setNovo({...novo,rua:e.target.value})}/>
+                <input style={inputSpacing} placeholder="Cidade" onChange={e=>setNovo({...novo,cidade:e.target.value})}/>
+                <input style={inputSpacing} placeholder="Estado" onChange={e=>setNovo({...novo,estado:e.target.value})}/>
+
+                <button style={primaryBtnSmall} onClick={criarCliente}>
+                  Criar cliente
+                </button>
+              </>
+            )}
 
           </div>
         </div>
@@ -200,137 +228,48 @@ export default function Clientes(){
   )
 }
 
-/* COMPONENTES */
-
-function SummaryCard({label,value}:{label:string,value:number}){
+/* COMPONENTE */
+function Info({label,value}:{label:string,value:string}){
   return(
-    <div style={summaryCard}>
-      <span style={summaryLabel}>{label}</span>
-      <strong style={summaryValue}>{value}</strong>
+    <div style={{marginBottom:12}}>
+      <span style={mutedSmall}>{label}</span>
+      <div>{value}</div>
     </div>
   )
 }
 
-function CircularPoints({pontos}:{pontos:number}){
+/* ESTILO (mantive o seu) */
 
-  const deg = pontos * 36
+const container={padding:"48px",background:"#f9f7f1",fontFamily:"Inter, sans-serif"}
+const header={display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}
+const title={fontSize:32,fontWeight:500,margin:0}
 
-  return(
-    <div style={{
-      width:42,
-      height:42,
-      borderRadius:"50%",
-      background:`conic-gradient(#c6a75e ${deg}deg,#eee ${deg}deg)`,
-      display:"flex",
-      alignItems:"center",
-      justifyContent:"center",
-      fontSize:11,
-      fontWeight:600
-    }}>
-      {pontos}
-    </div>
-  )
-}
+const primaryBtn={padding:"10px 18px",borderRadius:10,border:"1px solid #e6e0c9",background:"#fffbe6",cursor:"pointer",transition:"0.2s"}
+const primaryBtnSmall={padding:"10px",borderRadius:10,border:"none",background:"linear-gradient(90deg,#d4af37,#f6e27a)"}
+const secondaryBtn={padding:"10px",borderRadius:10,border:"1px solid #ddd",background:"#fff"}
 
-function StatusBadge({status}:{status:string}){
+const filters={display:"flex",gap:12,marginBottom:30}
 
-  const map:any={
-    "Acumulando":"#efefef",
-    "Quase lá":"#f3e7c7",
-    "Cupom disponível":"#d4b05f"
-  }
+const input={padding:12,borderRadius:10,border:"1px solid #e5e5e5",width:"100%"}
+const inputSpacing={...input,marginBottom:12}
 
-  return(
-    <span style={{
-      background:map[status],
-      padding:"3px 9px",
-      borderRadius:999,
-      fontSize:10,
-      width:"fit-content"
-    }}>
-      {status}
-    </span>
-  )
-}
+const select={padding:12,borderRadius:10,border:"1px solid #e5e5e5",flex:1}
 
-/* STYLES */
+const grid={display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:20}
 
-const header={display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:30}
-const title={fontFamily:"Playfair Display",fontSize:42,margin:0}
-const subtitle={color:"#8a8a8a"}
+const card={background:"#fff",padding:18,borderRadius:16,border:"1px solid #eee",cursor:"pointer",position:"relative"}
+const rank={position:"absolute",top:12,right:12,fontSize:12,color:"#b8962e"}
 
-const novoBtn={
-  background:"linear-gradient(135deg,#d4b05f,#b8963a)",
-  color:"#fff",
-  border:"none",
-  padding:"14px 28px",
-  borderRadius:12,
-  cursor:"pointer"
-}
+const name={fontWeight:500}
+const muted={color:"#888",fontSize:13}
+const mutedSmall={fontSize:12,color:"#999"}
 
-const summaryGrid={
-  display:"grid",
-  gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",
-  gap:22,
-  marginBottom:36
-}
+const coupon={margin:"10px 0",color:"#b8962e"}
 
-const summaryCard={
-  background:"#fff",
-  padding:"26px 28px",
-  borderRadius:20,
-  border:"1px solid #f1efe9",
-  minHeight:110,
-  display:"flex",
-  flexDirection:"column",
-  justifyContent:"center"
-}
+const progressBg={height:6,background:"#eee",borderRadius:999,marginBottom:6}
+const progressFill={height:"100%",background:"linear-gradient(90deg,#d4af37,#f6e27a)"}
 
-const summaryLabel={fontSize:13,color:"#9a978f",marginBottom:10}
-const summaryValue={fontSize:34,fontFamily:"Playfair Display"}
-
-const filters={display:"flex",gap:14,flexWrap:"wrap",marginBottom:30}
-
-const search={flex:1,padding:14,borderRadius:12,border:"1px solid #e7e4db"}
-const filter={minWidth:160,padding:14,borderRadius:12,border:"1px solid #e7e4db"}
-
-const dropdown={padding:14,borderRadius:12,border:"1px solid #e7e4db",background:"#fff"}
-
-const table={background:"#fff",borderRadius:22,overflow:"hidden",border:"1px solid #f2efe8"}
-
-const tableHeader={
-  display:"grid",
-  gridTemplateColumns:"2fr 1.2fr 1.2fr 80px 1.3fr 1.3fr 1fr",
-  padding:"18px 24px",
-  background:"#fbf8ef",
-  fontWeight:600,
-  fontSize:13,
-  color:"#6f6a5f"
-}
-
-const row={
-  display:"grid",
-  gridTemplateColumns:"2fr 1.2fr 1.2fr 80px 1.3fr 1.3fr 1fr",
-  padding:"18px 24px",
-  borderTop:"1px solid #f3f2ef",
-  alignItems:"center",
-  transition:"0.2s"
-}
-
-const actionBtn={
-  background:"#c6a75e",
-  border:"none",
-  color:"#fff",
-  padding:"6px 12px",
-  borderRadius:8,
-  fontSize:11,
-  cursor:"pointer"
-}
-
-const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center"}
-const modalCard={background:"#fff",padding:40,borderRadius:20,width:420}
-
-const input={width:"100%",padding:14,marginTop:12,borderRadius:10,border:"1px solid #ddd"}
-
-const cancelBtn={flex:1,padding:14,background:"#eee",border:"none",borderRadius:10}
-const saveBtn={flex:1,padding:14,background:"#c6a75e",color:"#fff",border:"none",borderRadius:10}
+const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.25)",display:"flex",alignItems:"center",justifyContent:"center"}
+const modal={background:"#fff",padding:"28px",borderRadius:16,width:360,boxShadow:"0 20px 60px rgba(0,0,0,0.12)"}
+const modalTitle={marginBottom:20}
+const modalActions={display:"flex",gap:10,marginTop:20}
