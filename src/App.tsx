@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Layout from "./components/Layout"
 import Dashboard from "./pages/Dashboard"
 import Clientes from "./pages/Clientes"
 import Compras from "./pages/Compras"
 import Troca from "./pages/Troca"
+import LoginCamiduda from "./pages/LoginCamiduda"
 
 export type Page = "dashboard" | "clientes" | "compra" | "troca"
 
@@ -15,8 +16,23 @@ export type CompraSelecionada = {
 function App() {
   const [page, setPage] = useState<Page>("dashboard")
 
+  // CONTROLE DE LOGIN
+  const [logado, setLogado] = useState(false)
+  const [carregando, setCarregando] = useState(true)
+
   // Guarda cliente escolhido para nova compra
-  const [compraSelecionada, setCompraSelecionada] = useState<CompraSelecionada>(null)
+  const [compraSelecionada, setCompraSelecionada] =
+    useState<CompraSelecionada>(null)
+
+  useEffect(() => {
+    const auth = localStorage.getItem("camiduda_auth")
+
+    if (auth === "true") {
+      setLogado(true)
+    }
+
+    setCarregando(false)
+  }, [])
 
   function irParaCompra(clienteId: string, clienteNome: string) {
     setCompraSelecionada({
@@ -51,6 +67,17 @@ function App() {
     return <Dashboard />
   }
 
+  // EVITA PISCAR TELA
+  if (carregando) {
+    return null
+  }
+
+  // SE NÃO ESTIVER LOGADO, LOGIN VEM PRIMEIRO
+  if (!logado) {
+    return <LoginCamiduda />
+  }
+
+  // SISTEMA NORMAL
   return (
     <Layout setPage={setPage}>
       {renderPage()}
