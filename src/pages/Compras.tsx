@@ -49,7 +49,7 @@ export default function Compras({ compraSelecionada }: Props) {
   const [usarCupom, setUsarCupom] = useState(false)
 
   /* =========================
-     FETCH CLIENTES
+     FETCH CLIENTE
   ========================= */
   async function fetchClientes() {
     const { data, error } = await supabase
