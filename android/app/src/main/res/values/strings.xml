@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Camiduda</string>
+    <string name="title_activity_main">Camiduda</string>
+    <string name="package_name">com.camiduda.app</string>
+    <string name="custom_url_scheme">com.camiduda.app</string>
+</resources>
