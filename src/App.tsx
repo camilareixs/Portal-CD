@@ -9,8 +9,8 @@ import LoginCamiduda from "./pages/LoginCamiduda"
 export type Page = "dashboard" | "clientes" | "compra" | "troca"
 
 export type CompraSelecionada = {
-  clienteId: string
-  clienteNome: string
+  clienteid: string
+  cliente: string
 } | null
 
 function App() {
@@ -28,8 +28,12 @@ function App() {
     setCarregando(false)
   }, [])
 
-  function irParaCompra(clienteId: string, clienteNome: string) {
-    setCompraSelecionada({ clienteId, clienteNome })
+  function irParaCompra(clienteid: string, cliente: string) {
+    setCompraSelecionada({
+      clienteid,
+      cliente
+    })
+
     setPage("compra")
   }
 
@@ -39,10 +43,14 @@ function App() {
         return <Dashboard />
 
       case "clientes":
-        return <Clientes irParaCompra={irParaCompra} />
+        return (
+          <Clientes irParaCompra={irParaCompra} />
+        )
 
       case "compra":
-        return <Compras compraSelecionada={compraSelecionada} />
+        return (
+          <Compras compraSelecionada={compraSelecionada} />
+        )
 
       case "troca":
         return <Troca />
