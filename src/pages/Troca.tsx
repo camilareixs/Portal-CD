@@ -1,189 +1,282 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { supabase } from "../lib/supabase"
 
-type Resgate={
- id:string
- cliente:string
- cpf:string
- data:Date
- tipo:string
- status:string
+type Cliente = {
+id: string
+nome: string
+cpf: string
+celular: string
+pontos: number
 }
 
-export default function Trocas(){
+type Resgate = {
+id: string
+clienteid: string
+cupomnumero: number
+tipo: string
+valorcupom: number
+criadoem: string
+}
 
- const [modal,setModal]=useState(false)
+export default function Trocas() {
+const [clientes, setClientes] = useState<Cliente[]>([])
+const [resgates, setResgates] = useState<Resgate[]>([])
 
- const [resgates]=useState<Resgate[]>([
-  {id:"1",cliente:"Ana Souza",cpf:"111",data:new Date(2026,2,12),tipo:"Cupom 150",status:"Concluído"},
-  {id:"2",cliente:"Mariana Lima",cpf:"222",data:new Date(2026,1,3),tipo:"Desconto",status:"Concluído"},
-  {id:"3",cliente:"Fernanda Alves",cpf:"444",data:new Date(2026,0,18),tipo:"Brinde",status:"Concluído"}
- ])
+async function fetchClientes() {
+const { data, error } = await supabase
+.from("clientes")
+.select("id,nome,cpf,celular,pontos")
+.order("nome")
 
- const totalMes=resgates.length
- const clientesElegiveis=4
- const cuponsAtivos=2
+if (error) {
+  alert("Erro clientes: " + error.message)
+  return
+}
 
- const agrupados=resgates.reduce((acc:any,r)=>{
-  const chave=`${r.data.getFullYear()}-${r.data.getMonth()}`
-  if(!acc[chave]) acc[chave]=[]
-  acc[chave].push(r)
-  return acc
- },{})
+setClientes(
+  (data || []).map((c: any) => ({
+    id: String(c.id),
+    nome: c.nome || "",
+    cpf: c.cpf || "",
+    celular: c.celular || "",
+    pontos: Number(c.pontos || 0)
+  }))
+)
 
- const mesesOrdenados=Object.keys(agrupados).sort((a,b)=>b.localeCompare(a))
 
- return(
+}
 
-  <div>
+async function fetchTrocas() {
+const { data, error } = await supabase
+.from("trocas")
+.select("*")
+.order("criadoem", { ascending: false })
 
-   {/* HEADER */}
-   <div style={header}>
-    <div>
-     <h1 style={title}>Trocas</h1>
-     <span style={sub}>Resgate de fidelidade</span>
-    </div>
 
-    <button style={novoBtn} onClick={()=>setModal(true)}>
-     Resgatar Fidelidade
-    </button>
-   </div>
+if (error) {
+  alert("Erro trocas: " + error.message)
+  return
+}
 
-   {/* DASH */}
-   <div style={dashGrid}>
-    <Dash label="Resgates no mês" value={totalMes}/>
-    <Dash label="Cupons ativos" value={cuponsAtivos}/>
-    <Dash label="Clientes elegíveis" value={clientesElegiveis}/>
-   </div>
+setResgates(
+  (data || []).map((r: any) => ({
+    id: String(r.id),
+    clienteid: String(r.clienteid),
+    cupomnumero: Number(r.cupomnumero || 0),
+    tipo: r.tipo || "Cupom Fidelidade",
+    valorcupom: Number(r.valorcupom || 150),
+    criadoem: r.criadoem || ""
+  }))
+)
 
-   {/* TIMELINE */}
-   {mesesOrdenados.map(m=>{
 
-    const lista=agrupados[m]
-    const [ano,mes]=m.split("-")
+}
 
-    const nomeMes=new Date(Number(ano),Number(mes))
-     .toLocaleString("pt-BR",{month:"long"})
+useEffect(() => {
+fetchClientes()
+fetchTrocas()
+}, [])
 
-    return(
+function getCliente(clienteid: string) {
+return clientes.find(c => c.id === clienteid)
+}
 
-     <div key={m} style={{marginBottom:36}}>
+const totalMes = resgates.filter(r => {
+const d = new Date(r.criadoem)
+const hoje = new Date()
+return (
+d.getMonth() === hoje.getMonth() &&
+d.getFullYear() === hoje.getFullYear()
+)
+}).length
 
-      <h2 style={mesTitulo}>
-       {nomeMes.toUpperCase()} {ano}
-      </h2>
+const clientesElegiveis = clientes.filter(
+c => c.pontos >= 10
+).length
 
-      <div style={cardMes}>
-       {lista.map((r:Resgate)=>(
-        <div key={r.id} style={row}>
+const cuponsAtivos = clientes.reduce(
+(acc, c) => acc + Math.floor(c.pontos / 10),
+0
+)
 
-         <div>
-          <strong>{r.cliente}</strong>
-          <div style={cpfTxt}>{r.cpf}</div>
-         </div>
+const agrupados = resgates.reduce((acc: any, r) => {
+const data = new Date(r.criadoem)
+const chave = `${data.getFullYear()}-${data.getMonth()}`
 
-         <div>{r.data.toLocaleDateString()}</div>
-         <div>{r.tipo}</div>
-         <Status status={r.status}/>
 
+if (!acc[chave]) acc[chave] = []
+
+acc[chave].push(r)
+
+return acc
+
+
+}, {})
+
+const mesesOrdenados = Object.keys(agrupados).sort(
+(a, b) => b.localeCompare(a)
+)
+
+return ( <div style={container}> <div style={header}> <div> <h1 style={title}>Trocas</h1> <span style={sub}>
+Histórico automático de cupons utilizados </span> </div> </div>
+
+
+  <div style={dashGrid}>
+    <Dash label="Resgates no mês" value={totalMes} />
+    <Dash label="Cupons ativos" value={cuponsAtivos} />
+    <Dash
+      label="Clientes elegíveis"
+      value={clientesElegiveis}
+    />
+  </div>
+
+  {mesesOrdenados.map(m => {
+    const lista = agrupados[m]
+    const [ano, mes] = m.split("-")
+
+    const nomeMes = new Date(
+      Number(ano),
+      Number(mes)
+    ).toLocaleString("pt-BR", {
+      month: "long"
+    })
+
+    return (
+      <div key={m} style={{ marginBottom: 36 }}>
+        <h2 style={mesTitulo}>
+          {nomeMes.toUpperCase()} {ano}
+        </h2>
+
+        <div style={card}>
+          {lista.map((r: Resgate) => {
+            const cliente = getCliente(r.clienteid)
+
+            return (
+              <div key={r.id} style={row}>
+                <div>
+                  <strong>
+                    {cliente?.nome || "Cliente"}
+                  </strong>
+                  <div style={muted}>
+                    {cliente?.cpf || "-"}
+                  </div>
+                </div>
+
+                <div>
+                  {new Date(
+                    r.criadoem
+                  ).toLocaleDateString("pt-BR")}
+                </div>
+
+                <div>
+                  Cupom #{r.cupomnumero}
+                </div>
+
+                <div style={checkWrap}>
+                  <span style={checkIcon}>✓</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
-       ))}
       </div>
-
-     </div>
-
     )
+  })}
+</div>
 
-   })}
 
-   {/* MODAL */}
-   {modal && (
-    <div style={overlay}>
-     <div style={modalCard}>
-
-      <div style={modalHead}>
-       <h2 style={{fontFamily:"Playfair Display"}}>Resgatar Fidelidade</h2>
-       <button style={close} onClick={()=>setModal(false)}>✕</button>
-      </div>
-
-      <input placeholder="Nome Cliente" style={input}/>
-
-      <div style={{marginTop:10}}>
-       Pontos atuais: <strong>10</strong>
-      </div>
-
-      <select style={input}>
-       <option>Cupom 150</option>
-       <option>Desconto</option>
-       <option>Brinde</option>
-      </select>
-
-      <button style={save}>
-       Confirmar Resgate
-      </button>
-
-     </div>
-    </div>
-   )}
-
-  </div>
-
- )
+)
 }
 
-function Dash({label,value}:{label:string,value:any}){
- return(
-  <div style={dashCard}>
-   <span style={dashLabel}>{label}</span>
-   <strong style={dashValue}>{value}</strong>
-  </div>
- )
+function Dash({ label, value }: any) {
+return ( <div style={dash}> <span style={dashLabel}>{label}</span> <strong style={dashValue}>{value}</strong> </div>
+)
 }
 
-function Status({status}:{status:string}){
- return(
-  <span style={{
-   background:"#ececec",
-   padding:"4px 12px",
-   borderRadius:999,
-   fontSize:12
-  }}>
-   {status}
-  </span>
- )
+const container = {
+padding: 40,
+background: "#f6f6f7",
+fontFamily: "Inter"
 }
 
-/* styles iguais compras */
+const header = {
+display: "flex",
+justifyContent: "space-between",
+marginBottom: 30
+}
 
-const header={display:"flex",justifyContent:"space-between",marginBottom:30}
-const title={fontFamily:"Playfair Display",fontSize:42,margin:0}
-const sub={color:"#8a8a8a"}
+const title = {
+fontSize: 34,
+margin: 0,
+fontWeight: 600
+}
 
-const novoBtn={
-    background:"linear-gradient(135deg,#d4b05f,#b8963a)",
-    color:"#fff",
-    border:"none",
-    padding:"14px 28px",
-    borderRadius:12,
-    cursor:"pointer"
-  }
-const dashGrid={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:22,marginBottom:30}
-const dashCard={background:"#fff",padding:26,borderRadius:20,border:"1px solid #f1efe9"}
-const dashLabel={fontSize:13,color:"#9a978f",marginBottom:6,display:"block"}
-const dashValue={fontSize:30,fontFamily:"Playfair Display"}
+const sub = {
+color: "#777",
+fontSize: 13
+}
 
-const mesTitulo={fontFamily:"Playfair Display",marginBottom:10}
-const cardMes={background:"#fff",borderRadius:18,overflow:"hidden",border:"1px solid #f3f1ea"}
+const dashGrid = {
+display: "grid",
+gridTemplateColumns: "repeat(3,1fr)",
+gap: 10,
+marginBottom: 25
+}
 
-const row={display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",padding:18,borderTop:"1px solid #f5f3ed",alignItems:"center"}
+const dash = {
+background: "#fff",
+padding: 16,
+borderRadius: 12
+}
 
-const cpfTxt={fontSize:12,color:"#aaa"}
+const dashLabel = {
+fontSize: 12,
+color: "#777",
+display: "block"
+}
 
-const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center"}
-const modalCard={background:"#fff",padding:34,borderRadius:20,width:420}
+const dashValue = {
+fontSize: 24
+}
 
-const modalHead={display:"flex",justifyContent:"space-between"}
-const close={border:"none",background:"transparent",fontSize:20,cursor:"pointer"}
+const mesTitulo = {
+fontSize: 16,
+marginBottom: 10,
+fontWeight: 600
+}
 
-const input={width:"100%",padding:13,marginTop:12,borderRadius:10,border:"1px solid #ddd"}
+const card = {
+background: "#fff",
+borderRadius: 12,
+overflow: "hidden"
+}
 
-const save={marginTop:20,width:"100%",padding:14,background:"#c6a75e",color:"#fff",border:"none",borderRadius:10}
+const row = {
+display: "grid",
+gridTemplateColumns: "2fr 1fr 1fr 80px",
+padding: 14,
+borderTop: "1px solid #eee",
+alignItems: "center"
+}
+
+const muted = {
+fontSize: 12,
+color: "#999"
+}
+
+const checkWrap = {
+display: "flex",
+justifyContent: "center"
+}
+
+const checkIcon = {
+width: 28,
+height: 28,
+borderRadius: "50%",
+background: "#22c55e",
+color: "white",
+display: "flex",
+alignItems: "center",
+justifyContent: "center",
+fontWeight: 700
+}
