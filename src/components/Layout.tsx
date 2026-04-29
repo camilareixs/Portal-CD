@@ -1,6 +1,6 @@
 
 import type { ReactNode } from "react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 
 type Page = "dashboard" | "clientes" | "compra" | "troca"
 
