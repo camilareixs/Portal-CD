@@ -1,5 +1,5 @@
 
-import { ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 
 type Page = "dashboard" | "clientes" | "compra" | "troca"
 
