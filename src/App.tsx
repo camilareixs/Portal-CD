@@ -53,7 +53,7 @@ function App() {
         )
 
       case "troca":
-        return <Troca />
+        return <Troca de Ponto />
 
       default:
         return <Dashboard />

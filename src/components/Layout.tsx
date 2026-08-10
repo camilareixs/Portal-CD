@@ -45,7 +45,7 @@ export default function Layout({ children, setPage }: Props) {
         />
 
         <NavItem
-          label="Trocas"
+          label="Troca de Pontos"
           active={active === "troca"}
           onClick={() => nav("troca")}
         />

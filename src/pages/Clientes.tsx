@@ -11,7 +11,10 @@ type Cliente = {
   estado: string
   rua: string
   criadoEm: string
-
+  CEP: string
+  Complemento: string
+  cintura: string
+  
   tamanhoSaia?: string
   tamanhoVestido?: string
   tamanhoBlusa?: string
