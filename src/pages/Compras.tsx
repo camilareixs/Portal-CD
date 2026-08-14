@@ -49,8 +49,9 @@ export default function Compras({ compraSelecionada }: Props) {
   const [usarCupom, setUsarCupom] = useState(false)
 
   /* =========================
-     FETCH CLIENTE
+     FETCH CLIENTES
   ========================= */
+
   async function fetchClientes() {
     const { data, error } = await supabase
       .from("clientes")
@@ -68,7 +69,7 @@ export default function Compras({ compraSelecionada }: Props) {
           id: String(c.id),
           nome: c.nome || "",
           cpf: c.cpf || "",
-          pontos: c.pontos || 0
+          pontos: Number(c.pontos || 0)
         }))
       )
     }
@@ -77,6 +78,7 @@ export default function Compras({ compraSelecionada }: Props) {
   /* =========================
      FETCH COMPRAS
   ========================= */
+
   async function fetchCompras() {
     const { data, error } = await supabase
       .from("compras")
@@ -114,6 +116,7 @@ export default function Compras({ compraSelecionada }: Props) {
   /* =========================
      CLIENTE VINDO DA PÁGINA
   ========================= */
+
   useEffect(() => {
     if (compraSelecionada && clientes.length > 0) {
       const cliente = clientes.find(
@@ -127,17 +130,23 @@ export default function Compras({ compraSelecionada }: Props) {
     }
   }, [compraSelecionada, clientes])
 
-  /* CLIENTES FILTRO */
+  /* =========================
+     CLIENTES FILTRADOS
+  ========================= */
+
   const clientesFiltrados = clientes.filter(c =>
     c.nome.toLowerCase().includes(buscaCliente.toLowerCase())
   )
 
-  /* CUPOM */
-  const cupomsDisponiveis = clienteSel
-  ? Math.floor(clienteSel.pontos / 10)
-  : 0
+  /* =========================
+     CUPONS
+  ========================= */
 
-const saldoCupom = cupomsDisponiveis * 150
+  const cupomsDisponiveis = clienteSel
+    ? Math.floor(clienteSel.pontos / 10)
+    : 0
+
+  const saldoCupom = cupomsDisponiveis * 150
 
   const valorCupom = usarCupom
     ? Math.min(saldoCupom, valor)
@@ -152,6 +161,7 @@ const saldoCupom = cupomsDisponiveis * 150
   /* =========================
      REGISTRAR COMPRA
   ========================= */
+
   async function registrarCompra() {
     if (!clienteSel) {
       alert("Selecione um cliente")
@@ -170,23 +180,23 @@ const saldoCupom = cupomsDisponiveis * 150
           : "Cupom"
         : pagamento
 
-        const { data: compraCriada, error } = await supabase
-        .from("compras")
-        .insert([
-          {
-            clienteid: clienteSel.id,
-            cliente: clienteSel.nome,
-            cpf: clienteSel.cpf,
-            valor: valor,
-            pagamento: pagamentoFinal,
-            parcelas: parcelas,
-            pontosgerados: pontosGerados,
-            cupomusado: valorCupom,
-            criadoem: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single()
+    const { data: compraCriada, error } = await supabase
+      .from("compras")
+      .insert([
+        {
+          clienteid: clienteSel.id,
+          cliente: clienteSel.nome,
+          cpf: clienteSel.cpf,
+          valor: valor,
+          pagamento: pagamentoFinal,
+          parcelas: parcelas,
+          pontosgerados: pontosGerados,
+          cupomusado: valorCupom,
+          criadoem: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single()
 
     if (error) {
       alert("Erro compra: " + error.message)
@@ -206,58 +216,58 @@ const saldoCupom = cupomsDisponiveis * 150
       .eq("id", clienteSel.id)
 
     if (erroCliente) {
-  alert("Erro ao atualizar cliente: " + erroCliente.message)
-  return
-}
+      alert("Erro ao atualizar cliente: " + erroCliente.message)
+      return
+    }
 
-      if (valorCupom > 0) {
-        const quantidadeCupons = Math.ceil(valorCupom / 150)
-      
-        const {
-          count: cuponsAnteriores,
-          error: countError
-        } = await supabase
-          .from("trocas")
-          .select("*", {
-            count: "exact",
-            head: true
-          })
-          .eq("clienteid", clienteSel.id)
-      
-        if (countError) {
-          alert(
-            "Erro ao contar cupons anteriores: " +
-              countError.message
-          )
-          return
-        }
-      
-        const trocas = Array.from(
-          { length: quantidadeCupons },
-          (_, i) => ({
-            clienteid: clienteSel.id,
-            cliente: clienteSel.nome,
-            cpf: clienteSel.cpf,
-            compraid: compraCriada.id,
-            cupomnumero: (cuponsAnteriores || 0) + i + 1,
-            valorcupom: 150,
-            tipo: "Cupom Fidelidade",
-            status: "Concluído",
-            criadoem: new Date().toISOString()
-          })
+    if (valorCupom > 0) {
+      const quantidadeCupons = Math.ceil(valorCupom / 150)
+
+      const {
+        count: cuponsAnteriores,
+        error: countError
+      } = await supabase
+        .from("trocas")
+        .select("*", {
+          count: "exact",
+          head: true
+        })
+        .eq("clienteid", clienteSel.id)
+
+      if (countError) {
+        alert(
+          "Erro ao contar cupons anteriores: " +
+            countError.message
         )
-      
-        const { error: erroTrocas } = await supabase
-          .from("trocas")
-          .insert(trocas)
-      
-        if (erroTrocas) {
-          alert(
-            "Compra salva, mas erro ao registrar trocas: " +
-              erroTrocas.message
-          )
-        }
+        return
       }
+
+      const trocas = Array.from(
+        { length: quantidadeCupons },
+        (_, i) => ({
+          clienteid: clienteSel.id,
+          cliente: clienteSel.nome,
+          cpf: clienteSel.cpf,
+          compraid: compraCriada.id,
+          cupomnumero: (cuponsAnteriores || 0) + i + 1,
+          valorcupom: 150,
+          tipo: "Cupom Fidelidade",
+          status: "Concluído",
+          criadoem: new Date().toISOString()
+        })
+      )
+
+      const { error: erroTrocas } = await supabase
+        .from("trocas")
+        .insert(trocas)
+
+      if (erroTrocas) {
+        alert(
+          "Compra salva, mas erro ao registrar trocas: " +
+            erroTrocas.message
+        )
+      }
+    }
 
     alert("Compra registrada com sucesso!")
 
@@ -274,67 +284,93 @@ const saldoCupom = cupomsDisponiveis * 150
   }
 
   /* =========================
-     FILTROS GALERIA
+     FILTROS
   ========================= */
+
   const comprasFiltradas = useMemo(() => {
     return compras.filter(compra => {
+      const termo = buscaVenda.toLowerCase()
+
       const nomeMatch =
-        compra.cliente
-          .toLowerCase()
-          .includes(buscaVenda.toLowerCase()) ||
+        compra.cliente.toLowerCase().includes(termo) ||
         compra.cpf.includes(buscaVenda)
 
       const data = new Date(compra.criadoem)
-      const mesCompra = String(data.getMonth() + 1).padStart(2, "0")
+
+      const mesCompra = String(
+        data.getMonth() + 1
+      ).padStart(2, "0")
 
       const mesMatch =
-        filtroMes === "todos" || filtroMes === mesCompra
+        filtroMes === "todos" ||
+        filtroMes === mesCompra
 
       const pagamentoMatch =
         filtroPagamento === "todos" ||
         compra.pagamento.includes(filtroPagamento)
 
-      return nomeMatch && mesMatch && pagamentoMatch
+      return (
+        nomeMatch &&
+        mesMatch &&
+        pagamentoMatch
+      )
     })
-  }, [compras, buscaVenda, filtroMes, filtroPagamento])
+  }, [
+    compras,
+    buscaVenda,
+    filtroMes,
+    filtroPagamento
+  ])
 
   /* =========================
      RESUMO MENSAL
   ========================= */
+
   const vendasPorMes = useMemo(() => {
     const mapa: Record<string, number> = {}
-  
+
     compras.forEach(compra => {
       const data = new Date(compra.criadoem)
-      const mes = String(data.getMonth() + 1).padStart(2, "0")
-  
+
+      const mes = String(
+        data.getMonth() + 1
+      ).padStart(2, "0")
+
       if (
         filtroMes !== "todos" &&
         mes !== filtroMes
       ) {
         return
       }
-  
-      const chave = `${mes}/${data.getFullYear()}`
-  
-      mapa[chave] = (mapa[chave] || 0) + compra.valor
+
+      const chave =
+        `${mes}/${data.getFullYear()}`
+
+      mapa[chave] =
+        (mapa[chave] || 0) + compra.valor
     })
-  
+
     return Object.entries(mapa).sort((a, b) =>
       b[0].localeCompare(a[0])
     )
   }, [compras, filtroMes])
 
-  /* INATIVOS */
+  /* =========================
+     CLIENTES INATIVOS
+  ========================= */
+
   const hoje = new Date()
 
   const clientesInativos = clientes.filter(c => {
-    const ult = compras.find(x => x.cpf === c.cpf)
+    const ult = compras.find(
+      x => x.cpf === c.cpf
+    )
 
     if (!ult) return true
 
     const dias =
-      (hoje.getTime() - new Date(ult.criadoem).getTime()) /
+      (hoje.getTime() -
+        new Date(ult.criadoem).getTime()) /
       86400000
 
     return dias > 30
@@ -346,20 +382,31 @@ const saldoCupom = cupomsDisponiveis * 150
 
   return (
     <div style={container}>
+
+      {/* NOTIFICAÇÃO */}
       {clientesInativos.length > 0 && (
         <div style={notifBar}>
-          🔔 {clientesInativos.length} clientes inativos
+          <span>
+            🔔 {clientesInativos.length} clientes inativos
+          </span>
+
           <button
             style={notifBtn}
             onClick={() => setModalInativos(true)}
           >
-            ver
+            Ver
           </button>
         </div>
       )}
 
+      {/* HEADER */}
       <div style={header}>
-        <h1 style={title}>Compras</h1>
+        <div>
+          <h1 style={title}>Compras</h1>
+          <span style={sub}>
+            Controle e histórico de vendas
+          </span>
+        </div>
 
         <button
           style={btnSmall}
@@ -369,144 +416,311 @@ const saldoCupom = cupomsDisponiveis * 150
         </button>
       </div>
 
+      {/* KPIs */}
       <div style={dashGrid}>
-      <Dash
-  label="Faturamento"
-  value={`R$ ${comprasFiltradas.reduce(
-    (a, c) => a + c.valor,
-    0
-  ).toFixed(2)}`}
-/>
+        <Dash
+          label="Faturamento"
+          value={`R$ ${comprasFiltradas
+            .reduce(
+              (a, c) => a + c.valor,
+              0
+            )
+            .toFixed(2)}`}
+        />
 
-<Dash
-  label="Vendas"
-  value={comprasFiltradas.length}
-/>
+        <Dash
+          label="Vendas"
+          value={comprasFiltradas.length}
+        />
 
-<Dash
-  label="Clientes"
-  value={
-    new Set(
-      comprasFiltradas.map(c => c.cpf)
-    ).size
-  }
-/>
+        <Dash
+          label="Clientes"
+          value={
+            new Set(
+              comprasFiltradas.map(
+                c => c.cpf
+              )
+            ).size
+          }
+        />
       </div>
 
-      {/* RESUMO MENSAL */}
+      {/* FATURAMENTO POR MÊS */}
       <div style={section}>
-        <h3>Faturamento por mês</h3>
+        <div style={sectionHeader}>
+          <div>
+            <h3 style={sectionTitle}>
+              Faturamento por mês
+            </h3>
+
+            <span style={sectionSub}>
+              Acompanhe a evolução das vendas
+            </span>
+          </div>
+        </div>
 
         <div style={mesGrid}>
-          {vendasPorMes.map(([mes, total]) => (
-            <div key={mes} style={mesCard}>
-              <strong>{mes}</strong>
-              <div>R$ {total.toFixed(2)}</div>
+          {vendasPorMes.length === 0 ? (
+            <div style={emptyState}>
+              Nenhuma venda encontrada.
             </div>
-          ))}
+          ) : (
+            vendasPorMes.map(
+              ([mes, total]) => (
+                <div
+                  key={mes}
+                  style={mesCard}
+                >
+                  <strong style={mesLabel}>
+                    {mes}
+                  </strong>
+
+                  <div style={mesValue}>
+                    R$ {total.toFixed(2)}
+                  </div>
+                </div>
+              )
+            )
+          )}
         </div>
       </div>
 
       {/* FILTROS */}
       <div style={filtrosBar}>
-        <input
-          placeholder="Buscar por cliente ou CPF"
-          value={buscaVenda}
-          onChange={e => setBuscaVenda(e.target.value)}
-          style={inputFiltro}
-        />
 
-        <select
-          value={filtroMes}
-          onChange={e => setFiltroMes(e.target.value)}
-          style={selectFiltro}
-        >
-          <option value="todos">Todos os meses</option>
-          <option value="01">Janeiro</option>
-          <option value="02">Fevereiro</option>
-          <option value="03">Março</option>
-          <option value="04">Abril</option>
-          <option value="05">Maio</option>
-          <option value="06">Junho</option>
-          <option value="07">Julho</option>
-          <option value="08">Agosto</option>
-          <option value="09">Setembro</option>
-          <option value="10">Outubro</option>
-          <option value="11">Novembro</option>
-          <option value="12">Dezembro</option>
-        </select>
+        <div style={filtroBusca}>
+          <input
+            placeholder="Buscar por cliente ou CPF"
+            value={buscaVenda}
+            onChange={e =>
+              setBuscaVenda(e.target.value)
+            }
+            style={inputFiltro}
+          />
+        </div>
 
-        <select
-          value={filtroPagamento}
-          onChange={e =>
-            setFiltroPagamento(e.target.value)
-          }
-          style={selectFiltro}
-        >
-          <option value="todos">Todos pagamentos</option>
-          <option value="Pix">Pix</option>
-          <option value="Dinheiro">Dinheiro</option>
-          <option value="Cartão">Cartão</option>
-          <option value="Cupom">Cupom</option>
-        </select>
-      </div>
+        <div style={filtroCampo}>
+          <select
+            value={filtroMes}
+            onChange={e =>
+              setFiltroMes(e.target.value)
+            }
+            style={selectFiltro}
+          >
+            <option value="todos">
+              Todos os meses
+            </option>
 
-      {/* GALERIA */}
-      <div style={section}>
-        <h3>Histórico de vendas</h3>
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
 
-        <div style={listaCompras}>
-          {comprasFiltradas.map(compra => (
-            <div key={compra.id} style={compraCard}>
-              <div>
-                <strong>{compra.cliente}</strong>
-                <div style={muted}>{compra.cpf}</div>
-              </div>
+        <div style={filtroCampo}>
+          <select
+            value={filtroPagamento}
+            onChange={e =>
+              setFiltroPagamento(
+                e.target.value
+              )
+            }
+            style={selectFiltro}
+          >
+            <option value="todos">
+              Todos pagamentos
+            </option>
 
-              <div>
-                <strong>
-                  R$ {compra.valor.toFixed(2)}
-                </strong>
-                <div style={muted}>
-                  {new Date(
-                    compra.criadoem
-                  ).toLocaleDateString("pt-BR")}
-                </div>
-              </div>
+            <option value="Pix">
+              Pix
+            </option>
 
-              <div>
-                <div>{compra.pagamento}</div>
-                <div style={muted}>
-                  {compra.parcelas}x
-                </div>
-              </div>
+            <option value="Dinheiro">
+              Dinheiro
+            </option>
 
-              <div>
-                <div>
-                  +{compra.pontosgerados} pts
-                </div>
-                <div style={muted}>
-                  Cupom: R$ {compra.cupomusado}
-                </div>
-              </div>
-            </div>
-          ))}
+            <option value="Cartão">
+              Cartão
+            </option>
+
+            <option value="Cupom">
+              Cupom
+            </option>
+          </select>
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* HISTÓRICO */}
+      <div style={section}>
+
+        <div style={sectionHeader}>
+          <div>
+            <h3 style={sectionTitle}>
+              Histórico de vendas
+            </h3>
+
+            <span style={sectionSub}>
+              {comprasFiltradas.length} venda
+              {comprasFiltradas.length !== 1
+                ? "s"
+                : ""}{" "}
+              encontrada
+              {comprasFiltradas.length !== 1
+                ? "s"
+                : ""}
+            </span>
+          </div>
+        </div>
+
+        <div style={listaCompras}>
+
+          {comprasFiltradas.length === 0 ? (
+            <div style={emptyState}>
+              Nenhuma venda encontrada com
+              os filtros selecionados.
+            </div>
+          ) : (
+            comprasFiltradas.map(
+              compra => (
+                <div
+                  key={compra.id}
+                  style={compraCard}
+                >
+
+                  {/* CLIENTE */}
+                  <div style={compraCliente}>
+                    <strong
+                      style={clienteNome}
+                    >
+                      {compra.cliente}
+                    </strong>
+
+                    <div style={muted}>
+                      {compra.cpf}
+                    </div>
+                  </div>
+
+                  {/* VALOR */}
+                  <div style={compraInfo}>
+                    <span style={infoLabel}>
+                      Valor
+                    </span>
+
+                    <strong
+                      style={valorCompra}
+                    >
+                      R${" "}
+                      {compra.valor.toFixed(
+                        2
+                      )}
+                    </strong>
+
+                    <div style={muted}>
+                      {new Date(
+                        compra.criadoem
+                      ).toLocaleDateString(
+                        "pt-BR"
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PAGAMENTO */}
+                  <div style={compraInfo}>
+                    <span style={infoLabel}>
+                      Pagamento
+                    </span>
+
+                    <strong>
+                      {compra.pagamento}
+                    </strong>
+
+                    {compra.pagamento.includes(
+                      "Cartão"
+                    ) && (
+                      <div style={muted}>
+                        {compra.parcelas}x
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PONTOS */}
+                  <div style={compraInfo}>
+                    <span style={infoLabel}>
+                      Fidelidade
+                    </span>
+
+                    <strong style={pontos}>
+                      +{compra.pontosgerados} pts
+                    </strong>
+
+                    <div style={muted}>
+                      Cupom: R${" "}
+                      {compra.cupomusado.toFixed(
+                        2
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )
+            )
+          )}
+
+        </div>
+      </div>
+
+      {/* MODAL NOVA COMPRA */}
       {modal && (
-        <div style={overlay} onClick={() => setModal(false)}>
+        <div
+          style={overlay}
+          onClick={() =>
+            setModal(false)
+          }
+        >
           <div
             style={modalCard}
-            onClick={e => e.stopPropagation()}
+            onClick={e =>
+              e.stopPropagation()
+            }
           >
-            <h2>Nova compra</h2>
+            <div style={modalHeader}>
+              <div>
+                <h2 style={modalTitle}>
+                  Nova compra
+                </h2>
+
+                <span style={modalSub}>
+                  Registre uma nova venda
+                </span>
+              </div>
+
+              <button
+                style={closeButton}
+                onClick={() =>
+                  setModal(false)
+                }
+              >
+                ×
+              </button>
+            </div>
 
             <input
               placeholder="Buscar cliente"
               value={buscaCliente}
-              onChange={e => setBuscaCliente(e.target.value)}
+              onChange={e =>
+                setBuscaCliente(
+                  e.target.value
+                )
+              }
               style={input}
             />
 
@@ -517,13 +731,22 @@ const saldoCupom = cupomsDisponiveis * 150
                   style={{
                     ...clienteCard,
                     border:
-                      clienteSel?.id === c.id
+                      clienteSel?.id ===
+                      c.id
                         ? "2px solid #d4af37"
                         : "1px solid #eee"
                   }}
-                  onClick={() => setClienteSel(c)}
+                  onClick={() =>
+                    setClienteSel(c)
+                  }
                 >
-                  {c.nome}
+                  <strong>
+                    {c.nome}
+                  </strong>
+
+                  <span style={muted}>
+                    {c.cpf}
+                  </span>
                 </div>
               ))}
             </div>
@@ -531,18 +754,31 @@ const saldoCupom = cupomsDisponiveis * 150
             {clienteSel && (
               <>
                 <div style={cupomRow}>
-                Cupoms disponíveis: {cupomsDisponiveis} (R$ {saldoCupom})
+                  <span>
+                    Cupons disponíveis:{" "}
+                    <strong>
+                      {cupomsDisponiveis}
+                    </strong>{" "}
+                    (R${" "}
+                    {saldoCupom.toFixed(2)}
+                    )
+                  </span>
 
-                {cupomsDisponiveis > 0 && (
-                    <label>
-                      usar cupom
+                  {cupomsDisponiveis > 0 && (
+                    <label
+                      style={checkboxLabel}
+                    >
                       <input
                         type="checkbox"
                         checked={usarCupom}
                         onChange={() =>
-                          setUsarCupom(!usarCupom)
+                          setUsarCupom(
+                            !usarCupom
+                          )
                         }
                       />
+
+                      Usar cupom
                     </label>
                   )}
                 </div>
@@ -553,7 +789,11 @@ const saldoCupom = cupomsDisponiveis * 150
                   style={input}
                   value={valor || ""}
                   onChange={e =>
-                    setValor(Number(e.target.value))
+                    setValor(
+                      Number(
+                        e.target.value
+                      )
+                    )
                   }
                 />
 
@@ -561,42 +801,83 @@ const saldoCupom = cupomsDisponiveis * 150
                   style={input}
                   value={pagamento}
                   onChange={e =>
-                    setPagamento(e.target.value)
+                    setPagamento(
+                      e.target.value
+                    )
                   }
                 >
                   <option>Pix</option>
-                  <option>Dinheiro</option>
-                  <option>Cartão</option>
+                  <option>
+                    Dinheiro
+                  </option>
+                  <option>
+                    Cartão
+                  </option>
                 </select>
 
-                {pagamento === "Cartão" && (
+                {pagamento ===
+                  "Cartão" && (
                   <select
                     style={input}
                     value={parcelas}
                     onChange={e =>
-                      setParcelas(Number(e.target.value))
+                      setParcelas(
+                        Number(
+                          e.target.value
+                        )
+                      )
                     }
                   >
-                    <option value={1}>1x</option>
-                    <option value={2}>2x</option>
-                    <option value={3}>3x</option>
-                    <option value={4}>4x</option>
-                    <option value={5}>5x</option>
+                    <option value={1}>
+                      1x
+                    </option>
+                    <option value={2}>
+                      2x
+                    </option>
+                    <option value={3}>
+                      3x
+                    </option>
+                    <option value={4}>
+                      4x
+                    </option>
+                    <option value={5}>
+                      5x
+                    </option>
                   </select>
                 )}
 
                 <div style={resumo}>
-                  Valor final: <strong>R$ {valorRestante}</strong>
+                  Valor final:{" "}
+                  <strong>
+                    R${" "}
+                    {valorRestante.toFixed(
+                      2
+                    )}
+                  </strong>
+
                   <br />
-                  Cupom usado: <strong>R$ {valorCupom}</strong>
+
+                  Cupom usado:{" "}
+                  <strong>
+                    R${" "}
+                    {valorCupom.toFixed(
+                      2
+                    )}
+                  </strong>
+
                   <br />
+
                   Pontos gerados:{" "}
-                  <strong>{pontosGerados}</strong>
+                  <strong>
+                    {pontosGerados}
+                  </strong>
                 </div>
 
                 <button
                   style={btnPrimary}
-                  onClick={registrarCompra}
+                  onClick={
+                    registrarCompra
+                  }
                 >
                   Finalizar compra
                 </button>
@@ -606,31 +887,63 @@ const saldoCupom = cupomsDisponiveis * 150
         </div>
       )}
 
-      {/* INATIVOS */}
+      {/* MODAL INATIVOS */}
       {modalInativos && (
         <div
           style={overlay}
-          onClick={() => setModalInativos(false)}
+          onClick={() =>
+            setModalInativos(false)
+          }
         >
           <div
             style={modalCard}
-            onClick={e => e.stopPropagation()}
+            onClick={e =>
+              e.stopPropagation()
+            }
           >
-            <h3>Clientes inativos</h3>
+            <div style={modalHeader}>
+              <div>
+                <h3 style={modalTitle}>
+                  Clientes inativos
+                </h3>
+
+                <span style={modalSub}>
+                  Clientes sem compra há mais
+                  de 30 dias
+                </span>
+              </div>
+
+              <button
+                style={closeButton}
+                onClick={() =>
+                  setModalInativos(false)
+                }
+              >
+                ×
+              </button>
+            </div>
 
             {clientesInativos.map(c => {
-              const ult = getUltimaCompra(c.cpf)
+              const ult =
+                getUltimaCompra(c.cpf)
 
               return (
-                <div key={c.id} style={inativoRow}>
-                  <strong>{c.nome}</strong>
+                <div
+                  key={c.id}
+                  style={inativoRow}
+                >
+                  <strong>
+                    {c.nome}
+                  </strong>
 
                   <div style={muted}>
                     Última compra:{" "}
                     {ult
                       ? new Date(
                           ult.criadoem
-                        ).toLocaleDateString("pt-BR")
+                        ).toLocaleDateString(
+                          "pt-BR"
+                        )
                       : "Nunca"}
                   </div>
                 </div>
@@ -643,18 +956,29 @@ const saldoCupom = cupomsDisponiveis * 150
   )
 }
 
-/* COMPONENT */
-function Dash({ label, value }: any) {
+/* =========================
+   COMPONENTE KPI
+========================= */
+
+function Dash({
+  label,
+  value
+}: any) {
   return (
     <div style={dash}>
-      <div style={{ color: "#777" }}>{label}</div>
-      <strong>{value}</strong>
+      <div style={dashLabel}>
+        {label}
+      </div>
+
+      <strong style={dashValue}>
+        {value}
+      </strong>
     </div>
   )
 }
 
 /* =========================
-   ESTILOS RESPONSIVOS
+   ESTILOS
 ========================= */
 
 const container = {
@@ -663,18 +987,7 @@ const container = {
   minHeight: "100%",
   padding: 40,
   background: "#f6f6f7",
-  fontFamily: "Inter",
-  overflow: "hidden"
-}
-
-const section = {
-  width: "100%",
-  minWidth: 0,
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  marginBottom: 20,
-  overflow: "hidden"
+  fontFamily: "Inter"
 }
 
 const notifBar = {
@@ -713,6 +1026,13 @@ const title = {
   margin: 0
 }
 
+const sub = {
+  display: "block",
+  color: "#777",
+  fontSize: 13,
+  marginTop: 4
+}
+
 const btnSmall = {
   padding: "10px 16px",
   borderRadius: 10,
@@ -729,77 +1049,226 @@ const dashGrid = {
   gridTemplateColumns:
     "repeat(auto-fit,minmax(180px,1fr))",
   gap: 10,
-  marginBottom: 20
+  marginBottom: 20,
+  width: "100%",
+  minWidth: 0
 }
 
 const dash = {
   background: "#fff",
-  padding: 16,
-  borderRadius: 12,
+  padding: 18,
+  borderRadius: 14,
   minWidth: 0,
   overflow: "hidden"
 }
 
-const filtrosBar = {
-  display: "grid",
-  gridTemplateColumns:
-    "minmax(200px,2fr) minmax(140px,1fr) minmax(140px,1fr)",
-  gap: 10,
-  marginBottom: 20,
-  width: "100%"
+const dashLabel = {
+  color: "#777",
+  fontSize: 12,
+  marginBottom: 5
 }
 
-const inputFiltro = {
+const dashValue = {
+  display: "block",
+  fontSize: 24,
+  wordBreak: "break-word" as const
+}
+
+/* =========================
+   SEÇÕES
+========================= */
+
+const section = {
   width: "100%",
   minWidth: 0,
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "#fff"
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  marginBottom: 20
 }
 
-const selectFiltro = {
-  width: "100%",
-  minWidth: 0,
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "#fff"
-}
-
-const listaCompras = {
+const sectionHeader = {
   display: "flex",
-  flexDirection: "column" as const,
-  gap: 10,
-  width: "100%"
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 16
 }
 
-const compraCard = {
-  display: "grid",
-  gridTemplateColumns:
-    "minmax(180px,2fr) minmax(110px,1fr) minmax(100px,1fr) minmax(110px,1fr)",
-  gap: 16,
-  padding: 16,
-  borderRadius: 12,
-  background: "#f9f9f9",
-  alignItems: "center",
-  minWidth: 0
+const sectionTitle = {
+  margin: 0,
+  fontSize: 18,
+  fontWeight: 600
 }
+
+const sectionSub = {
+  display: "block",
+  marginTop: 4,
+  color: "#888",
+  fontSize: 12
+}
+
+/* =========================
+   FATURAMENTO MENSAL
+========================= */
 
 const mesGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(120px,1fr))",
-  gap: 10
+    "repeat(auto-fit,minmax(130px,1fr))",
+  gap: 10,
+  width: "100%"
 }
 
 const mesCard = {
   background: "#f9f9f9",
   padding: 14,
   borderRadius: 12,
-  textAlign: "center" as const,
   minWidth: 0
 }
+
+const mesLabel = {
+  display: "block",
+  fontSize: 13,
+  color: "#777",
+  marginBottom: 6
+}
+
+const mesValue = {
+  fontSize: 17,
+  fontWeight: 600,
+  wordBreak: "break-word" as const
+}
+
+/* =========================
+   FILTROS
+========================= */
+
+const filtrosBar = {
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(200px,2fr) minmax(150px,1fr) minmax(150px,1fr)",
+  gap: 10,
+  marginBottom: 20,
+  width: "100%",
+  minWidth: 0
+}
+
+const filtroBusca = {
+  minWidth: 0,
+  width: "100%"
+}
+
+const filtroCampo = {
+  minWidth: 0,
+  width: "100%"
+}
+
+const inputFiltro = {
+  display: "block",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "#fff",
+  fontSize: 14,
+  outline: "none"
+}
+
+const selectFiltro = {
+  display: "block",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "#fff",
+  fontSize: 14,
+  outline: "none"
+}
+
+/* =========================
+   HISTÓRICO
+========================= */
+
+const listaCompras = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 10,
+  width: "100%",
+  minWidth: 0
+}
+
+const compraCard = {
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(180px,2fr) minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr)",
+  gap: 18,
+  padding: 16,
+  borderRadius: 12,
+  background: "#f9f9f9",
+  alignItems: "center",
+  width: "100%",
+  minWidth: 0
+}
+
+const compraCliente = {
+  minWidth: 0,
+  overflow: "hidden"
+}
+
+const clienteNome = {
+  display: "block",
+  fontSize: 14,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const
+}
+
+const compraInfo = {
+  minWidth: 0,
+  overflow: "hidden"
+}
+
+const infoLabel = {
+  display: "block",
+  color: "#999",
+  fontSize: 11,
+  marginBottom: 3
+}
+
+const valorCompra = {
+  fontSize: 15,
+  whiteSpace: "nowrap" as const
+}
+
+const pontos = {
+  fontSize: 14,
+  color: "#a48229"
+}
+
+const muted = {
+  fontSize: 12,
+  color: "#888",
+  marginTop: 3,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const
+}
+
+const emptyState = {
+  padding: 24,
+  textAlign: "center" as const,
+  color: "#888",
+  fontSize: 13
+}
+
+/* =========================
+   MODAL
+========================= */
 
 const overlay = {
   position: "fixed" as const,
@@ -818,10 +1287,43 @@ const modalCard = {
   padding: 20,
   borderRadius: 16,
   width: "100%",
-  maxWidth: 420,
+  maxWidth: 440,
   maxHeight: "90vh",
   overflowY: "auto" as const,
   overflowX: "hidden" as const
+}
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 16
+}
+
+const modalTitle = {
+  margin: 0,
+  fontSize: 20
+}
+
+const modalSub = {
+  display: "block",
+  marginTop: 4,
+  color: "#888",
+  fontSize: 12
+}
+
+const closeButton = {
+  width: 32,
+  height: 32,
+  borderRadius: "50%",
+  border: "none",
+  background: "#f4f4f4",
+  color: "#555",
+  fontSize: 22,
+  lineHeight: 1,
+  cursor: "pointer",
+  flexShrink: 0
 }
 
 const clienteGrid = {
@@ -837,7 +1339,8 @@ const clienteCard = {
   borderRadius: 10,
   cursor: "pointer",
   background: "#fff",
-  wordBreak: "break-word" as const
+  wordBreak: "break-word" as const,
+  minWidth: 0
 }
 
 const cupomRow = {
@@ -845,9 +1348,17 @@ const cupomRow = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
-  marginTop: 10,
+  marginTop: 14,
   flexWrap: "wrap" as const,
   fontSize: 14
+}
+
+const checkboxLabel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const
 }
 
 const resumo = {
@@ -855,7 +1366,8 @@ const resumo = {
   padding: 12,
   background: "#faf8f1",
   borderRadius: 10,
-  lineHeight: 1.7
+  lineHeight: 1.7,
+  fontSize: 14
 }
 
 const btnPrimary = {
@@ -876,17 +1388,15 @@ const inativoRow = {
 }
 
 const input = {
+  display: "block",
   width: "100%",
+  maxWidth: "100%",
   minWidth: 0,
   padding: 10,
   marginTop: 10,
   borderRadius: 10,
   border: "1px solid #ddd",
-  background: "#fff"
-}
-
-const muted = {
-  fontSize: 12,
-  color: "#888",
-  marginTop: 3
+  background: "#fff",
+  fontSize: 14,
+  outline: "none"
 }
