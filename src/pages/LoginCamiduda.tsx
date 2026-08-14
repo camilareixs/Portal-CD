@@ -2,32 +2,57 @@ import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 export default function LoginCamiduda() {
-  const [usuario, setUsuario] = useState("")
-  const [senha, setSenha] = useState("")
-  const [codigo, setCodigo] = useState("")
-  const [modoCadastro, setModoCadastro] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState("")
+  const [usuario, setUsuario] =
+    useState("")
 
-  // animação título
-  const [text, setText] = useState("")
+  const [senha, setSenha] =
+    useState("")
+
+  const [codigo, setCodigo] =
+    useState("")
+
+  const [modoCadastro, setModoCadastro] =
+    useState(false)
+
+  const [loading, setLoading] =
+    useState(false)
+
+  const [erro, setErro] =
+    useState("")
+
+  const [text, setText] =
+    useState("")
+
   const fullText = "Camiduda"
 
   useEffect(() => {
     verificarPrimeiroAcesso()
 
     let i = 0
+
     const interval = setInterval(() => {
-      setText(fullText.slice(0, i + 1))
+      setText(
+        fullText.slice(0, i + 1)
+      )
+
       i++
-      if (i === fullText.length) clearInterval(interval)
+
+      if (i === fullText.length) {
+        clearInterval(interval)
+      }
     }, 120)
 
-    return () => clearInterval(interval)
+    return () =>
+      clearInterval(interval)
   }, [])
 
   async function verificarPrimeiroAcesso() {
-    const { data } = await supabase.from("login").select("*").limit(1)
+    const { data } =
+      await supabase
+        .from("login")
+        .select("*")
+        .limit(1)
+
     if (!data || data.length === 0) {
       setModoCadastro(true)
     }
@@ -37,30 +62,39 @@ export default function LoginCamiduda() {
     setErro("")
 
     if (codigo !== "CDFEI") {
-      setErro("Código de acesso inválido")
+      setErro(
+        "Código de acesso inválido"
+      )
       return
     }
 
     if (!usuario || !senha) {
-      setErro("Preencha usuário e senha")
+      setErro(
+        "Preencha usuário e senha"
+      )
       return
     }
 
     setLoading(true)
 
-    const { error } = await supabase.from("login").insert([
-      {
-        usuario,
-        senha,
-        codigo_secreto: codigo,
-        primeiro_acesso: false
-      }
-    ])
+    const { error } =
+      await supabase
+        .from("login")
+        .insert([
+          {
+            usuario,
+            senha,
+            codigo_secreto: codigo,
+            primeiro_acesso: false
+          }
+        ])
 
     setLoading(false)
 
     if (error) {
-      setErro("Erro ao criar acesso")
+      setErro(
+        "Erro ao criar acesso"
+      )
       return
     }
 
@@ -74,22 +108,32 @@ export default function LoginCamiduda() {
     setErro("")
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from("login")
-      .select("*")
-      .eq("usuario", usuario)
-      .eq("senha", senha)
-      .single()
+    const { data, error } =
+      await supabase
+        .from("login")
+        .select("*")
+        .eq("usuario", usuario)
+        .eq("senha", senha)
+        .single()
 
     setLoading(false)
 
     if (error || !data) {
-      setErro("Usuário ou senha inválidos")
+      setErro(
+        "Usuário ou senha inválidos"
+      )
       return
     }
 
-    localStorage.setItem("camiduda_auth", "true")
-    localStorage.setItem("camiduda_user", data.usuario)
+    localStorage.setItem(
+      "camiduda_auth",
+      "true"
+    )
+
+    localStorage.setItem(
+      "camiduda_user",
+      data.usuario
+    )
 
     window.location.reload()
   }
@@ -100,7 +144,13 @@ export default function LoginCamiduda() {
         <div style={header}>
           <h1 style={title}>
             {text}
-            <span style={{ color: "#c8a24a" }}>.</span>
+            <span
+              style={{
+                color: "#c8a24a"
+              }}
+            >
+              .
+            </span>
           </h1>
 
           <p style={sub}>
@@ -115,7 +165,10 @@ export default function LoginCamiduda() {
             style={input}
             placeholder="Usuário"
             value={usuario}
-            onChange={(e) => setUsuario(e.target.value)}
+            onChange={e =>
+              setUsuario(e.target.value)
+            }
+            autoComplete="username"
           />
 
           <input
@@ -123,7 +176,14 @@ export default function LoginCamiduda() {
             type="password"
             placeholder="Senha"
             value={senha}
-            onChange={(e) => setSenha(e.target.value)}
+            onChange={e =>
+              setSenha(e.target.value)
+            }
+            autoComplete={
+              modoCadastro
+                ? "new-password"
+                : "current-password"
+            }
           />
 
           {modoCadastro && (
@@ -131,15 +191,30 @@ export default function LoginCamiduda() {
               style={input}
               placeholder="Código de acesso"
               value={codigo}
-              onChange={(e) => setCodigo(e.target.value)}
+              onChange={e =>
+                setCodigo(
+                  e.target.value
+                )
+              }
             />
           )}
 
-          {erro && <span style={erroStyle}>{erro}</span>}
+          {erro && (
+            <span style={erroStyle}>
+              {erro}
+            </span>
+          )}
 
           <button
-            style={button}
-            onClick={modoCadastro ? handleCadastro : handleLogin}
+            style={{
+              ...button,
+              opacity: loading ? 0.7 : 1
+            }}
+            onClick={
+              modoCadastro
+                ? handleCadastro
+                : handleLogin
+            }
             disabled={loading}
           >
             {loading
@@ -157,7 +232,14 @@ export default function LoginCamiduda() {
                   setErro("")
                 }}
               >
-                Já possui acesso? <b style={{ color: "#b08d3c" }}>Entrar</b>
+                Já possui acesso?{" "}
+                <b
+                  style={{
+                    color: "#b08d3c"
+                  }}
+                >
+                  Entrar
+                </b>
               </span>
             ) : (
               <span
@@ -166,7 +248,14 @@ export default function LoginCamiduda() {
                   setErro("")
                 }}
               >
-                Primeiro acesso? <b style={{ color: "#b08d3c" }}>Criar conta</b>
+                Primeiro acesso?{" "}
+                <b
+                  style={{
+                    color: "#b08d3c"
+                  }}
+                >
+                  Criar conta
+                </b>
               </span>
             )}
           </div>
@@ -176,18 +265,17 @@ export default function LoginCamiduda() {
   )
 }
 
-/* =========================
-   ESTILO FINAL BOUTIQUE
-========================= */
-
 const container = {
-  minHeight: "100vh",
+  width: "100%",
+  minHeight: "100dvh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   fontFamily: "Inter",
-  background: "radial-gradient(circle at top,#fffdf8,#f3f0e8)",
-  padding: 20
+  background:
+    "radial-gradient(circle at top,#fffdf8,#f3f0e8)",
+  padding: 20,
+  overflowX: "hidden" as const
 }
 
 const card = {
@@ -196,7 +284,8 @@ const card = {
   background: "#ffffff",
   borderRadius: 22,
   padding: 44,
-  boxShadow: "0 30px 80px rgba(0,0,0,0.12)",
+  boxShadow:
+    "0 30px 80px rgba(0,0,0,0.12)",
   border: "1px solid #e9e2d2"
 }
 
@@ -222,10 +311,13 @@ const sub = {
 const form = {
   display: "flex",
   flexDirection: "column" as const,
-  gap: 12
+  gap: 12,
+  width: "100%"
 }
 
 const input = {
+  width: "100%",
+  minWidth: 0,
   padding: 14,
   borderRadius: 12,
   border: "1px solid #e6dcc8",
@@ -235,11 +327,13 @@ const input = {
 }
 
 const button = {
+  width: "100%",
   marginTop: 10,
   padding: 14,
   borderRadius: 12,
   border: "none",
-  background: "linear-gradient(90deg,#b08d3c,#d6b25e)",
+  background:
+    "linear-gradient(90deg,#b08d3c,#d6b25e)",
   color: "#1a1a1a",
   fontWeight: 600,
   cursor: "pointer"
@@ -256,5 +350,6 @@ const toggle = {
   textAlign: "center" as const,
   color: "#777",
   fontSize: 13,
-  cursor: "pointer"
+  cursor: "pointer",
+  lineHeight: 1.5
 }

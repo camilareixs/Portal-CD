@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -59,7 +58,9 @@ export default function Dashboard() {
       }
 
       if (periodo === "trimestre") {
-        const diff = (hoje.getTime() - data.getTime()) / 86400000
+        const diff =
+          (hoje.getTime() - data.getTime()) / 86400000
+
         return diff <= 90
       }
 
@@ -71,31 +72,50 @@ export default function Dashboard() {
     })
   }, [compras, periodo])
 
-  const faturamento = comprasFiltradas.reduce((a, b) => a + Number(b.valor), 0)
+  const faturamento = comprasFiltradas.reduce(
+    (a, b) => a + Number(b.valor),
+    0
+  )
+
   const ticketMedio = comprasFiltradas.length
     ? faturamento / comprasFiltradas.length
     : 0
 
-  const clientesAtivos = new Set(comprasFiltradas.map(c => c.clienteid)).size
+  const clientesAtivos = new Set(
+    comprasFiltradas.map(c => c.clienteid)
+  ).size
 
-  const progressoMeta = Math.min((faturamento / meta) * 100, 100)
+  const progressoMeta = Math.min(
+    (faturamento / meta) * 100,
+    100
+  )
 
   const clientesRisco = useMemo(() => {
     const hoje = new Date()
 
     return clientes
       .map(cliente => {
-        const ultima = compras.find(c => c.clienteid === cliente.id)
+        const ultima = compras.find(
+          c => c.clienteid === cliente.id
+        )
 
         if (!ultima) {
-          return { ...cliente, dias: 999 }
+          return {
+            ...cliente,
+            dias: 999
+          }
         }
 
         const dias = Math.floor(
-          (hoje.getTime() - new Date(ultima.criadoem).getTime()) / 86400000
+          (hoje.getTime() -
+            new Date(ultima.criadoem).getTime()) /
+            86400000
         )
 
-        return { ...cliente, dias }
+        return {
+          ...cliente,
+          dias
+        }
       })
       .sort((a, b) => b.dias - a.dias)
   }, [clientes, compras])
@@ -108,47 +128,117 @@ export default function Dashboard() {
 
   compras.forEach(c => {
     const d = new Date(c.criadoem)
-    const chave = `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`
-    vendasPorMesMap[chave] = (vendasPorMesMap[chave] || 0) + Number(c.valor)
+
+    const chave = `${String(
+      d.getMonth() + 1
+    ).padStart(2, "0")}/${d.getFullYear()}`
+
+    vendasPorMesMap[chave] =
+      (vendasPorMesMap[chave] || 0) +
+      Number(c.valor)
   })
 
-  const melhorMes = Object.entries(vendasPorMesMap).sort((a, b) => b[1] - a[1])[0]
+  const melhorMes =
+    Object.entries(vendasPorMesMap).sort(
+      (a, b) => b[1] - a[1]
+    )[0]
 
   const lucroEstimado = faturamento * 0.45
 
-
   function campanha(tipo: string) {
-    if (tipo === "vip") alert("Campanha VIP enviada para melhores clientes")
-    if (tipo === "estoque") alert("Campanha Queima de Estoque ativada")
-    if (tipo === "pos") alert("Campanha Pós-compra iniciada")
-    if (tipo === "inativos") alert("Campanha de recuperação para inativos enviada")
+    if (tipo === "vip")
+      alert(
+        "Campanha VIP enviada para melhores clientes"
+      )
+
+    if (tipo === "estoque")
+      alert(
+        "Campanha Queima de Estoque ativada"
+      )
+
+    if (tipo === "pos")
+      alert(
+        "Campanha Pós-compra iniciada"
+      )
+
+    if (tipo === "inativos")
+      alert(
+        "Campanha de recuperação para inativos enviada"
+      )
   }
 
   const calendario = [
-    ["15 Março", "Dia do Consumidor", "Campanha de recompra + cupom progressivo"],
-    ["Maio (2º domingo)", "Dia das Mães", "Kits premium + ticket médio elevado"],
-    ["12 Junho", "Dia dos Namorados", "Combos presenteáveis + venda cruzada"],
-    ["Agosto (2º domingo)", "Dia dos Pais", "Acessórios + campanhas de indicação"],
-    ["15 Setembro", "Dia do Cliente", "Cashback + fidelização"],
-    ["12 Outubro", "Dia das Crianças", "Linha família + combos"],
-    ["Novembro", "Black Friday", "Giro de estoque + aquisição"],
-    ["Dezembro", "Natal", "Luxo, presentes e retenção"],
-    ["26 Dez–Jan", "Pós-Natal / Liquidação", "Queima estratégica"]
+    [
+      "15 Março",
+      "Dia do Consumidor",
+      "Campanha de recompra + cupom progressivo"
+    ],
+    [
+      "Maio (2º domingo)",
+      "Dia das Mães",
+      "Kits premium + ticket médio elevado"
+    ],
+    [
+      "12 Junho",
+      "Dia dos Namorados",
+      "Combos presenteáveis + venda cruzada"
+    ],
+    [
+      "Agosto (2º domingo)",
+      "Dia dos Pais",
+      "Acessórios + campanhas de indicação"
+    ],
+    [
+      "15 Setembro",
+      "Dia do Cliente",
+      "Cashback + fidelização"
+    ],
+    [
+      "12 Outubro",
+      "Dia das Crianças",
+      "Linha família + combos"
+    ],
+    [
+      "Novembro",
+      "Black Friday",
+      "Giro de estoque + aquisição"
+    ],
+    [
+      "Dezembro",
+      "Natal",
+      "Luxo, presentes e retenção"
+    ],
+    [
+      "26 Dez–Jan",
+      "Pós-Natal / Liquidação",
+      "Queima estratégica"
+    ]
   ]
-  
 
   return (
     <div style={container}>
       <div style={header}>
         <div>
           <h1 style={title}>Dashboard</h1>
-          <span style={sub}>Visão estratégica CamiDuda</span>
+          <span style={sub}>
+            Visão estratégica CamiDuda
+          </span>
         </div>
 
         <div style={topControls}>
-          <select value={periodo} onChange={e => setPeriodo(e.target.value as Periodo)} style={select}>
+          <select
+            value={periodo}
+            onChange={e =>
+              setPeriodo(
+                e.target.value as Periodo
+              )
+            }
+            style={select}
+          >
             <option value="mes">Mês</option>
-            <option value="trimestre">3 meses</option>
+            <option value="trimestre">
+              3 meses
+            </option>
             <option value="ano">Ano</option>
             <option value="todos">Todos</option>
           </select>
@@ -156,275 +246,636 @@ export default function Dashboard() {
       </div>
 
       <div style={viewSwitch}>
-        <button style={visao === "geral" ? activeTab : tab} onClick={() => setVisao("geral")}>Visão Lucro</button>
-        <button style={visao === "clientes" ? activeTab : tab} onClick={() => setVisao("clientes")}>Visão Clientes</button>
-      </div>
+        <button
+          style={
+            visao === "geral"
+              ? activeTab
+              : tab
+          }
+          onClick={() =>
+            setVisao("geral")
+          }
+        >
+          Visão Lucro
+        </button>
 
-      {visao === "geral" && (
-  <>
-    {/* KPIs PRINCIPAIS */}
-    <div style={dashGrid}>
-      <Dash label="Faturamento" value={`R$ ${faturamento.toFixed(2)}`} />
-      <Dash label="Vendas" value={comprasFiltradas.length} />
-      <Dash label="Ticket médio" value={`R$ ${ticketMedio.toFixed(2)}`} />
-      <Dash label="Clientes ativos" value={clientesAtivos} />
-    </div>
-
-    {/* META */}
-    <div style={metaCard}>
-      <div style={metaHeader}>
-        <strong>Meta do período: R$ {meta.toLocaleString("pt-BR")}</strong>
-        <button style={dots} onClick={() => setEditarMeta(!editarMeta)}>
-          •••
+        <button
+          style={
+            visao === "clientes"
+              ? activeTab
+              : tab
+          }
+          onClick={() =>
+            setVisao("clientes")
+          }
+        >
+          Visão Clientes
         </button>
       </div>
 
-      {editarMeta && (
-        <input
-          type="number"
-          value={meta}
-          onChange={e => setMeta(Number(e.target.value))}
-          style={input}
-        />
-      )}
-
-      <div
-        title={`R$ ${faturamento.toFixed(2)} de R$ ${meta.toFixed(2)}`}
-        style={progressBg}
-      >
-        <div
-          style={{
-            ...progressFill,
-            width: `${progressoMeta}%`
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 12,
-          color: "#777"
-        }}
-      >
-        {progressoMeta.toFixed(1)}% da meta
-      </div>
-    </div>
-
-    {/* KPIs EXECUTIVOS */}
-    <div style={dashGrid}>
-      <Dash
-        label="Lucro estimado"
-        value={`R$ ${lucroEstimado.toFixed(2)}`}
-      />
-      <Dash
-        label="Melhor mês"
-        value={melhorMes ? melhorMes[0] : "-"}
-      />
-      <Dash
-        label="Valor melhor mês"
-        value={
-          melhorMes
-            ? `R$ ${Number(melhorMes[1]).toFixed(2)}`
-            : "-"
-        }
-      />
-      <Dash
-        label="Média por cliente"
-        value={`R$ ${
-          clientesAtivos
-            ? (faturamento / clientesAtivos).toFixed(2)
-            : "0.00"
-        }`}
-      />
-    </div>
-
-    {/* GRÁFICOS / VISUAL PROFISSIONAL */}
-    <div style={profitGrid}>
-      {/* FATURAMENTO POR MÊS */}
-      <div style={chartCard}>
-        <h3 style={chartTitle}>Faturamento por mês</h3>
-
-        {Object.entries(vendasPorMesMap)
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .slice(-6)
-          .map(([mes, total]) => {
-            const largura =
-              (Number(total) /
-                Math.max(...Object.values(vendasPorMesMap))) *
-              100
-
-            return (
-              <div key={mes} style={{ marginBottom: 12 }}>
-                <div style={barLabel}>
-                  <span>{mes}</span>
-                  <strong>R$ {Number(total).toFixed(0)}</strong>
-                </div>
-
-                <div style={barBg}>
-                  <div
-                    style={{
-                      ...barFill,
-                      width: `${largura}%`
-                    }}
-                  />
-                </div>
-              </div>
-            )
-          })}
-      </div>
-
-      {/* DISTRIBUIÇÃO DE PERFORMANCE */}
-      <div style={chartCard}>
-        <h3 style={chartTitle}>Performance estratégica</h3>
-
-        <MiniMetric
-          label="Conversão da meta"
-          value={`${progressoMeta.toFixed(1)}%`}
-        />
-
-        <MiniMetric
-          label="Margem estimada"
-          value={`${((lucroEstimado / faturamento) * 100 || 0).toFixed(1)}%`}
-        />
-
-        <MiniMetric
-          label="Recorrência"
-          value={`${(
-            (clientesAtivos / clientes.length) *
-              100 || 0
-          ).toFixed(1)}%`}
-        />
-
-        <MiniMetric
-          label="Potencial VIP"
-          value={`${topClientes.length} clientes`}
-        />
-      </div>
-    </div>
-
-    {/* INSIGHTS EMPRESARIAIS */}
-    <div style={section}>
-      <h3>Insights estratégicos</h3>
-
-      <div style={insightGrid}>
-        <InsightCard
-          title="Melhor oportunidade"
-          text={`${
-            melhorMes
-              ? `Replicar estratégia de ${melhorMes[0]}`
-              : "Acompanhar sazonalidade"
-          }`}
-        />
-
-        <InsightCard
-          title="Ação recomendada"
-          text={
-            ticketMedio < 150
-              ? "Criar combos para elevar ticket médio"
-              : "Focar retenção premium"
-          }
-        />
-
-        <InsightCard
-          title="Atenção"
-          text={
-            progressoMeta < 60
-              ? "Meta abaixo do esperado"
-              : "Meta saudável"
-          }
-        />
-
-        <InsightCard
-          title="Expansão"
-          text="Campanhas VIP + recompra pós-venda"
-        />
-      </div>
-    </div>
-  </>
-)}
-
-
-      {visao === "clientes" && (
+      {visao === "geral" && (
         <>
-          <div style={riskGrid}>
-            {clientesRisco.slice(0, 8).map(c => (
-              <div key={c.id} style={riskCard}>
-                <strong>{c.nome}</strong>
-                <div style={muted}>{c.dias >= 999 ? "Nunca comprou" : `${c.dias} dias sem comprar`}</div>
-              </div>
-            ))}
+          <div style={dashGrid}>
+            <Dash
+              label="Faturamento"
+              value={`R$ ${faturamento.toFixed(
+                2
+              )}`}
+            />
+
+            <Dash
+              label="Vendas"
+              value={comprasFiltradas.length}
+            />
+
+            <Dash
+              label="Ticket médio"
+              value={`R$ ${ticketMedio.toFixed(
+                2
+              )}`}
+            />
+
+            <Dash
+              label="Clientes ativos"
+              value={clientesAtivos}
+            />
+          </div>
+
+          <div style={metaCard}>
+            <div style={metaHeader}>
+              <strong>
+                Meta do período: R${" "}
+                {meta.toLocaleString("pt-BR")}
+              </strong>
+
+              <button
+                style={dots}
+                onClick={() =>
+                  setEditarMeta(
+                    !editarMeta
+                  )
+                }
+              >
+                •••
+              </button>
+            </div>
+
+            {editarMeta && (
+              <input
+                type="number"
+                value={meta}
+                onChange={e =>
+                  setMeta(
+                    Number(e.target.value)
+                  )
+                }
+                style={input}
+              />
+            )}
+
+            <div
+              title={`R$ ${faturamento.toFixed(
+                2
+              )} de R$ ${meta.toFixed(2)}`}
+              style={progressBg}
+            >
+              <div
+                style={{
+                  ...progressFill,
+                  width: `${progressoMeta}%`
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                color: "#777"
+              }}
+            >
+              {progressoMeta.toFixed(1)}%
+              da meta
+            </div>
+          </div>
+
+          <div style={dashGrid}>
+            <Dash
+              label="Lucro estimado"
+              value={`R$ ${lucroEstimado.toFixed(
+                2
+              )}`}
+            />
+
+            <Dash
+              label="Melhor mês"
+              value={
+                melhorMes
+                  ? melhorMes[0]
+                  : "-"
+              }
+            />
+
+            <Dash
+              label="Valor melhor mês"
+              value={
+                melhorMes
+                  ? `R$ ${Number(
+                      melhorMes[1]
+                    ).toFixed(2)}`
+                  : "-"
+              }
+            />
+
+            <Dash
+              label="Média por cliente"
+              value={`R$ ${
+                clientesAtivos
+                  ? (
+                      faturamento /
+                      clientesAtivos
+                    ).toFixed(2)
+                  : "0.00"
+              }`}
+            />
+          </div>
+
+          <div style={profitGrid}>
+            <div style={chartCard}>
+              <h3 style={chartTitle}>
+                Faturamento por mês
+              </h3>
+
+              {Object.entries(
+                vendasPorMesMap
+              )
+                .sort((a, b) =>
+                  a[0].localeCompare(b[0])
+                )
+                .slice(-6)
+                .map(([mes, total]) => {
+                  const maior =
+                    Math.max(
+                      ...Object.values(
+                        vendasPorMesMap
+                      )
+                    )
+
+                  const largura =
+                    maior > 0
+                      ? (Number(total) /
+                          maior) *
+                        100
+                      : 0
+
+                  return (
+                    <div
+                      key={mes}
+                      style={{
+                        marginBottom: 12
+                      }}
+                    >
+                      <div style={barLabel}>
+                        <span>{mes}</span>
+
+                        <strong>
+                          R${" "}
+                          {Number(
+                            total
+                          ).toFixed(0)}
+                        </strong>
+                      </div>
+
+                      <div style={barBg}>
+                        <div
+                          style={{
+                            ...barFill,
+                            width: `${largura}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+
+            <div style={chartCard}>
+              <h3 style={chartTitle}>
+                Performance estratégica
+              </h3>
+
+              <MiniMetric
+                label="Conversão da meta"
+                value={`${progressoMeta.toFixed(
+                  1
+                )}%`}
+              />
+
+              <MiniMetric
+                label="Margem estimada"
+                value={`${(
+                  (lucroEstimado /
+                    faturamento) *
+                    100 || 0
+                ).toFixed(1)}%`}
+              />
+
+              <MiniMetric
+                label="Recorrência"
+                value={`${(
+                  (clientesAtivos /
+                    clientes.length) *
+                    100 || 0
+                ).toFixed(1)}%`}
+              />
+
+              <MiniMetric
+                label="Potencial VIP"
+                value={`${topClientes.length} clientes`}
+              />
+            </div>
           </div>
 
           <div style={section}>
-            <h3>Top clientes por pontos</h3>
-            {topClientes.map(c => (
-              <div key={c.id} style={listRow}>
-                <span>{c.nome}</span>
-                <strong>{c.pontos} pts</strong>
-              </div>
-            ))}
+            <h3>
+              Insights estratégicos
+            </h3>
+
+            <div style={insightGrid}>
+              <InsightCard
+                title="Melhor oportunidade"
+                text={
+                  melhorMes
+                    ? `Replicar estratégia de ${melhorMes[0]}`
+                    : "Acompanhar sazonalidade"
+                }
+              />
+
+              <InsightCard
+                title="Ação recomendada"
+                text={
+                  ticketMedio < 150
+                    ? "Criar combos para elevar ticket médio"
+                    : "Focar retenção premium"
+                }
+              />
+
+              <InsightCard
+                title="Atenção"
+                text={
+                  progressoMeta < 60
+                    ? "Meta abaixo do esperado"
+                    : "Meta saudável"
+                }
+              />
+
+              <InsightCard
+                title="Expansão"
+                text="Campanhas VIP + recompra pós-venda"
+              />
+            </div>
           </div>
         </>
       )}
 
       {visao === "clientes" && (
         <>
+          <div style={riskGrid}>
+            {clientesRisco
+              .slice(0, 8)
+              .map(c => (
+                <div
+                  key={c.id}
+                  style={riskCard}
+                >
+                  <strong>
+                    {c.nome}
+                  </strong>
+
+                  <div style={muted}>
+                    {c.dias >= 999
+                      ? "Nunca comprou"
+                      : `${c.dias} dias sem comprar`}
+                  </div>
+                </div>
+              ))}
+          </div>
+
           <div style={section}>
-            <h3>Campanhas automáticas</h3>
+            <h3>
+              Top clientes por pontos
+            </h3>
+
+            {topClientes.map(c => (
+              <div
+                key={c.id}
+                style={listRow}
+              >
+                <span>{c.nome}</span>
+                <strong>
+                  {c.pontos} pts
+                </strong>
+              </div>
+            ))}
+          </div>
+
+          <div style={section}>
+            <h3>
+              Campanhas automáticas
+            </h3>
+
             <div style={campaignGrid}>
-              <button style={actionBtn} onClick={() => campanha("vip")}>Enviar promoção VIP</button>
-              <button style={actionBtn} onClick={() => campanha("estoque")}>Queima de estoque</button>
-              <button style={actionBtn} onClick={() => campanha("pos")}>Pós-compra</button>
-              <button style={actionBtn} onClick={() => campanha("inativos")}>Recuperar inativos</button>
+              <button
+                style={actionBtn}
+                onClick={() =>
+                  campanha("vip")
+                }
+              >
+                Enviar promoção VIP
+              </button>
+
+              <button
+                style={actionBtn}
+                onClick={() =>
+                  campanha("estoque")
+                }
+              >
+                Queima de estoque
+              </button>
+
+              <button
+                style={actionBtn}
+                onClick={() =>
+                  campanha("pos")
+                }
+              >
+                Pós-compra
+              </button>
+
+              <button
+                style={actionBtn}
+                onClick={() =>
+                  campanha("inativos")
+                }
+              >
+                Recuperar inativos
+              </button>
             </div>
           </div>
 
           <div style={section}>
-            <h3>Calendário sazonal</h3>
-            {calendario.map(([mes, data, acao]) => (
-  <div key={mes} style={listRow}>
-    <span>{mes} • {data}</span>
-    <strong>{acao}</strong>
-  </div>
-))}
-        </div>
-</>
-)}
+            <h3>
+              Calendário sazonal
+            </h3>
+
+            {calendario.map(
+              ([mes, data, acao]) => (
+                <div
+                  key={mes}
+                  style={calendarRow}
+                >
+                  <div>
+                    <strong>
+                      {mes}
+                    </strong>
+
+                    <span
+                      style={calendarDate}
+                    >
+                      {data}
+                    </span>
+                  </div>
+
+                  <strong
+                    style={calendarAction}
+                  >
+                    {acao}
+                  </strong>
+                </div>
+              )
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-function Dash({ label, value }: any) {
+function Dash({
+  label,
+  value
+}: {
+  label: string
+  value: React.ReactNode
+}) {
   return (
     <div style={dash}>
-      <span style={dashLabel}>{label}</span>
-      <strong style={dashValue}>{value}</strong>
+      <span style={dashLabel}>
+        {label}
+      </span>
+
+      <strong style={dashValue}>
+        {value}
+      </strong>
     </div>
   )
 }
 
-function MiniMetric({ label, value }: any) {
+function MiniMetric({
+  label,
+  value
+}: {
+  label: string
+  value: string
+}) {
   return (
     <div style={miniMetric}>
-      <span style={miniLabel}>{label}</span>
-      <strong style={miniValue}>{value}</strong>
+      <span style={miniLabel}>
+        {label}
+      </span>
+
+      <strong style={miniValue}>
+        {value}
+      </strong>
     </div>
   )
 }
 
-function InsightCard({ title, text }: any) {
+function InsightCard({
+  title,
+  text
+}: {
+  title: string
+  text: string
+}) {
   return (
     <div style={insightCard}>
-      <span style={insightTitle}>{title}</span>
-      <strong style={insightText}>{text}</strong>
+      <span style={insightTitle}>
+        {title}
+      </span>
+
+      <strong style={insightText}>
+        {text}
+      </strong>
     </div>
   )
+}
+
+/* =========================
+   ESTILOS
+========================= */
+
+const container = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: "100%",
+  padding: 40,
+  background: "#f6f6f7",
+  fontFamily: "Inter",
+  overflow: "hidden"
+}
+
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+  marginBottom: 24,
+  flexWrap: "wrap" as const
+}
+
+const title = {
+  fontSize: 34,
+  margin: 0
+}
+
+const sub = {
+  color: "#777",
+  fontSize: 14
+}
+
+const topControls = {
+  display: "flex",
+  gap: 10
+}
+
+const select = {
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "#fff",
+  minWidth: 120
+}
+
+const viewSwitch = {
+  display: "flex",
+  gap: 10,
+  marginBottom: 20,
+  flexWrap: "wrap" as const
+}
+
+const tab = {
+  padding: "10px 18px",
+  border: "none",
+  borderRadius: 12,
+  cursor: "pointer",
+  background: "#fff",
+  color: "#555"
+}
+
+const activeTab = {
+  ...tab,
+  background: "#f4e7a1",
+  color: "#6f5b25",
+  fontWeight: 600
+}
+
+const dashGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 12,
+  marginBottom: 20
+}
+
+const dash = {
+  background: "#fff",
+  padding: 18,
+  borderRadius: 16,
+  minWidth: 0,
+  overflow: "hidden"
+}
+
+const dashLabel = {
+  display: "block",
+  color: "#777",
+  fontSize: 13,
+  marginBottom: 6
+}
+
+const dashValue = {
+  fontSize: 24,
+  wordBreak: "break-word" as const
+}
+
+const metaCard = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  marginBottom: 20
+}
+
+const metaHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12
+}
+
+const dots = {
+  border: "none",
+  background: "transparent",
+  cursor: "pointer",
+  fontSize: 18
+}
+
+const input = {
+  marginTop: 10,
+  padding: 10,
+  width: "100%",
+  borderRadius: 10,
+  border: "1px solid #ddd"
+}
+
+const progressBg = {
+  marginTop: 14,
+  height: 14,
+  background: "#eee",
+  borderRadius: 999,
+  overflow: "hidden"
+}
+
+const progressFill = {
+  height: "100%",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  borderRadius: 999,
+  transition: "width 0.3s ease"
+}
+
+const section = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  marginBottom: 20,
+  minWidth: 0,
+  overflow: "hidden"
 }
 
 const profitGrid = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr",
+  gridTemplateColumns:
+    "minmax(0,2fr) minmax(280px,1fr)",
   gap: 16,
   marginBottom: 20
 }
@@ -432,7 +883,8 @@ const profitGrid = {
 const chartCard = {
   background: "#fff",
   padding: 20,
-  borderRadius: 16
+  borderRadius: 16,
+  minWidth: 0
 }
 
 const chartTitle = {
@@ -443,6 +895,7 @@ const chartTitle = {
 const barLabel = {
   display: "flex",
   justifyContent: "space-between",
+  gap: 10,
   marginBottom: 6,
   fontSize: 13
 }
@@ -450,12 +903,14 @@ const barLabel = {
 const barBg = {
   height: 10,
   background: "#f1f1f1",
-  borderRadius: 999
+  borderRadius: 999,
+  overflow: "hidden"
 }
 
 const barFill = {
   height: "100%",
-  background: "linear-gradient(90deg,#d4af37,#f6e27a)",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
   borderRadius: 999
 }
 
@@ -467,7 +922,8 @@ const miniMetric = {
 const miniLabel = {
   display: "block",
   fontSize: 12,
-  color: "#777"
+  color: "#777",
+  marginBottom: 4
 }
 
 const miniValue = {
@@ -476,7 +932,8 @@ const miniValue = {
 
 const insightGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(4,1fr)",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
   gap: 12
 }
 
@@ -484,7 +941,8 @@ const insightCard = {
   background: "#fcfbf7",
   padding: 16,
   borderRadius: 14,
-  border: "1px solid #f1ead7"
+  border: "1px solid #f1ead7",
+  minWidth: 0
 }
 
 const insightTitle = {
@@ -495,32 +953,76 @@ const insightTitle = {
 }
 
 const insightText = {
+  fontSize: 14,
+  lineHeight: 1.4
+}
+
+const campaignGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(180px,1fr))",
+  gap: 10
+}
+
+const actionBtn = {
+  padding: 14,
+  border: "none",
+  borderRadius: 12,
+  background: "#f9f3dc",
+  cursor: "pointer",
+  minHeight: 52
+}
+
+const riskGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 12,
+  marginBottom: 20
+}
+
+const riskCard = {
+  background: "#fff",
+  padding: 16,
+  borderRadius: 14,
+  minWidth: 0
+}
+
+const listRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: "10px 0",
+  borderBottom: "1px solid #f1f1f1",
+  flexWrap: "wrap" as const
+}
+
+const muted = {
+  color: "#777",
+  fontSize: 12,
+  marginTop: 4
+}
+
+const calendarRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+  padding: "14px 0",
+  borderBottom: "1px solid #f1f1f1",
+  flexWrap: "wrap" as const
+}
+
+const calendarDate = {
+  display: "block",
+  color: "#777",
+  fontSize: 12,
+  marginTop: 4
+}
+
+const calendarAction = {
+  maxWidth: 500,
+  textAlign: "right" as const,
   fontSize: 14
 }
-const container = { padding: 40, background: "#f6f6f7", minHeight: "100vh", fontFamily: "Inter" }
-const header = { display: "flex", justifyContent: "space-between", marginBottom: 24 }
-const title = { fontSize: 34, margin: 0 }
-const sub = { color: "#777" }
-const topControls = { display: "flex", gap: 10 }
-const select = { padding: 10, borderRadius: 10, border: "1px solid #ddd" }
-const viewSwitch = { display: "flex", gap: 10, marginBottom: 20 }
-const tab = { padding: "10px 18px", border: "none", borderRadius: 12, cursor: "pointer" }
-const activeTab = { ...tab, background: "#f4e7a1" }
-const dashGrid = { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }
-const dash = { background: "#fff", padding: 18, borderRadius: 16 }
-const dashLabel = { display: "block", color: "#777", fontSize: 13 }
-const dashValue = { fontSize: 24 }
-const metaCard = { background: "#fff", padding: 20, borderRadius: 16, marginBottom: 20 }
-const metaHeader = { display: "flex", justifyContent: "space-between" }
-const dots = { border: "none", background: "transparent", cursor: "pointer" }
-const input = { marginTop: 10, padding: 10, width: "100%", borderRadius: 10, border: "1px solid #ddd" }
-const progressBg = { marginTop: 14, height: 14, background: "#eee", borderRadius: 999 }
-const progressFill = { height: "100%", background: "linear-gradient(90deg,#d4af37,#f6e27a)", borderRadius: 999 }
-const section = { background: "#fff", padding: 20, borderRadius: 16, marginBottom: 20 }
-const campaignGrid = { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }
-const actionBtn = { padding: 14, border: "none", borderRadius: 12, background: "#f9f3dc", cursor: "pointer" }
-const riskGrid = { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }
-const riskCard = { background: "#fff", padding: 16, borderRadius: 14 }
-const listRow = { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f1f1" }
-const muted = { color: "#777", fontSize: 12 }
-

@@ -19,7 +19,6 @@ export default function Layout({ children, setPage }: Props) {
 
       setIsMobile(mobile)
 
-      // Se voltar para desktop, fecha o menu
       if (!mobile) {
         setMenuOpen(false)
       }
@@ -34,85 +33,65 @@ export default function Layout({ children, setPage }: Props) {
     }
   }, [])
 
-  // Impede o scroll da página quando o menu estiver aberto no celular
-  useEffect(() => {
-    if (isMobile && menuOpen) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = ""
-    }
-
-    return () => {
-      document.body.style.overflow = ""
-    }
-  }, [isMobile, menuOpen])
-
   function nav(p: Page) {
     setActive(p)
     setPage(p)
 
-    // Fecha o menu depois de escolher uma página
     if (isMobile) {
       setMenuOpen(false)
     }
   }
 
-  function toggleMenu() {
-    setMenuOpen((prev) => !prev)
-  }
-
-  function closeMenu() {
-    setMenuOpen(false)
-  }
-
   return (
     <div style={layout}>
-      {/* =====================================
-          HEADER MOBILE
-      ====================================== */}
-
+      {/* HEADER MOBILE */}
       {isMobile && (
         <header style={mobileHeader}>
           <button
-            onClick={toggleMenu}
+            onClick={() => setMenuOpen(prev => !prev)}
             style={menuButton}
-            aria-label={
-              menuOpen ? "Fechar menu" : "Abrir menu"
-            }
+            aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={menuOpen}
           >
-            {menuOpen ? (
-              <span style={closeIcon}>×</span>
-            ) : (
-              <>
-                <span style={hamburgerLine} />
-                <span style={hamburgerLine} />
-                <span style={hamburgerLine} />
-              </>
-            )}
+            <span
+              style={{
+                ...hamburgerLine,
+                transform: menuOpen
+                  ? "rotate(45deg) translate(5px, 5px)"
+                  : "none"
+              }}
+            />
+
+            <span
+              style={{
+                ...hamburgerLine,
+                opacity: menuOpen ? 0 : 1
+              }}
+            />
+
+            <span
+              style={{
+                ...hamburgerLine,
+                transform: menuOpen
+                  ? "rotate(-45deg) translate(5px, -5px)"
+                  : "none"
+              }}
+            />
           </button>
 
-          <div style={mobileLogo}>
-            Cami&Duda
-          </div>
+          <div style={mobileLogo}>Cami&Duda</div>
         </header>
       )}
 
-      {/* =====================================
-          OVERLAY MOBILE
-      ====================================== */}
-
+      {/* OVERLAY MOBILE */}
       {isMobile && menuOpen && (
         <div
           style={overlay}
-          onClick={closeMenu}
-          aria-hidden="true"
+          onClick={() => setMenuOpen(false)}
         />
       )}
 
-      {/* =====================================
-          SIDEBAR
-      ====================================== */}
-
+      {/* SIDEBAR */}
       <aside
         style={{
           ...sidebar,
@@ -123,36 +102,25 @@ export default function Layout({ children, setPage }: Props) {
                 top: 0,
                 left: 0,
                 bottom: 0,
-
                 width: 280,
-                minWidth: 280,
-
-                height: "100vh",
-
-                zIndex: 2001,
-
+                maxWidth: "85vw",
+                height: "100dvh",
+                zIndex: 1001,
                 transform: menuOpen
                   ? "translateX(0)"
                   : "translateX(-100%)",
-
-                transition:
-                  "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-
+                transition: "transform 0.3s ease",
                 boxShadow: menuOpen
-                  ? "8px 0 30px rgba(0,0,0,0.15)"
+                  ? "8px 0 30px rgba(0,0,0,0.14)"
                   : "none",
-
                 overflowY: "auto"
               }
             : {})
         }}
       >
-        {/* Logo do menu */}
-
+        {/* LOGO */}
         <div style={brandWrap}>
-          <div style={logo}>
-            Cami&Duda
-          </div>
+          <div style={logo}>Cami&Duda</div>
         </div>
 
         <div style={divider} />
@@ -182,10 +150,7 @@ export default function Layout({ children, setPage }: Props) {
         />
       </aside>
 
-      {/* =====================================
-          CONTEÚDO
-      ====================================== */}
-
+      {/* CONTEÚDO */}
       <main
         style={{
           ...content,
@@ -194,9 +159,7 @@ export default function Layout({ children, setPage }: Props) {
             ? {
                 width: "100%",
                 minWidth: 0,
-                padding:
-                  "80px 16px 30px",
-                boxSizing: "border-box"
+                padding: "80px 16px 30px"
               }
             : {})
         }}
@@ -206,10 +169,6 @@ export default function Layout({ children, setPage }: Props) {
     </div>
   )
 }
-
-/* =====================================
-   ITEM DO MENU
-===================================== */
 
 function NavItem({
   label,
@@ -250,38 +209,32 @@ function NavItem({
   )
 }
 
-/* =====================================
+/* =========================
    LAYOUT
-===================================== */
+========================= */
 
 const layout = {
   display: "flex",
-  minHeight: "100vh",
   width: "100%",
+  minHeight: "100vh",
+  minWidth: 0,
   overflowX: "hidden" as const
 }
 
-/* =====================================
+/* =========================
    SIDEBAR
-===================================== */
+========================= */
 
 const sidebar = {
   width: 260,
   minWidth: 260,
-
+  minHeight: "100vh",
   background: "#fffdfa",
-
-  borderRight:
-    "1px solid #efe3bf",
-
+  borderRight: "1px solid #efe3bf",
   paddingTop: 46,
-
   display: "flex",
   flexDirection: "column" as const,
-
-  boxShadow:
-    "4px 0 18px rgba(216,191,122,0.08)",
-
+  boxShadow: "4px 0 18px rgba(216,191,122,0.08)",
   boxSizing: "border-box" as const
 }
 
@@ -292,190 +245,104 @@ const brandWrap = {
 }
 
 const logo = {
-  fontFamily:
-    "Playfair Display, serif",
-
+  fontFamily: "Playfair Display, serif",
   fontSize: 32,
-
   color: "#b9974f",
-
   fontWeight: 700,
-
   letterSpacing: "0.4px",
-
-  whiteSpace:
-    "nowrap" as const
+  whiteSpace: "nowrap" as const
 }
 
 const divider = {
   height: 1,
-
   background:
     "linear-gradient(90deg, transparent, #e7d39b, transparent)",
-
-  margin:
-    "0 24px 26px"
+  margin: "0 24px 26px"
 }
 
 const navBtn = {
   padding: "16px 36px",
-
   border: "none",
-
   background: "transparent",
-
-  textAlign:
-    "left" as const,
-
+  textAlign: "left" as const,
   fontSize: 15,
-
   cursor: "pointer",
-
-  transition:
-    "all 0.25s ease",
-
+  transition: "all 0.25s ease",
   marginBottom: 8,
-
-  borderRadius:
-    "0 14px 14px 0",
-
+  borderRadius: "0 14px 14px 0",
   width: "100%",
-
-  boxSizing:
-    "border-box" as const
+  boxSizing: "border-box" as const
 }
 
-/* =====================================
+/* =========================
    CONTEÚDO
-===================================== */
+========================= */
 
 const content = {
   flex: 1,
-
   minWidth: 0,
-
-  padding:
-    "50px 70px",
-
+  width: "100%",
+  padding: "50px 70px",
   background: "#f6f6f7",
-
-  boxSizing:
-    "border-box" as const
+  boxSizing: "border-box" as const
 }
 
-/* =====================================
-   HEADER MOBILE
-===================================== */
+/* =========================
+   MOBILE HEADER
+========================= */
 
 const mobileHeader = {
   position: "fixed" as const,
-
   top: 0,
   left: 0,
   right: 0,
-
+  width: "100%",
   height: 64,
-
   background: "#fffdfa",
-
-  borderBottom:
-    "1px solid #efe3bf",
-
+  borderBottom: "1px solid #efe3bf",
   display: "flex",
-
   alignItems: "center",
-
-  zIndex: 2000,
-
-  boxShadow:
-    "0 2px 12px rgba(216,191,122,0.08)"
+  zIndex: 1000,
+  boxShadow: "0 2px 12px rgba(216,191,122,0.08)"
 }
 
 const mobileLogo = {
-  fontFamily:
-    "Playfair Display, serif",
-
+  fontFamily: "Playfair Display, serif",
   fontSize: 24,
-
   color: "#b9974f",
-
   fontWeight: 700,
-
   letterSpacing: "0.4px",
-
-  marginLeft: 12
+  marginLeft: 12,
+  whiteSpace: "nowrap" as const
 }
-
-/* =====================================
-   BOTÃO HAMBURGER
-===================================== */
 
 const menuButton = {
   width: 44,
   height: 44,
-
   marginLeft: 8,
-
   border: "none",
-
   background: "transparent",
-
   display: "flex",
-
-  flexDirection:
-    "column" as const,
-
-  justifyContent:
-    "center",
-
-  alignItems:
-    "center",
-
+  flexDirection: "column" as const,
+  justifyContent: "center",
+  alignItems: "center",
   gap: 5,
-
   cursor: "pointer",
-
-  padding: 0,
-
-  borderRadius: 10
+  padding: 0
 }
 
 const hamburgerLine = {
+  display: "block",
   width: 23,
   height: 2,
-
   background: "#8b6f3d",
-
-  borderRadius: 10,
-
-  display: "block"
+  borderRadius: 5,
+  transition: "all 0.25s ease"
 }
-
-const closeIcon = {
-  fontSize: 34,
-
-  lineHeight: 1,
-
-  fontWeight: 300,
-
-  color: "#8b6f3d",
-
-  display: "block",
-
-  marginTop: -2
-}
-
-/* =====================================
-   FUNDO DO MENU
-===================================== */
 
 const overlay = {
   position: "fixed" as const,
-
   inset: 0,
-
-  background:
-    "rgba(0, 0, 0, 0.32)",
-
-  zIndex: 2000
+  background: "rgba(0, 0, 0, 0.32)",
+  zIndex: 1000
 }

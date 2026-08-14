@@ -653,58 +653,81 @@ function Dash({ label, value }: any) {
   )
 }
 
-/* ESTILO */
+/* =========================
+   ESTILOS RESPONSIVOS
+========================= */
+
 const container = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: "100%",
   padding: 40,
   background: "#f6f6f7",
-  fontFamily: "Inter"
+  fontFamily: "Inter",
+  overflow: "hidden"
 }
 
 const section = {
+  width: "100%",
+  minWidth: 0,
   background: "#fff",
   padding: 20,
   borderRadius: 16,
-  marginBottom: 20
+  marginBottom: 20,
+  overflow: "hidden"
 }
 
 const notifBar = {
+  width: "100%",
   background: "#fff6d6",
-  padding: "8px 12px",
+  padding: "10px 14px",
   borderRadius: 10,
   marginBottom: 12,
   display: "flex",
   justifyContent: "space-between",
-  fontSize: 13
+  alignItems: "center",
+  gap: 10,
+  fontSize: 13,
+  flexWrap: "wrap" as const
 }
 
 const notifBtn = {
   border: "none",
   background: "transparent",
   color: "#b8962e",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontWeight: 600
 }
 
 const header = {
   display: "flex",
   justifyContent: "space-between",
-  marginBottom: 20
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 20,
+  flexWrap: "wrap" as const
 }
 
 const title = {
-  fontSize: 30
+  fontSize: 30,
+  margin: 0
 }
 
 const btnSmall = {
-  padding: "8px 14px",
+  padding: "10px 16px",
   borderRadius: 10,
   border: "none",
-  background: "linear-gradient(90deg,#d4af37,#f6e27a)",
-  cursor: "pointer"
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
 }
 
 const dashGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(3,1fr)",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(180px,1fr))",
   gap: 10,
   marginBottom: 20
 }
@@ -712,46 +735,61 @@ const dashGrid = {
 const dash = {
   background: "#fff",
   padding: 16,
-  borderRadius: 12
+  borderRadius: 12,
+  minWidth: 0,
+  overflow: "hidden"
 }
 
 const filtrosBar = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr",
+  gridTemplateColumns:
+    "minmax(200px,2fr) minmax(140px,1fr) minmax(140px,1fr)",
   gap: 10,
-  marginBottom: 20
+  marginBottom: 20,
+  width: "100%"
 }
 
 const inputFiltro = {
+  width: "100%",
+  minWidth: 0,
   padding: 12,
   borderRadius: 10,
-  border: "1px solid #ddd"
+  border: "1px solid #ddd",
+  background: "#fff"
 }
 
 const selectFiltro = {
+  width: "100%",
+  minWidth: 0,
   padding: 12,
   borderRadius: 10,
-  border: "1px solid #ddd"
+  border: "1px solid #ddd",
+  background: "#fff"
 }
 
 const listaCompras = {
   display: "flex",
   flexDirection: "column" as const,
-  gap: 10
+  gap: 10,
+  width: "100%"
 }
 
 const compraCard = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1fr",
+  gridTemplateColumns:
+    "minmax(180px,2fr) minmax(110px,1fr) minmax(100px,1fr) minmax(110px,1fr)",
+  gap: 16,
   padding: 16,
   borderRadius: 12,
   background: "#f9f9f9",
-  alignItems: "center"
+  alignItems: "center",
+  minWidth: 0
 }
 
 const mesGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(120px,1fr))",
   gap: 10
 }
 
@@ -759,7 +797,8 @@ const mesCard = {
   background: "#f9f9f9",
   padding: 14,
   borderRadius: 12,
-  textAlign: "center" as const
+  textAlign: "center" as const,
+  minWidth: 0
 }
 
 const overlay = {
@@ -768,38 +807,55 @@ const overlay = {
   background: "rgba(0,0,0,0.4)",
   display: "flex",
   alignItems: "center",
-  justifyContent: "center"
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 2000,
+  overflowY: "auto" as const
 }
 
 const modalCard = {
   background: "#fff",
   padding: 20,
   borderRadius: 16,
-  width: 420,
+  width: "100%",
+  maxWidth: 420,
   maxHeight: "90vh",
-  overflowY: "auto" as const
+  overflowY: "auto" as const,
+  overflowX: "hidden" as const
 }
 
 const clienteGrid = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 8
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(130px,1fr))",
+  gap: 8,
+  marginTop: 10
 }
 
 const clienteCard = {
-  padding: 10,
+  padding: 12,
   borderRadius: 10,
-  cursor: "pointer"
+  cursor: "pointer",
+  background: "#fff",
+  wordBreak: "break-word" as const
 }
 
 const cupomRow = {
   display: "flex",
   justifyContent: "space-between",
-  marginTop: 10
+  alignItems: "center",
+  gap: 12,
+  marginTop: 10,
+  flexWrap: "wrap" as const,
+  fontSize: 14
 }
 
 const resumo = {
-  marginTop: 10
+  marginTop: 10,
+  padding: 12,
+  background: "#faf8f1",
+  borderRadius: 10,
+  lineHeight: 1.7
 }
 
 const btnPrimary = {
@@ -808,24 +864,29 @@ const btnPrimary = {
   padding: 12,
   borderRadius: 10,
   border: "none",
-  background: "linear-gradient(90deg,#d4af37,#f6e27a)",
-  cursor: "pointer"
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  cursor: "pointer",
+  fontWeight: 600
 }
 
 const inativoRow = {
-  padding: 10,
+  padding: 12,
   borderBottom: "1px solid #eee"
 }
 
 const input = {
   width: "100%",
+  minWidth: 0,
   padding: 10,
   marginTop: 10,
   borderRadius: 10,
-  border: "1px solid #ddd"
+  border: "1px solid #ddd",
+  background: "#fff"
 }
 
 const muted = {
   fontSize: 12,
-  color: "#888"
+  color: "#888",
+  marginTop: 3
 }
