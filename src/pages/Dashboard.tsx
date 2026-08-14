@@ -85,10 +85,10 @@ export default function Dashboard() {
     comprasFiltradas.map(c => c.clienteid)
   ).size
 
-  const progressoMeta = Math.min(
-    (faturamento / meta) * 100,
-    100
-  )
+  const progressoMeta =
+    meta > 0
+      ? Math.min((faturamento / meta) * 100, 100)
+      : 0
 
   const clientesRisco = useMemo(() => {
     const hoje = new Date()
@@ -100,10 +100,7 @@ export default function Dashboard() {
         )
 
         if (!ultima) {
-          return {
-            ...cliente,
-            dias: 999
-          }
+          return { ...cliente, dias: 999 }
         }
 
         const dias = Math.floor(
@@ -112,10 +109,7 @@ export default function Dashboard() {
             86400000
         )
 
-        return {
-          ...cliente,
-          dias
-        }
+        return { ...cliente, dias }
       })
       .sort((a, b) => b.dias - a.dias)
   }, [clientes, compras])
@@ -134,32 +128,24 @@ export default function Dashboard() {
     ).padStart(2, "0")}/${d.getFullYear()}`
 
     vendasPorMesMap[chave] =
-      (vendasPorMesMap[chave] || 0) +
-      Number(c.valor)
+      (vendasPorMesMap[chave] || 0) + Number(c.valor)
   })
 
-  const melhorMes =
-    Object.entries(vendasPorMesMap).sort(
-      (a, b) => b[1] - a[1]
-    )[0]
+  const melhorMes = Object.entries(
+    vendasPorMesMap
+  ).sort((a, b) => b[1] - a[1])[0]
 
   const lucroEstimado = faturamento * 0.45
 
   function campanha(tipo: string) {
     if (tipo === "vip")
-      alert(
-        "Campanha VIP enviada para melhores clientes"
-      )
+      alert("Campanha VIP enviada para melhores clientes")
 
     if (tipo === "estoque")
-      alert(
-        "Campanha Queima de Estoque ativada"
-      )
+      alert("Campanha Queima de Estoque ativada")
 
     if (tipo === "pos")
-      alert(
-        "Campanha Pós-compra iniciada"
-      )
+      alert("Campanha Pós-compra iniciada")
 
     if (tipo === "inativos")
       alert(
@@ -217,6 +203,7 @@ export default function Dashboard() {
 
   return (
     <div style={container}>
+      {/* HEADER */}
       <div style={header}>
         <div>
           <h1 style={title}>Dashboard</h1>
@@ -229,22 +216,19 @@ export default function Dashboard() {
           <select
             value={periodo}
             onChange={e =>
-              setPeriodo(
-                e.target.value as Periodo
-              )
+              setPeriodo(e.target.value as Periodo)
             }
             style={select}
           >
             <option value="mes">Mês</option>
-            <option value="trimestre">
-              3 meses
-            </option>
+            <option value="trimestre">3 meses</option>
             <option value="ano">Ano</option>
             <option value="todos">Todos</option>
           </select>
         </div>
       </div>
 
+      {/* VISÃO */}
       <div style={viewSwitch}>
         <button
           style={
@@ -252,9 +236,7 @@ export default function Dashboard() {
               ? activeTab
               : tab
           }
-          onClick={() =>
-            setVisao("geral")
-          }
+          onClick={() => setVisao("geral")}
         >
           Visão Lucro
         </button>
@@ -265,22 +247,23 @@ export default function Dashboard() {
               ? activeTab
               : tab
           }
-          onClick={() =>
-            setVisao("clientes")
-          }
+          onClick={() => setVisao("clientes")}
         >
           Visão Clientes
         </button>
       </div>
 
+      {/* =========================
+          VISÃO GERAL
+      ========================= */}
+
       {visao === "geral" && (
         <>
+          {/* KPIs PRINCIPAIS */}
           <div style={dashGrid}>
             <Dash
               label="Faturamento"
-              value={`R$ ${faturamento.toFixed(
-                2
-              )}`}
+              value={`R$ ${faturamento.toFixed(2)}`}
             />
 
             <Dash
@@ -290,9 +273,7 @@ export default function Dashboard() {
 
             <Dash
               label="Ticket médio"
-              value={`R$ ${ticketMedio.toFixed(
-                2
-              )}`}
+              value={`R$ ${ticketMedio.toFixed(2)}`}
             />
 
             <Dash
@@ -301,22 +282,29 @@ export default function Dashboard() {
             />
           </div>
 
+          {/* META */}
           <div style={metaCard}>
             <div style={metaHeader}>
               <strong>
-                Meta do período: R${" "}
-                {meta.toLocaleString("pt-BR")}
+                Meta do período:{" "}
+                {meta.toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL"
+                })}
               </strong>
 
               <button
                 style={dots}
                 onClick={() =>
-                  setEditarMeta(
-                    !editarMeta
-                  )
+                  setEditarMeta(!editarMeta)
+                }
+                aria-label={
+                  editarMeta
+                    ? "Fechar edição da meta"
+                    : "Editar meta"
                 }
               >
-                •••
+                {editarMeta ? "×" : "+"}
               </button>
             </div>
 
@@ -325,9 +313,7 @@ export default function Dashboard() {
                 type="number"
                 value={meta}
                 onChange={e =>
-                  setMeta(
-                    Number(e.target.value)
-                  )
+                  setMeta(Number(e.target.value))
                 }
                 style={input}
               />
@@ -347,24 +333,16 @@ export default function Dashboard() {
               />
             </div>
 
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 12,
-                color: "#777"
-              }}
-            >
-              {progressoMeta.toFixed(1)}%
-              da meta
+            <div style={progressText}>
+              {progressoMeta.toFixed(1)}% da meta
             </div>
           </div>
 
+          {/* KPIs EXECUTIVOS */}
           <div style={dashGrid}>
             <Dash
               label="Lucro estimado"
-              value={`R$ ${lucroEstimado.toFixed(
-                2
-              )}`}
+              value={`R$ ${lucroEstimado.toFixed(2)}`}
             />
 
             <Dash
@@ -400,7 +378,12 @@ export default function Dashboard() {
             />
           </div>
 
+          {/* =========================
+              GRÁFICOS
+          ========================= */}
+
           <div style={profitGrid}>
+            {/* FATURAMENTO */}
             <div style={chartCard}>
               <h3 style={chartTitle}>
                 Faturamento por mês
@@ -414,7 +397,7 @@ export default function Dashboard() {
                 )
                 .slice(-6)
                 .map(([mes, total]) => {
-                  const maior =
+                  const maiorValor =
                     Math.max(
                       ...Object.values(
                         vendasPorMesMap
@@ -422,9 +405,9 @@ export default function Dashboard() {
                     )
 
                   const largura =
-                    maior > 0
+                    maiorValor > 0
                       ? (Number(total) /
-                          maior) *
+                          maiorValor) *
                         100
                       : 0
 
@@ -435,7 +418,9 @@ export default function Dashboard() {
                         marginBottom: 12
                       }}
                     >
-                      <div style={barLabel}>
+                      <div
+                        style={barLabel}
+                      >
                         <span>{mes}</span>
 
                         <strong>
@@ -459,6 +444,9 @@ export default function Dashboard() {
                 })}
             </div>
 
+            {/* PERFORMANCE
+                FICA ABAIXO QUANDO
+                NÃO HOUVER ESPAÇO */}
             <div style={chartCard}>
               <h3 style={chartTitle}>
                 Performance estratégica
@@ -496,10 +484,9 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* INSIGHTS */}
           <div style={section}>
-            <h3>
-              Insights estratégicos
-            </h3>
+            <h3>Insights estratégicos</h3>
 
             <div style={insightGrid}>
               <InsightCard
@@ -538,6 +525,10 @@ export default function Dashboard() {
         </>
       )}
 
+      {/* =========================
+          VISÃO CLIENTES
+      ========================= */}
+
       {visao === "clientes" && (
         <>
           <div style={riskGrid}>
@@ -548,9 +539,7 @@ export default function Dashboard() {
                   key={c.id}
                   style={riskCard}
                 >
-                  <strong>
-                    {c.nome}
-                  </strong>
+                  <strong>{c.nome}</strong>
 
                   <div style={muted}>
                     {c.dias >= 999
@@ -562,9 +551,7 @@ export default function Dashboard() {
           </div>
 
           <div style={section}>
-            <h3>
-              Top clientes por pontos
-            </h3>
+            <h3>Top clientes por pontos</h3>
 
             {topClientes.map(c => (
               <div
@@ -580,9 +567,7 @@ export default function Dashboard() {
           </div>
 
           <div style={section}>
-            <h3>
-              Campanhas automáticas
-            </h3>
+            <h3>Campanhas automáticas</h3>
 
             <div style={campaignGrid}>
               <button
@@ -624,31 +609,19 @@ export default function Dashboard() {
           </div>
 
           <div style={section}>
-            <h3>
-              Calendário sazonal
-            </h3>
+            <h3>Calendário sazonal</h3>
 
             {calendario.map(
               ([mes, data, acao]) => (
                 <div
                   key={mes}
-                  style={calendarRow}
+                  style={listRow}
                 >
-                  <div>
-                    <strong>
-                      {mes}
-                    </strong>
+                  <span>
+                    {mes} • {data}
+                  </span>
 
-                    <span
-                      style={calendarDate}
-                    >
-                      {data}
-                    </span>
-                  </div>
-
-                  <strong
-                    style={calendarAction}
-                  >
+                  <strong>
                     {acao}
                   </strong>
                 </div>
@@ -661,12 +634,16 @@ export default function Dashboard() {
   )
 }
 
+/* =========================
+   COMPONENTES
+========================= */
+
 function Dash({
   label,
   value
 }: {
   label: string
-  value: React.ReactNode
+  value: string | number
 }) {
   return (
     <div style={dash}>
@@ -726,19 +703,18 @@ function InsightCard({
 ========================= */
 
 const container = {
-  width: "100%",
-  minWidth: 0,
-  minHeight: "100%",
   padding: 40,
   background: "#f6f6f7",
+  minHeight: "100vh",
   fontFamily: "Inter",
-  overflow: "hidden"
+  width: "100%",
+  boxSizing: "border-box" as const
 }
 
 const header = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
   gap: 20,
   marginBottom: 24,
   flexWrap: "wrap" as const
@@ -750,8 +726,7 @@ const title = {
 }
 
 const sub = {
-  color: "#777",
-  fontSize: 14
+  color: "#777"
 }
 
 const topControls = {
@@ -764,7 +739,7 @@ const select = {
   borderRadius: 10,
   border: "1px solid #ddd",
   background: "#fff",
-  minWidth: 120
+  maxWidth: "100%"
 }
 
 const viewSwitch = {
@@ -778,22 +753,18 @@ const tab = {
   padding: "10px 18px",
   border: "none",
   borderRadius: 12,
-  cursor: "pointer",
-  background: "#fff",
-  color: "#555"
+  cursor: "pointer"
 }
 
 const activeTab = {
   ...tab,
-  background: "#f4e7a1",
-  color: "#6f5b25",
-  fontWeight: 600
+  background: "#f4e7a1"
 }
 
 const dashGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(190px,1fr))",
+    "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 12,
   marginBottom: 20
 }
@@ -802,27 +773,30 @@ const dash = {
   background: "#fff",
   padding: 18,
   borderRadius: 16,
-  minWidth: 0,
-  overflow: "hidden"
+  minWidth: 0
 }
 
 const dashLabel = {
   display: "block",
   color: "#777",
   fontSize: 13,
-  marginBottom: 6
+  marginBottom: 5
 }
 
 const dashValue = {
   fontSize: 24,
-  wordBreak: "break-word" as const
+  overflowWrap: "anywhere" as const
 }
+
+/* META */
 
 const metaCard = {
   background: "#fff",
   padding: 20,
   borderRadius: 16,
-  marginBottom: 20
+  marginBottom: 20,
+  width: "100%",
+  boxSizing: "border-box" as const
 }
 
 const metaHeader = {
@@ -833,10 +807,19 @@ const metaHeader = {
 }
 
 const dots = {
+  width: 34,
+  height: 34,
   border: "none",
-  background: "transparent",
+  background: "#f9f3dc",
+  borderRadius: "50%",
   cursor: "pointer",
-  fontSize: 18
+  fontSize: 24,
+  lineHeight: 1,
+  color: "#9b7b2f",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0
 }
 
 const input = {
@@ -844,7 +827,8 @@ const input = {
   padding: 10,
   width: "100%",
   borderRadius: 10,
-  border: "1px solid #ddd"
+  border: "1px solid #ddd",
+  boxSizing: "border-box" as const
 }
 
 const progressBg = {
@@ -852,39 +836,39 @@ const progressBg = {
   height: 14,
   background: "#eee",
   borderRadius: 999,
-  overflow: "hidden"
+  overflow: "hidden" as const
 }
 
 const progressFill = {
   height: "100%",
   background:
     "linear-gradient(90deg,#d4af37,#f6e27a)",
-  borderRadius: 999,
-  transition: "width 0.3s ease"
+  borderRadius: 999
 }
 
-const section = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  marginBottom: 20,
-  minWidth: 0,
-  overflow: "hidden"
+const progressText = {
+  marginTop: 8,
+  fontSize: 12,
+  color: "#777"
 }
+
+/* GRÁFICOS */
 
 const profitGrid = {
   display: "grid",
   gridTemplateColumns:
-    "minmax(0,2fr) minmax(280px,1fr)",
+    "minmax(0, 2fr) minmax(280px, 1fr)",
   gap: 16,
-  marginBottom: 20
+  marginBottom: 20,
+  width: "100%"
 }
 
 const chartCard = {
   background: "#fff",
   padding: 20,
   borderRadius: 16,
-  minWidth: 0
+  minWidth: 0,
+  overflow: "hidden" as const
 }
 
 const chartTitle = {
@@ -904,7 +888,7 @@ const barBg = {
   height: 10,
   background: "#f1f1f1",
   borderRadius: 999,
-  overflow: "hidden"
+  overflow: "hidden" as const
 }
 
 const barFill = {
@@ -922,18 +906,19 @@ const miniMetric = {
 const miniLabel = {
   display: "block",
   fontSize: 12,
-  color: "#777",
-  marginBottom: 4
+  color: "#777"
 }
 
 const miniValue = {
   fontSize: 18
 }
 
+/* INSIGHTS */
+
 const insightGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(190px,1fr))",
+    "repeat(auto-fit, minmax(200px, 1fr))",
   gap: 12
 }
 
@@ -954,13 +939,24 @@ const insightTitle = {
 
 const insightText = {
   fontSize: 14,
-  lineHeight: 1.4
+  overflowWrap: "anywhere" as const
+}
+
+/* CLIENTES */
+
+const section = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  marginBottom: 20,
+  width: "100%",
+  boxSizing: "border-box" as const
 }
 
 const campaignGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(180px,1fr))",
+    "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 10
 }
 
@@ -970,13 +966,13 @@ const actionBtn = {
   borderRadius: 12,
   background: "#f9f3dc",
   cursor: "pointer",
-  minHeight: 52
+  minHeight: 50
 }
 
 const riskGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(190px,1fr))",
+    "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 12,
   marginBottom: 20
 }
@@ -992,7 +988,7 @@ const listRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 12,
+  gap: 15,
   padding: "10px 0",
   borderBottom: "1px solid #f1f1f1",
   flexWrap: "wrap" as const
@@ -1000,29 +996,5 @@ const listRow = {
 
 const muted = {
   color: "#777",
-  fontSize: 12,
-  marginTop: 4
-}
-
-const calendarRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 20,
-  padding: "14px 0",
-  borderBottom: "1px solid #f1f1f1",
-  flexWrap: "wrap" as const
-}
-
-const calendarDate = {
-  display: "block",
-  color: "#777",
-  fontSize: 12,
-  marginTop: 4
-}
-
-const calendarAction = {
-  maxWidth: 500,
-  textAlign: "right" as const,
-  fontSize: 14
+  fontSize: 12
 }
