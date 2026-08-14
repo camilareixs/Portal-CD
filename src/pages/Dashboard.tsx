@@ -856,8 +856,7 @@ const progressText = {
 
 const profitGrid = {
   display: "grid",
-  gridTemplateColumns:
-    "minmax(0, 2fr) minmax(280px, 1fr)",
+  gridTemplateColumns: "1fr",
   gap: 16,
   marginBottom: 20,
   width: "100%"
