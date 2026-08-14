@@ -43,3 +43,211 @@ textarea {
     min-width: 0;
   }
 }
+
+/* =====================================================
+   RESPONSIVIDADE CAMIDUDA
+===================================================== */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* =====================================================
+   TABLET
+===================================================== */
+
+@media (max-width: 900px) {
+
+  .compras-filtros {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .compras-filtros input {
+    grid-column: 1 / -1;
+  }
+
+  .compra-card {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* =====================================================
+   MOBILE
+===================================================== */
+
+@media (max-width: 600px) {
+
+  /* Container */
+
+  .compras-container {
+    padding: 20px 14px !important;
+  }
+
+  /* Header */
+
+  .compras-header {
+    align-items: stretch !important;
+  }
+
+  .compras-header button {
+    width: 100%;
+  }
+
+  /* KPIs */
+
+  .compras-dash-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ===================================================
+     FILTROS
+  =================================================== */
+
+  .compras-filtros {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .compras-filtros input,
+  .compras-filtros select {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* ===================================================
+     FATURAMENTO POR MÊS
+  =================================================== */
+
+  .compras-meses {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ===================================================
+     HISTÓRICO DE VENDAS
+  =================================================== */
+
+  .compras-historico {
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  .compra-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    padding: 16px !important;
+    gap: 14px !important;
+
+    background: #fafafa !important;
+
+    border: 1px solid #eeeeee;
+    border-radius: 14px !important;
+  }
+
+  .compra-card > div {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Cliente */
+
+  .compra-cliente {
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eeeeee;
+  }
+
+  /* Valor e data */
+
+  .compra-valor {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 10px;
+  }
+
+  /* Pagamento e parcelas */
+
+  .compra-pagamento {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+
+    padding: 10px 12px;
+    background: #fff;
+    border-radius: 10px;
+  }
+
+  /* Pontos e cupom */
+
+  .compra-pontos {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+
+    padding-top: 2px;
+  }
+
+  /* ===================================================
+     MODAIS
+  =================================================== */
+
+  .modal-card {
+    width: calc(100vw - 28px) !important;
+    max-width: none !important;
+
+    max-height: calc(100vh - 28px) !important;
+
+    padding: 18px !important;
+  }
+
+  .cliente-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* =====================================================
+   CELULARES PEQUENOS
+===================================================== */
+
+@media (max-width: 380px) {
+
+  .compras-container {
+    padding: 16px 10px !important;
+  }
+
+  .compras-meses {
+    grid-template-columns: 1fr !important;
+  }
+
+  .compra-card {
+    padding: 14px !important;
+  }
+
+  .compra-valor {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .compra-pontos {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px;
+  }
+}
