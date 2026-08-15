@@ -1,7 +1,12 @@
+/* =====================================================
+   CAMIDUDA — BASE GLOBAL
+===================================================== */
+
 html,
 body,
 #root {
   width: 100%;
+  min-width: 0;
   min-height: 100%;
   margin: 0;
   padding: 0;
@@ -21,6 +26,10 @@ body {
   font-family: Inter, Arial, sans-serif;
 }
 
+/* =====================================================
+   ELEMENTOS GLOBAIS
+===================================================== */
+
 button,
 input,
 select,
@@ -38,80 +47,204 @@ textarea {
   max-width: 100%;
 }
 
-@media (max-width: 768px) {
-  body {
-    min-width: 0;
-  }
+img {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  max-width: 100%;
 }
 
 /* =====================================================
-   RESPONSIVIDADE CAMIDUDA
-===================================================== */
-
-html,
-body,
-#root {
-  width: 100%;
-  min-width: 0;
-  overflow-x: hidden;
-}
-
-/* =====================================================
-   TABLET
+   TABLET — ATÉ 900px
 ===================================================== */
 
 @media (max-width: 900px) {
+
+  /* ===================================================
+     COMPRAS
+  =================================================== */
+
+  .compras-container {
+    padding: 28px 20px !important;
+  }
 
   .compras-filtros {
     grid-template-columns: 1fr 1fr !important;
   }
 
   .compras-filtros input {
-    grid-column: 1 / -1;
+    grid-column: 1 / -1 !important;
   }
 
   .compra-card {
     grid-template-columns: 1fr 1fr !important;
   }
+
+  /* ===================================================
+     DASHBOARD
+  =================================================== */
+
+  .dashboard-container {
+    padding: 28px 20px !important;
+  }
+
+  .dashboard-dash-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .dashboard-profit-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-insight-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .dashboard-campaign-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .dashboard-risk-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ===================================================
+     TROCAS
+  =================================================== */
+
+  .trocas-container {
+    padding: 28px 20px !important;
+  }
+
+  .trocas-dash-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .troca-row {
+    grid-template-columns: 2fr 1fr 1fr 60px !important;
+  }
 }
 
 /* =====================================================
-   MOBILE
+   MOBILE — ATÉ 600px
 ===================================================== */
 
 @media (max-width: 600px) {
 
-  /* Container */
+  /* ===================================================
+     BASE
+  =================================================== */
 
-  .compras-container {
-    padding: 20px 14px !important;
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
-  /* Header */
+  body {
+    font-size: 14px;
+  }
+
+  /* ===================================================
+     COMPRAS
+  =================================================== */
+
+  .compras-container {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 20px 14px !important;
+    overflow-x: hidden !important;
+  }
+
+  /* HEADER */
 
   .compras-header {
+    width: 100% !important;
     align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .compras-header h1 {
+    font-size: 28px !important;
   }
 
   .compras-header button {
-    width: 100%;
+    width: 100% !important;
   }
 
-  /* KPIs */
+  /* ===================================================
+     KPIs
+
+     Cliente
+     Nova compra
+
+     Faturamento
+
+     Vendas | Clientes
+  =================================================== */
 
   .compras-dash-grid {
-    grid-template-columns: 1fr !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .compras-dash-grid .dash-faturamento {
+    grid-column: 1 / -1 !important;
+  }
+
+  .compras-dash-grid .dash {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .compras-dash-grid .dash strong {
+    display: block;
+    font-size: 21px;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
+
+  /* ===================================================
+     FATURAMENTO POR MÊS
+  =================================================== */
+
+  .compras-meses {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .compras-meses > * {
+    min-width: 0 !important;
   }
 
   /* ===================================================
      FILTROS
+
+     Buscar
+     Todos os meses | Todos pagamentos
   =================================================== */
 
   .compras-filtros {
-    display: flex !important;
-    flex-direction: column !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
     width: 100% !important;
+    min-width: 0 !important;
     gap: 10px !important;
+  }
+
+  .compras-filtros input {
+    grid-column: 1 / -1 !important;
   }
 
   .compras-filtros input,
@@ -120,14 +253,6 @@ body,
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-  }
-
-  /* ===================================================
-     FATURAMENTO POR MÊS
-  =================================================== */
-
-  .compras-meses {
-    grid-template-columns: 1fr 1fr !important;
   }
 
   /* ===================================================
@@ -140,6 +265,15 @@ body,
     overflow: visible !important;
   }
 
+  .compras-historico h3 {
+    font-size: 17px;
+  }
+
+  .compras-historico-lista {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
   .compra-card {
     display: flex !important;
     flex-direction: column !important;
@@ -147,6 +281,7 @@ body,
 
     width: 100% !important;
     min-width: 0 !important;
+    max-width: 100% !important;
 
     padding: 16px !important;
     gap: 14px !important;
@@ -155,6 +290,8 @@ body,
 
     border: 1px solid #eeeeee;
     border-radius: 14px !important;
+
+    overflow: hidden !important;
   }
 
   .compra-card > div {
@@ -162,46 +299,51 @@ body,
     min-width: 0 !important;
     max-width: 100% !important;
 
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
 
-  /* Cliente */
+  /* CLIENTE */
 
   .compra-cliente {
-    padding-bottom: 10px;
-    border-bottom: 1px solid #eeeeee;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid #eeeeee !important;
   }
 
-  /* Valor e data */
+  /* VALOR + DATA */
 
   .compra-valor {
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
-    gap: 10px;
+    gap: 10px !important;
   }
 
-  /* Pagamento e parcelas */
+  /* PAGAMENTO */
 
   .compra-pagamento {
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
 
-    padding: 10px 12px;
-    background: #fff;
-    border-radius: 10px;
+    width: 100% !important;
+
+    padding: 10px 12px !important;
+
+    background: #fff !important;
+    border-radius: 10px !important;
   }
 
-  /* Pontos e cupom */
+  /* PONTOS */
 
   .compra-pontos {
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
 
-    padding-top: 2px;
+    width: 100% !important;
+
+    padding-top: 2px !important;
   }
 
   /* ===================================================
@@ -215,25 +357,140 @@ body,
     max-height: calc(100vh - 28px) !important;
 
     padding: 18px !important;
+
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
   .cliente-grid {
     grid-template-columns: 1fr !important;
   }
+
+  /* ===================================================
+     DASHBOARD
+  =================================================== */
+
+  .dashboard-container {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 20px 14px !important;
+    overflow-x: hidden !important;
+  }
+
+  .dashboard-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .dashboard-header select {
+    width: 100% !important;
+  }
+
+  .dashboard-view-switch {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .dashboard-view-switch button {
+    width: 100% !important;
+  }
+
+  .dashboard-dash-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .dashboard-dash-grid .dash {
+    min-width: 0 !important;
+  }
+
+  .dashboard-profit-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-insight-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-campaign-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-risk-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ===================================================
+     TROCAS
+  =================================================== */
+
+  .trocas-container {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 20px 14px !important;
+    overflow-x: hidden !important;
+  }
+
+  .trocas-dash-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .troca-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    padding: 14px !important;
+  }
+
+  .troca-row > div {
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .troca-check {
+    align-self: flex-end !important;
+  }
 }
 
 /* =====================================================
-   CELULARES PEQUENOS
+   CELULARES PEQUENOS — ATÉ 380px
 ===================================================== */
 
 @media (max-width: 380px) {
+
+  /* ===================================================
+     COMPRAS
+  =================================================== */
 
   .compras-container {
     padding: 16px 10px !important;
   }
 
+  .compras-dash-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .compras-dash-grid .dash-faturamento {
+    grid-column: auto !important;
+  }
+
   .compras-meses {
     grid-template-columns: 1fr !important;
+  }
+
+  .compras-filtros {
+    grid-template-columns: 1fr !important;
+  }
+
+  .compras-filtros input {
+    grid-column: auto !important;
   }
 
   .compra-card {
@@ -248,6 +505,39 @@ body,
   .compra-pontos {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 4px;
+    gap: 4px !important;
+  }
+
+  /* ===================================================
+     DASHBOARD
+  =================================================== */
+
+  .dashboard-container {
+    padding: 16px 10px !important;
+  }
+
+  .dashboard-dash-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-view-switch {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ===================================================
+     TROCAS
+  =================================================== */
+
+  .trocas-container {
+    padding: 16px 10px !important;
+  }
+
+  /* ===================================================
+     MODAIS
+  =================================================== */
+
+  .modal-card {
+    width: calc(100vw - 20px) !important;
+    padding: 16px !important;
   }
 }
