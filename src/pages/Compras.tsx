@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
+import type { CSSProperties } from "react"
 
 type Cliente = {
   id: string

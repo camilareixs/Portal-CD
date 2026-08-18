@@ -202,17 +202,24 @@ export default function Dashboard() {
   ]
 
   return (
-    <div style={container}>
-      {/* HEADER */}
-      <div style={header}>
+    <div style={container} className="dashboard-container">
+
+      {/* =========================
+          HEADER
+      ========================= */}
+
+      <div style={header} className="dashboard-header">
+
         <div>
           <h1 style={title}>Dashboard</h1>
+
           <span style={sub}>
             Visão estratégica CamiDuda
           </span>
         </div>
 
         <div style={topControls}>
+
           <select
             value={periodo}
             onChange={e =>
@@ -225,11 +232,16 @@ export default function Dashboard() {
             <option value="ano">Ano</option>
             <option value="todos">Todos</option>
           </select>
+
         </div>
       </div>
 
-      {/* VISÃO */}
+      {/* =========================
+          VISÃO
+      ========================= */}
+
       <div style={viewSwitch}>
+
         <button
           style={
             visao === "geral"
@@ -251,6 +263,7 @@ export default function Dashboard() {
         >
           Visão Clientes
         </button>
+
       </div>
 
       {/* =========================
@@ -259,8 +272,14 @@ export default function Dashboard() {
 
       {visao === "geral" && (
         <>
+
           {/* KPIs PRINCIPAIS */}
-          <div style={dashGrid}>
+
+          <div
+            style={dashGrid}
+            className="dashboard-kpis"
+          >
+
             <Dash
               label="Faturamento"
               value={`R$ ${faturamento.toFixed(2)}`}
@@ -280,11 +299,20 @@ export default function Dashboard() {
               label="Clientes ativos"
               value={clientesAtivos}
             />
+
           </div>
 
-          {/* META */}
-          <div style={metaCard}>
+          {/* =========================
+              META
+          ========================= */}
+
+          <div
+            style={metaCard}
+            className="dashboard-meta"
+          >
+
             <div style={metaHeader}>
+
               <strong>
                 Meta do período:{" "}
                 {meta.toLocaleString("pt-BR", {
@@ -306,6 +334,7 @@ export default function Dashboard() {
               >
                 {editarMeta ? "×" : "+"}
               </button>
+
             </div>
 
             {editarMeta && (
@@ -325,21 +354,31 @@ export default function Dashboard() {
               )} de R$ ${meta.toFixed(2)}`}
               style={progressBg}
             >
+
               <div
                 style={{
                   ...progressFill,
                   width: `${progressoMeta}%`
                 }}
               />
+
             </div>
 
             <div style={progressText}>
               {progressoMeta.toFixed(1)}% da meta
             </div>
+
           </div>
 
-          {/* KPIs EXECUTIVOS */}
-          <div style={dashGrid}>
+          {/* =========================
+              KPIs EXECUTIVOS
+          ========================= */}
+
+          <div
+            style={dashGrid}
+            className="dashboard-kpis dashboard-kpis-executivos"
+          >
+
             <Dash
               label="Lucro estimado"
               value={`R$ ${lucroEstimado.toFixed(2)}`}
@@ -376,15 +415,22 @@ export default function Dashboard() {
                   : "0.00"
               }`}
             />
+
           </div>
 
           {/* =========================
               GRÁFICOS
           ========================= */}
 
-          <div style={profitGrid}>
+          <div
+            style={profitGrid}
+            className="dashboard-graficos"
+          >
+
             {/* FATURAMENTO */}
+
             <div style={chartCard}>
+
               <h3 style={chartTitle}>
                 Faturamento por mês
               </h3>
@@ -397,6 +443,7 @@ export default function Dashboard() {
                 )
                 .slice(-6)
                 .map(([mes, total]) => {
+
                   const maiorValor =
                     Math.max(
                       ...Object.values(
@@ -418,10 +465,12 @@ export default function Dashboard() {
                         marginBottom: 12
                       }}
                     >
-                      <div
-                        style={barLabel}
-                      >
-                        <span>{mes}</span>
+
+                      <div style={barLabel}>
+
+                        <span>
+                          {mes}
+                        </span>
 
                         <strong>
                           R${" "}
@@ -429,25 +478,30 @@ export default function Dashboard() {
                             total
                           ).toFixed(0)}
                         </strong>
+
                       </div>
 
                       <div style={barBg}>
+
                         <div
                           style={{
                             ...barFill,
                             width: `${largura}%`
                           }}
                         />
+
                       </div>
+
                     </div>
                   )
                 })}
+
             </div>
 
-            {/* PERFORMANCE
-                FICA ABAIXO QUANDO
-                NÃO HOUVER ESPAÇO */}
+            {/* PERFORMANCE */}
+
             <div style={chartCard}>
+
               <h3 style={chartTitle}>
                 Performance estratégica
               </h3>
@@ -481,14 +535,26 @@ export default function Dashboard() {
                 label="Potencial VIP"
                 value={`${topClientes.length} clientes`}
               />
+
             </div>
+
           </div>
 
-          {/* INSIGHTS */}
-          <div style={section}>
-            <h3>Insights estratégicos</h3>
+          {/* =========================
+              INSIGHTS
+          ========================= */}
+
+          <div
+            style={section}
+            className="dashboard-section"
+          >
+
+            <h3>
+              Insights estratégicos
+            </h3>
 
             <div style={insightGrid}>
+
               <InsightCard
                 title="Melhor oportunidade"
                 text={
@@ -520,8 +586,11 @@ export default function Dashboard() {
                 title="Expansão"
                 text="Campanhas VIP + recompra pós-venda"
               />
+
             </div>
+
           </div>
+
         </>
       )}
 
@@ -531,45 +600,76 @@ export default function Dashboard() {
 
       {visao === "clientes" && (
         <>
-          <div style={riskGrid}>
+
+          <div
+            style={riskGrid}
+            className="dashboard-risk-grid"
+          >
+
             {clientesRisco
               .slice(0, 8)
               .map(c => (
+
                 <div
                   key={c.id}
                   style={riskCard}
                 >
-                  <strong>{c.nome}</strong>
+
+                  <strong>
+                    {c.nome}
+                  </strong>
 
                   <div style={muted}>
                     {c.dias >= 999
                       ? "Nunca comprou"
                       : `${c.dias} dias sem comprar`}
                   </div>
+
                 </div>
+
               ))}
+
           </div>
 
-          <div style={section}>
-            <h3>Top clientes por pontos</h3>
+          {/* TOP CLIENTES */}
+
+          <div style={section} className="dashboard-section">
+
+            <h3>
+              Top clientes por pontos
+            </h3>
 
             {topClientes.map(c => (
+
               <div
                 key={c.id}
                 style={listRow}
               >
-                <span>{c.nome}</span>
+
+                <span>
+                  {c.nome}
+                </span>
+
                 <strong>
                   {c.pontos} pts
                 </strong>
+
               </div>
+
             ))}
+
           </div>
 
-          <div style={section}>
-            <h3>Campanhas automáticas</h3>
+          {/* CAMPANHAS */}
+
+          <div style={section} className="dashboard-section">
+
+            <h3>
+              Campanhas automáticas
+            </h3>
 
             <div style={campaignGrid}>
+
               <button
                 style={actionBtn}
                 onClick={() =>
@@ -605,18 +705,27 @@ export default function Dashboard() {
               >
                 Recuperar inativos
               </button>
+
             </div>
+
           </div>
 
-          <div style={section}>
-            <h3>Calendário sazonal</h3>
+          {/* CALENDÁRIO */}
+
+          <div style={section} className="dashboard-section">
+
+            <h3>
+              Calendário sazonal
+            </h3>
 
             {calendario.map(
               ([mes, data, acao]) => (
+
                 <div
                   key={mes}
                   style={listRow}
                 >
+
                   <span>
                     {mes} • {data}
                   </span>
@@ -624,19 +733,24 @@ export default function Dashboard() {
                   <strong>
                     {acao}
                   </strong>
+
                 </div>
+
               )
             )}
+
           </div>
+
         </>
       )}
+
     </div>
   )
 }
 
-/* =========================
+/* =====================================================
    COMPONENTES
-========================= */
+===================================================== */
 
 function Dash({
   label,
@@ -647,6 +761,7 @@ function Dash({
 }) {
   return (
     <div style={dash}>
+
       <span style={dashLabel}>
         {label}
       </span>
@@ -654,6 +769,7 @@ function Dash({
       <strong style={dashValue}>
         {value}
       </strong>
+
     </div>
   )
 }
@@ -667,6 +783,7 @@ function MiniMetric({
 }) {
   return (
     <div style={miniMetric}>
+
       <span style={miniLabel}>
         {label}
       </span>
@@ -674,6 +791,7 @@ function MiniMetric({
       <strong style={miniValue}>
         {value}
       </strong>
+
     </div>
   )
 }
@@ -687,6 +805,7 @@ function InsightCard({
 }) {
   return (
     <div style={insightCard}>
+
       <span style={insightTitle}>
         {title}
       </span>
@@ -694,13 +813,14 @@ function InsightCard({
       <strong style={insightText}>
         {text}
       </strong>
+
     </div>
   )
 }
 
-/* =========================
+/* =====================================================
    ESTILOS
-========================= */
+===================================================== */
 
 const container = {
   padding: 40,
@@ -773,7 +893,8 @@ const dash = {
   background: "#fff",
   padding: 18,
   borderRadius: 16,
-  minWidth: 0
+  minWidth: 0,
+  overflow: "hidden" as const
 }
 
 const dashLabel = {
@@ -788,7 +909,9 @@ const dashValue = {
   overflowWrap: "anywhere" as const
 }
 
-/* META */
+/* =====================================================
+   META
+===================================================== */
 
 const metaCard = {
   background: "#fff",
@@ -852,7 +975,9 @@ const progressText = {
   color: "#777"
 }
 
-/* GRÁFICOS */
+/* =====================================================
+   GRÁFICOS
+===================================================== */
 
 const profitGrid = {
   display: "grid",
@@ -912,7 +1037,9 @@ const miniValue = {
   fontSize: 18
 }
 
-/* INSIGHTS */
+/* =====================================================
+   INSIGHTS
+===================================================== */
 
 const insightGrid = {
   display: "grid",
@@ -941,7 +1068,9 @@ const insightText = {
   overflowWrap: "anywhere" as const
 }
 
-/* CLIENTES */
+/* =====================================================
+   CLIENTES
+===================================================== */
 
 const section = {
   background: "#fff",
