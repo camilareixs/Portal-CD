@@ -1047,11 +1047,12 @@ function Dash({
 const container = {
   width: "100%",
   minWidth: 0,
-  minHeight: "100vh",
+  minHeight: "100%",
   padding: 40,
   background: "#f6f6f7",
-  fontFamily: "Inter, Arial, sans-serif",
-  overflowX: "hidden"
+  fontFamily: "Inter",
+  overflowX: "hidden" as const,
+  boxSizing: "border-box" as const
 }
 
 const section = {
