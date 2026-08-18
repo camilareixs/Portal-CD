@@ -14,6 +14,7 @@ type Cliente = {
   CEP: string
   Complemento: string
   cintura: string
+
   tamanhoSaia?: string
   tamanhoVestido?: string
   tamanhoBlusa?: string
@@ -72,7 +73,7 @@ export default function Clientes({
         nome: c.nome || "",
         cpf: c.cpf || "",
         celular: c.celular || "",
-        pontos: Number(c.pontos || 0),
+        pontos: c.pontos || 0,
         cidade: c.cidade || "",
         estado: c.estado || "",
         rua: c.rua || "",
@@ -80,6 +81,7 @@ export default function Clientes({
         CEP: c.CEP || "",
         Complemento: c.Complemento || "",
         cintura: c.cintura || "",
+
         tamanhoSaia: c.tamanhoSaia || "",
         tamanhoVestido: c.tamanhoVestido || "",
         tamanhoBlusa: c.tamanhoBlusa || "",
@@ -137,6 +139,7 @@ export default function Clientes({
         rua: form.rua,
         cidade: form.cidade,
         estado: form.estado,
+
         tamanhoSaia: form.tamanhoSaia,
         tamanhoVestido: form.tamanhoVestido,
         tamanhoBlusa: form.tamanhoBlusa,
@@ -160,7 +163,7 @@ export default function Clientes({
   }
 
   async function criarCliente() {
-    if (!novo.nome?.trim()) {
+    if (!novo.nome) {
       alert("Preencha o nome do cliente")
       return
     }
@@ -177,6 +180,7 @@ export default function Clientes({
           rua: novo.rua || "",
           pontos: 0,
           criadoEm: new Date().toISOString(),
+
           tamanhoSaia: novo.tamanhoSaia || "",
           tamanhoVestido: novo.tamanhoVestido || "",
           tamanhoBlusa: novo.tamanhoBlusa || "",
@@ -208,14 +212,7 @@ export default function Clientes({
 
   function formatarData(data: string) {
     if (!data) return "-"
-
-    const dataObj = new Date(data)
-
-    if (Number.isNaN(dataObj.getTime())) {
-      return "-"
-    }
-
-    return dataObj.toLocaleDateString("pt-BR")
+    return new Date(data).toLocaleDateString("pt-BR")
   }
 
   function gerarMensagem(cliente: Cliente) {
@@ -232,9 +229,7 @@ Te esperamos! 💛`
 
   function enviarWhats(cliente: Cliente) {
     const numero = "55" + cliente.celular.replace(/\D/g, "")
-    const mensagem = encodeURIComponent(
-      gerarMensagem(cliente)
-    )
+    const mensagem = encodeURIComponent(gerarMensagem(cliente))
 
     window.open(
       `https://wa.me/${numero}?text=${mensagem}`,
@@ -274,7 +269,8 @@ Te esperamos! 💛`
         ? formatarData(comprasCliente[0].criadoem)
         : "Nenhuma"
 
-    const conteudo = `RELATÓRIO CAMIDUDA
+    const conteudo = `
+RELATÓRIO CAMIDUDA
 
 Cliente: ${cliente.nome}
 CPF: ${cliente.cpf}
@@ -289,7 +285,7 @@ Total gasto: R$ ${totalGasto.toFixed(2)}
 Compras realizadas: ${totalCompras}
 Ticket médio: R$ ${ticketMedio.toFixed(2)}
 Última compra: ${ultimaCompra}
-Cupons usados: ${cuponsUsados}
+Cupons usados: R$ ${cuponsUsados.toFixed(2)}
 Pontos gerados: ${pontosGerados}
 
 --- HISTÓRICO ---
@@ -319,452 +315,59 @@ ${comprasCliente
   }
 
   const cidades = Array.from(
-    new Set(
-      clientes
-        .map(c => c.cidade)
-        .filter(Boolean)
-    )
+    new Set(clientes.map(c => c.cidade).filter(Boolean))
   )
 
   const estados = Array.from(
-    new Set(
-      clientes
-        .map(c => c.estado)
-        .filter(Boolean)
-    )
+    new Set(clientes.map(c => c.estado).filter(Boolean))
   )
 
   let lista = [...clientes]
 
-  if (
-    ordenacao === "ranking" ||
-    ordenacao === "pontos"
-  ) {
+  if (ordenacao === "ranking" || ordenacao === "pontos") {
     lista.sort((a, b) => b.pontos - a.pontos)
   }
 
   if (ordenacao === "alfabetica") {
-    lista.sort((a, b) =>
-      a.nome.localeCompare(b.nome)
-    )
+    lista.sort((a, b) => a.nome.localeCompare(b.nome))
   }
 
   lista = lista
     .filter(c =>
-      c.nome
-        .toLowerCase()
-        .includes(busca.toLowerCase())
+      c.nome.toLowerCase().includes(busca.toLowerCase())
     )
-    .filter(
-      c =>
-        !cidadeFiltro ||
-        c.cidade === cidadeFiltro
-    )
-    .filter(
-      c =>
-        !estadoFiltro ||
-        c.estado === estadoFiltro
-    )
+    .filter(c => !cidadeFiltro || c.cidade === cidadeFiltro)
+    .filter(c => !estadoFiltro || c.estado === estadoFiltro)
 
   function fecharModal() {
     setSelected(null)
     setCreating(false)
     setEditing(false)
-    setForm({})
-    setNovo({})
-  }
-
-  function abrirCliente(cliente: Cliente) {
-    setSelected(cliente)
-    setForm(cliente)
   }
 
   return (
-    <div className="clientes-page">
-      <style>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        .clientes-page {
-          width: 100%;
-          min-width: 0;
-          background: #f6f6f7;
-          font-family: Inter, Arial, sans-serif;
-        }
-
-        .clientes-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 20px;
-          margin-bottom: 28px;
-          flex-wrap: wrap;
-        }
-
-        .clientes-title {
-          font-size: 32px;
-          font-weight: 500;
-          margin: 0;
-          color: #222;
-        }
-
-        .clientes-primary-btn {
-          padding: 10px 18px;
-          border-radius: 14px;
-          border: 1px solid #e6e0c9;
-          background: #fffbe6;
-          cursor: pointer;
-          box-shadow: 0 4px 12px rgba(212,175,55,0.15);
-          white-space: nowrap;
-          transition: 0.2s;
-        }
-
-        .clientes-primary-btn:hover {
-          background: #fff3c4;
-        }
-
-        .clientes-filters {
-          display: grid;
-          grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(140px, 1fr));
-          gap: 12px;
-          margin-bottom: 30px;
-          width: 100%;
-        }
-
-        .clientes-input,
-        .clientes-select {
-          padding: 12px;
-          border-radius: 14px;
-          border: 1px solid #e5e5e5;
-          width: 100%;
-          min-width: 0;
-          background: #fff;
-          outline: none;
-          font-family: inherit;
-          font-size: 14px;
-        }
-
-        .clientes-input:focus,
-        .clientes-select:focus {
-          border-color: #d4af37;
-          box-shadow: 0 0 0 3px rgba(212,175,55,0.10);
-        }
-
-        .clientes-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-          gap: 20px;
-          width: 100%;
-        }
-
-        .cliente-card {
-          background: #fff;
-          padding: 18px;
-          border-radius: 18px;
-          border: 1px solid #eee;
-          cursor: pointer;
-          transition: 0.25s;
-          position: relative;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .cliente-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 30px rgba(0,0,0,0.08);
-        }
-
-        .cliente-rank {
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          color: #b8962e;
-          font-weight: 600;
-        }
-
-        .cliente-name {
-          font-weight: 500;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          padding-right: 35px;
-          color: #222;
-        }
-
-        .cliente-muted {
-          color: #888;
-          font-size: 14px;
-        }
-
-        .cliente-muted-small {
-          font-size: 12px;
-          color: #999;
-        }
-
-        .cliente-coupon {
-          margin: 10px 0;
-          color: #b8962e;
-        }
-
-        .cliente-progress-bg {
-          height: 6px;
-          background: #eee;
-          border-radius: 999px;
-          overflow: hidden;
-        }
-
-        .cliente-progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg,#d4af37,#f6e27a);
-          border-radius: 999px;
-        }
-
-        .clientes-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.25);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 16px;
-          box-sizing: border-box;
-          z-index: 2000;
-        }
-
-        .clientes-modal {
-          background: #fff;
-          padding: 24px;
-          border-radius: 18px;
-          width: 100%;
-          max-width: 400px;
-          max-height: calc(100vh - 32px);
-          overflow-y: auto;
-          overflow-x: hidden;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.12);
-          box-sizing: border-box;
-        }
-
-        .clientes-modal-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-
-        .clientes-modal-title {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 500;
-          min-width: 0;
-          overflow-wrap: anywhere;
-        }
-
-        .clientes-close {
-          width: 34px;
-          height: 34px;
-          min-width: 34px;
-          border-radius: 50%;
-          border: 1px solid #eee;
-          background: #fafafa;
-          color: #777;
-          font-size: 24px;
-          line-height: 1;
-          cursor: pointer;
-        }
-
-        .clientes-info {
-          margin-bottom: 12px;
-        }
-
-        .clientes-info-label {
-          display: block;
-          font-size: 12px;
-          color: #999;
-          margin-bottom: 3px;
-        }
-
-        .clientes-info-value {
-          margin-top: 2px;
-          word-break: break-word;
-          color: #222;
-        }
-
-        .clientes-section-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #b8962e;
-          margin-top: 22px;
-          margin-bottom: 15px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid #eee;
-        }
-
-        .clientes-modal-actions {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 20px;
-        }
-
-        .clientes-secondary-btn,
-        .clientes-primary-small,
-        .clientes-whats-btn {
-          min-width: 0;
-          padding: 10px 12px;
-          border-radius: 12px;
-          cursor: pointer;
-          font-family: inherit;
-          font-size: 14px;
-        }
-
-        .clientes-secondary-btn {
-          border: 1px solid #ddd;
-          background: #fafafa;
-        }
-
-        .clientes-primary-small {
-          background: linear-gradient(90deg,#d4af37,#f6e27a);
-          border: none;
-        }
-
-        .clientes-whats-btn {
-          border: 1px solid #e6e0c9;
-          background: #fffbe6;
-        }
-
-        .clientes-create-actions {
-          display: flex;
-          justify-content: center;
-          margin-top: 8px;
-        }
-
-        .clientes-create-btn {
-          padding: 12px 24px;
-          border-radius: 14px;
-          border: none;
-          background: linear-gradient(90deg,#d4af37,#f6e27a);
-          box-shadow: 0 8px 20px rgba(212,175,55,0.25);
-          cursor: pointer;
-          font-family: inherit;
-        }
-
-        @media (max-width: 900px) {
-          .clientes-filters {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .clientes-filters > :first-child {
-            grid-column: 1 / -1;
-          }
-
-          .clientes-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 600px) {
-          .clientes-header {
-            align-items: stretch;
-            margin-bottom: 20px;
-            gap: 14px;
-          }
-
-          .clientes-title {
-            font-size: 28px;
-          }
-
-          .clientes-primary-btn {
-            width: 100%;
-            min-height: 46px;
-          }
-
-          .clientes-filters {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 20px;
-          }
-
-          .clientes-filters > :first-child {
-            grid-column: auto;
-          }
-
-          .clientes-input,
-          .clientes-select {
-            width: 100%;
-            min-width: 0;
-            height: 46px;
-          }
-
-          .clientes-grid {
-            grid-template-columns: 1fr;
-            gap: 12px;
-          }
-
-          .cliente-card {
-            padding: 16px;
-            border-radius: 16px;
-          }
-
-          .clientes-overlay {
-            padding: 10px;
-            align-items: flex-end;
-          }
-
-          .clientes-modal {
-            width: 100%;
-            max-width: none;
-            max-height: calc(100vh - 20px);
-            padding: 18px;
-            border-radius: 20px 20px 0 0;
-          }
-
-          .clientes-modal-title {
-            font-size: 21px;
-          }
-
-          .clientes-modal-actions {
-            grid-template-columns: 1fr;
-          }
-
-          .clientes-secondary-btn,
-          .clientes-primary-small,
-          .clientes-whats-btn {
-            width: 100%;
-            min-height: 44px;
-          }
-
-          .clientes-create-btn {
-            width: 100%;
-            min-height: 46px;
-          }
-        }
-
-        @media (max-width: 380px) {
-          .clientes-title {
-            font-size: 25px;
-          }
-
-          .clientes-modal {
-            padding: 16px;
-          }
-
-          .cliente-card {
-            padding: 14px;
-          }
-        }
-      `}</style>
-
+    <div style={container} className="clientes-container">
       {/* HEADER */}
-      <div className="clientes-header">
-        <h1 className="clientes-title">
-          Clientes
-        </h1>
+
+      <div style={header} className="clientes-header">
+        <div className="clientes-header-left">
+          <h1 style={title}>Clientes</h1>
+
+          <div className="clientes-search">
+            <span style={searchIcon}>⌕</span>
+
+            <input
+              placeholder="Buscar cliente..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={searchInput}
+            />
+          </div>
+        </div>
 
         <button
-          className="clientes-primary-btn"
+          style={primaryBtn}
+          className="novo-cliente-btn"
           onClick={() => {
             setNovo({})
             setCreating(true)
@@ -775,69 +378,55 @@ ${comprasCliente
       </div>
 
       {/* FILTROS */}
-      <div className="clientes-filters">
-        <input
-          className="clientes-input"
-          placeholder="Buscar cliente..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-        />
 
+      <div style={filters} className="clientes-filters">
         <select
-          className="clientes-select"
           value={cidadeFiltro}
-          onChange={e =>
-            setCidadeFiltro(e.target.value)
-          }
+          onChange={e => setCidadeFiltro(e.target.value)}
+          style={select}
         >
-          <option value="">Cidade</option>
+          <option value="">Todas as cidades</option>
 
           {cidades.map(c => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c}>{c}</option>
           ))}
         </select>
 
         <select
-          className="clientes-select"
           value={estadoFiltro}
-          onChange={e =>
-            setEstadoFiltro(e.target.value)
-          }
+          onChange={e => setEstadoFiltro(e.target.value)}
+          style={select}
         >
-          <option value="">Estado</option>
+          <option value="">Todos os estados</option>
 
           {estados.map(e => (
-            <option key={e} value={e}>
-              {e}
-            </option>
+            <option key={e}>{e}</option>
           ))}
         </select>
 
         <select
-          className="clientes-select"
           value={ordenacao}
-          onChange={e =>
-            setOrdenacao(e.target.value)
-          }
+          onChange={e => setOrdenacao(e.target.value)}
+          style={select}
         >
-          <option value="ranking">
-            Ranking
-          </option>
-
-          <option value="alfabetica">
-            A–Z
-          </option>
-
-          <option value="pontos">
-            Pontos
-          </option>
+          <option value="ranking">Ranking</option>
+          <option value="alfabetica">A–Z</option>
+          <option value="pontos">Pontos</option>
         </select>
       </div>
 
+      {/* CONTADOR */}
+
+      <div style={resultInfo}>
+        <span>
+          {lista.length}{" "}
+          {lista.length === 1 ? "cliente encontrado" : "clientes encontrados"}
+        </span>
+      </div>
+
       {/* CLIENTES */}
-      <div className="clientes-grid">
+
+      <div style={grid} className="clientes-grid">
         {lista.map((c, index) => {
           const { cupons, resto } = calc(c.pontos)
           const pct = (resto / 10) * 100
@@ -845,180 +434,224 @@ ${comprasCliente
           return (
             <div
               key={c.id}
+              style={card}
               className="cliente-card"
-              onClick={() => abrirCliente(c)}
-            >
-              {ordenacao === "ranking" &&
-                index < 3 && (
-                  <span className="cliente-rank">
-                    #{index + 1}
-                  </span>
-                )}
+              onClick={() => {
+                setSelected(c)
+                setForm(c)
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform =
+                  "translateY(-3px)"
 
-              <div className="cliente-name">
+                e.currentTarget.style.boxShadow =
+                  "0 12px 30px rgba(0,0,0,0.07)"
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform =
+                  "translateY(0)"
+
+                e.currentTarget.style.boxShadow =
+                  "0 2px 8px rgba(0,0,0,0.03)"
+              }}
+            >
+              {ordenacao === "ranking" && index < 3 && (
+                <span style={rank}>
+                  #{index + 1}
+                </span>
+              )}
+
+              <div style={avatar}>
+                {c.nome
+                  ? c.nome.charAt(0).toUpperCase()
+                  : "?"}
+              </div>
+
+              <div style={name}>
                 {c.nome}
               </div>
 
-              <div className="cliente-muted">
-                {c.cidade ||
-                  "Cidade não informada"}
+              <div style={muted}>
+                {c.cidade || "Cidade não informada"}
               </div>
 
-              <div className="cliente-coupon">
-                🎟 {cupons}
+              <div style={cardBottom}>
+                <div style={coupon}>
+                  🎟 {cupons} cupom{cupons !== 1 ? "s" : ""}
+                </div>
+
+                <span style={points}>
+                  {resto}/10 pts
+                </span>
               </div>
 
-              <div className="cliente-progress-bg">
+              <div style={progressBg}>
                 <div
-                  className="cliente-progress-fill"
                   style={{
+                    ...progressFill,
                     width: `${pct}%`
                   }}
                 />
-              </div>
-
-              <div className="cliente-muted-small">
-                {resto}/10 pontos
               </div>
             </div>
           )
         })}
 
         {lista.length === 0 && (
-          <div
-            style={{
-              gridColumn: "1 / -1",
-              background: "#fff",
-              padding: 30,
-              borderRadius: 16,
-              textAlign: "center",
-              color: "#888"
-            }}
-          >
-            Nenhum cliente encontrado.
+          <div style={emptyState}>
+            <div style={emptyIcon}>⌕</div>
+
+            <strong>Nenhum cliente encontrado</strong>
+
+            <span>
+              Tente alterar os filtros ou a busca.
+            </span>
           </div>
         )}
       </div>
 
       {/* MODAL */}
+
       {(selected || creating) && (
         <div
-          className="clientes-overlay"
+          style={overlay}
           onClick={fecharModal}
         >
           <div
-            className="clientes-modal"
-            onClick={e =>
-              e.stopPropagation()
-            }
+            style={modal}
+            className="cliente-modal"
+            onClick={e => e.stopPropagation()}
           >
             {/* VISUALIZAÇÃO */}
+
             {selected && !editing && (
               <>
-                <div className="clientes-modal-header">
-                  <h2 className="clientes-modal-title">
-                    {selected.nome}
-                  </h2>
+                <div style={modalHeader}>
+                  <div style={profileHeader}>
+                    <div style={modalAvatar}>
+                      {selected.nome
+                        ? selected.nome
+                            .charAt(0)
+                            .toUpperCase()
+                        : "?"}
+                    </div>
+
+                    <div>
+                      <h2 style={modalTitle}>
+                        {selected.nome}
+                      </h2>
+
+                      <span style={modalSubtitle}>
+                        Cliente desde{" "}
+                        {formatarData(
+                          selected.criadoEm
+                        )}
+                      </span>
+                    </div>
+                  </div>
 
                   <button
-                    className="clientes-close"
+                    style={closeBtn}
                     onClick={fecharModal}
                   >
                     ×
                   </button>
                 </div>
 
-                <Info
-                  label="CPF"
-                  value={selected.cpf || "-"}
-                />
+                <div style={pointsBox}>
+                  <div>
+                    <span style={pointsBoxLabel}>
+                      Pontos disponíveis
+                    </span>
 
-                <Info
-                  label="Celular"
-                  value={selected.celular || "-"}
-                />
+                    <strong style={pointsBoxValue}>
+                      ⭐ {selected.pontos}
+                    </strong>
+                  </div>
 
-                <Info
-                  label="Rua"
-                  value={selected.rua || "-"}
-                />
+                  <div style={couponBox}>
+                    🎟 {calc(selected.pontos).cupons} cupons
+                  </div>
+                </div>
 
-                <Info
-                  label="Cidade"
-                  value={selected.cidade || "-"}
-                />
+                <div style={sectionTitle}>
+                  Dados pessoais
+                </div>
 
-                <Info
-                  label="Estado"
-                  value={selected.estado || "-"}
-                />
+                <div style={infoGrid}>
+                  <Info
+                    label="CPF"
+                    value={selected.cpf || "-"}
+                  />
 
-                <Info
-                  label="CEP"
-                  value={selected.CEP || "-"}
-                />
+                  <Info
+                    label="Celular"
+                    value={selected.celular || "-"}
+                  />
 
-                <Info
-                  label="Complemento"
-                  value={
-                    selected.Complemento || "-"
-                  }
-                />
+                  <Info
+                    label="Cidade"
+                    value={selected.cidade || "-"}
+                  />
 
-                <Info
-                  label="Cliente desde"
-                  value={formatarData(
-                    selected.criadoEm
-                  )}
-                />
-
-                <div className="clientes-section-title">
-                  Medidas e tamanhos
+                  <Info
+                    label="Estado"
+                    value={selected.estado || "-"}
+                  />
                 </div>
 
                 <Info
-                  label="Saia"
+                  label="Endereço"
                   value={
-                    selected.tamanhoSaia || "-"
+                    [
+                      selected.rua,
+                      selected.CEP,
+                      selected.Complemento
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || "-"
                   }
                 />
 
-                <Info
-                  label="Vestido"
-                  value={
-                    selected.tamanhoVestido || "-"
-                  }
-                />
+                <div style={sectionTitle}>
+                  Medidas e tamanhos
+                </div>
 
-                <Info
-                  label="Blusa"
-                  value={
-                    selected.tamanhoBlusa || "-"
-                  }
-                />
+                <div style={measureGrid}>
+                  <Measure
+                    label="Saia"
+                    value={selected.tamanhoSaia}
+                  />
 
-                <Info
-                  label="Busto"
-                  value={selected.busto || "-"}
-                />
+                  <Measure
+                    label="Vestido"
+                    value={selected.tamanhoVestido}
+                  />
 
-                <Info
-                  label="Quadril"
-                  value={
-                    selected.quadril || "-"
-                  }
-                />
+                  <Measure
+                    label="Blusa"
+                    value={selected.tamanhoBlusa}
+                  />
 
-                <Info
-                  label="Cintura"
-                  value={
-                    selected.cintura || "-"
-                  }
-                />
+                  <Measure
+                    label="Busto"
+                    value={selected.busto}
+                  />
 
-                <div className="clientes-modal-actions">
+                  <Measure
+                    label="Quadril"
+                    value={selected.quadril}
+                  />
+
+                  <Measure
+                    label="Cintura"
+                    value={selected.cintura}
+                  />
+                </div>
+
+                <div style={modalActions}>
                   <button
-                    className="clientes-secondary-btn"
+                    style={secondaryBtn}
                     onClick={() => {
                       setForm(selected)
                       setEditing(true)
@@ -1028,12 +661,9 @@ ${comprasCliente
                   </button>
 
                   <button
-                    className="clientes-primary-small"
+                    style={primaryBtnSmall}
                     onClick={() => {
-                      if (
-                        irParaCompra &&
-                        selected
-                      ) {
+                      if (irParaCompra && selected) {
                         irParaCompra(
                           selected.id,
                           selected.nome
@@ -1043,11 +673,11 @@ ${comprasCliente
                       setSelected(null)
                     }}
                   >
-                    Nova compra
+                    + Nova compra
                   </button>
 
                   <button
-                    className="clientes-whats-btn"
+                    style={whatsBtn}
                     onClick={() =>
                       enviarWhats(selected)
                     }
@@ -1056,7 +686,7 @@ ${comprasCliente
                   </button>
 
                   <button
-                    className="clientes-secondary-btn"
+                    style={secondaryBtn}
                     onClick={() =>
                       baixarRelatorio(selected)
                     }
@@ -1068,29 +698,160 @@ ${comprasCliente
             )}
 
             {/* EDITAR */}
+
             {selected && editing && (
               <>
-                <div className="clientes-modal-header">
-                  <h2 className="clientes-modal-title">
-                    Editar cliente
-                  </h2>
+                <div style={modalHeader}>
+                  <div>
+                    <h2 style={modalTitle}>
+                      Editar cliente
+                    </h2>
+
+                    <span style={modalSubtitle}>
+                      Atualize os dados abaixo
+                    </span>
+                  </div>
 
                   <button
-                    className="clientes-close"
+                    style={closeBtn}
                     onClick={fecharModal}
                   >
                     ×
                   </button>
                 </div>
 
-                <ClienteForm
-                  data={form}
-                  setData={setForm}
+                <FormInput
+                  placeholder="Nome"
+                  value={form.nome}
+                  onChange={value =>
+                    setForm({
+                      ...form,
+                      nome: value
+                    })
+                  }
                 />
 
-                <div className="clientes-modal-actions">
+                <FormInput
+                  placeholder="CPF"
+                  value={form.cpf}
+                  onChange={value =>
+                    setForm({
+                      ...form,
+                      cpf: value
+                    })
+                  }
+                />
+
+                <FormInput
+                  placeholder="Celular"
+                  value={form.celular}
+                  onChange={value =>
+                    setForm({
+                      ...form,
+                      celular: value
+                    })
+                  }
+                />
+
+                <FormInput
+                  placeholder="Rua"
+                  value={form.rua}
+                  onChange={value =>
+                    setForm({
+                      ...form,
+                      rua: value
+                    })
+                  }
+                />
+
+                <div style={formGrid}>
+                  <FormInput
+                    placeholder="Cidade"
+                    value={form.cidade}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        cidade: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Estado"
+                    value={form.estado}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        estado: value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={sectionTitle}>
+                  Medidas e tamanhos
+                </div>
+
+                <div style={formGrid}>
+                  <FormInput
+                    placeholder="Tamanho saia"
+                    value={form.tamanhoSaia}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        tamanhoSaia: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Tamanho vestido"
+                    value={form.tamanhoVestido}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        tamanhoVestido: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Tamanho blusa"
+                    value={form.tamanhoBlusa}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        tamanhoBlusa: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Busto"
+                    value={form.busto}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        busto: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Quadril"
+                    value={form.quadril}
+                    onChange={value =>
+                      setForm({
+                        ...form,
+                        quadril: value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={modalActions}>
                   <button
-                    className="clientes-secondary-btn"
+                    style={secondaryBtn}
                     onClick={() =>
                       setEditing(false)
                     }
@@ -1099,39 +860,170 @@ ${comprasCliente
                   </button>
 
                   <button
-                    className="clientes-primary-small"
+                    style={primaryBtnSmall}
                     onClick={salvarEdicao}
                   >
-                    Salvar
+                    Salvar alterações
                   </button>
                 </div>
               </>
             )}
 
             {/* CRIAR */}
+
             {creating && (
               <>
-                <div className="clientes-modal-header">
-                  <h2 className="clientes-modal-title">
-                    Novo cliente
-                  </h2>
+                <div style={modalHeader}>
+                  <div>
+                    <h2 style={modalTitle}>
+                      Novo cliente
+                    </h2>
+
+                    <span style={modalSubtitle}>
+                      Cadastre um novo cliente
+                    </span>
+                  </div>
 
                   <button
-                    className="clientes-close"
+                    style={closeBtn}
                     onClick={fecharModal}
                   >
                     ×
                   </button>
                 </div>
 
-                <ClienteForm
-                  data={novo}
-                  setData={setNovo}
+                <FormInput
+                  placeholder="Nome *"
+                  value={novo.nome}
+                  onChange={value =>
+                    setNovo({
+                      ...novo,
+                      nome: value
+                    })
+                  }
                 />
 
-                <div className="clientes-create-actions">
+                <FormInput
+                  placeholder="CPF"
+                  value={novo.cpf}
+                  onChange={value =>
+                    setNovo({
+                      ...novo,
+                      cpf: value
+                    })
+                  }
+                />
+
+                <FormInput
+                  placeholder="Celular"
+                  value={novo.celular}
+                  onChange={value =>
+                    setNovo({
+                      ...novo,
+                      celular: value
+                    })
+                  }
+                />
+
+                <FormInput
+                  placeholder="Rua"
+                  value={novo.rua}
+                  onChange={value =>
+                    setNovo({
+                      ...novo,
+                      rua: value
+                    })
+                  }
+                />
+
+                <div style={formGrid}>
+                  <FormInput
+                    placeholder="Cidade"
+                    value={novo.cidade}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        cidade: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Estado"
+                    value={novo.estado}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        estado: value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={sectionTitle}>
+                  Medidas e tamanhos
+                </div>
+
+                <div style={formGrid}>
+                  <FormInput
+                    placeholder="Tamanho saia"
+                    value={novo.tamanhoSaia}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        tamanhoSaia: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Tamanho vestido"
+                    value={novo.tamanhoVestido}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        tamanhoVestido: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Tamanho blusa"
+                    value={novo.tamanhoBlusa}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        tamanhoBlusa: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Busto"
+                    value={novo.busto}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        busto: value
+                      })
+                    }
+                  />
+
+                  <FormInput
+                    placeholder="Quadril"
+                    value={novo.quadril}
+                    onChange={value =>
+                      setNovo({
+                        ...novo,
+                        quadril: value
+                      })
+                    }
+                  />
+                </div>
+
+                <div style={createActions}>
                   <button
-                    className="clientes-create-btn"
+                    style={primaryBtnCreate}
                     onClick={criarCliente}
                   >
                     Criar cliente
@@ -1142,217 +1034,138 @@ ${comprasCliente
           </div>
         </div>
       )}
+
+      {/* RESPONSIVIDADE */}
+
+      <style>
+        {`
+          * {
+            box-sizing: border-box;
+          }
+
+          .clientes-container {
+            overflow-x: hidden;
+          }
+
+          .clientes-header-left {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            min-width: 0;
+          }
+
+          .clientes-search {
+            display: flex;
+            align-items: center;
+            width: 230px;
+            height: 40px;
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 0 11px;
+          }
+
+          .clientes-search:focus-within {
+            border-color: #d4af37;
+            box-shadow: 0 0 0 3px rgba(212,175,55,0.10);
+          }
+
+          .novo-cliente-btn {
+            color: #7d641c;
+            font-weight: 600;
+          }
+
+          .clientes-filters {
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          .cliente-card {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+          }
+
+          @media (max-width: 700px) {
+
+            .clientes-header {
+              align-items: flex-start !important;
+              gap: 14px !important;
+              margin-bottom: 18px !important;
+            }
+
+            .clientes-header-left {
+              width: 100%;
+              display: grid;
+              grid-template-columns: auto 1fr;
+              gap: 12px;
+            }
+
+            .clientes-search {
+              width: 100%;
+              min-width: 0;
+            }
+
+            .novo-cliente-btn {
+              width: 100%;
+              height: 44px;
+            }
+
+            .clientes-filters {
+              grid-template-columns: 1fr 1fr !important;
+              gap: 8px !important;
+              margin-bottom: 18px !important;
+            }
+
+            .clientes-filters select {
+              min-width: 0 !important;
+              width: 100%;
+            }
+
+            .clientes-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+
+            .cliente-card {
+              padding: 16px !important;
+            }
+
+            .cliente-modal {
+              width: calc(100vw - 24px) !important;
+              max-height: calc(100vh - 24px) !important;
+              padding: 18px !important;
+              border-radius: 18px !important;
+            }
+          }
+
+          @media (max-width: 420px) {
+
+            .clientes-header-left {
+              grid-template-columns: 1fr;
+            }
+
+            .clientes-header-left h1 {
+              font-size: 28px !important;
+            }
+
+            .clientes-filters {
+              grid-template-columns: 1fr !important;
+            }
+
+            .cliente-modal {
+              width: calc(100vw - 16px) !important;
+              max-height: calc(100vh - 16px) !important;
+              padding: 16px !important;
+            }
+          }
+        `}
+      </style>
     </div>
   )
 }
 
-/* =====================================================
-   FORMULÁRIO DE CLIENTE
-===================================================== */
-
-function ClienteForm({
-  data,
-  setData
-}: {
-  data: Partial<Cliente>
-  setData: React.Dispatch<
-    React.SetStateAction<Partial<Cliente>>
-  >
-}) {
-  return (
-    <>
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Nome"
-        value={data.nome || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            nome: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="CPF"
-        value={data.cpf || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            cpf: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Celular"
-        value={data.celular || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            celular: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Rua"
-        value={data.rua || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            rua: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Cidade"
-        value={data.cidade || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            cidade: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Estado"
-        value={data.estado || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            estado: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="CEP"
-        value={data.CEP || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            CEP: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Complemento"
-        value={data.Complemento || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            Complemento: e.target.value
-          })
-        }
-      />
-
-      <div className="clientes-section-title">
-        Medidas e tamanhos
-      </div>
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Tamanho saia"
-        value={data.tamanhoSaia || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            tamanhoSaia: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Tamanho vestido"
-        value={data.tamanhoVestido || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            tamanhoVestido: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Tamanho blusa"
-        value={data.tamanhoBlusa || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            tamanhoBlusa: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Busto"
-        value={data.busto || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            busto: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Quadril"
-        value={data.quadril || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            quadril: e.target.value
-          })
-        }
-      />
-
-      <input
-        className="clientes-input"
-        style={{ marginBottom: 12 }}
-        placeholder="Cintura"
-        value={data.cintura || ""}
-        onChange={e =>
-          setData({
-            ...data,
-            cintura: e.target.value
-          })
-        }
-      />
-    </>
-  )
-}
-
-/* =====================================================
-   INFO
-===================================================== */
+/* =========================
+   COMPONENTES
+========================= */
 
 function Info({
   label,
@@ -1362,14 +1175,531 @@ function Info({
   value: string
 }) {
   return (
-    <div className="clientes-info">
-      <span className="clientes-info-label">
+    <div style={info}>
+      <span style={mutedSmall}>
         {label}
       </span>
 
-      <div className="clientes-info-value">
+      <div style={infoValue}>
         {value}
       </div>
     </div>
   )
+}
+
+function Measure({
+  label,
+  value
+}: {
+  label: string
+  value?: string
+}) {
+  return (
+    <div style={measure}>
+      <span style={measureLabel}>
+        {label}
+      </span>
+
+      <strong style={measureValue}>
+        {value || "-"}
+      </strong>
+    </div>
+  )
+}
+
+function FormInput({
+  placeholder,
+  value,
+  onChange
+}: {
+  placeholder: string
+  value?: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <input
+      style={inputSpacing}
+      placeholder={placeholder}
+      value={value || ""}
+      onChange={e =>
+        onChange(e.target.value)
+      }
+    />
+  )
+}
+
+/* =========================
+   CONTAINER
+========================= */
+
+const container = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box" as const,
+  background: "#f6f6f7",
+  fontFamily: "Inter, Arial, sans-serif"
+}
+
+/* =========================
+   HEADER
+========================= */
+
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  marginBottom: 24,
+  flexWrap: "wrap" as const
+}
+
+const title = {
+  fontSize: 32,
+  fontWeight: 500,
+  margin: 0,
+  color: "#222"
+}
+
+const searchIcon = {
+  color: "#999",
+  fontSize: 20,
+  marginRight: 5,
+  lineHeight: 1
+}
+
+const searchInput = {
+  border: "none",
+  outline: "none",
+  width: "100%",
+  minWidth: 0,
+  background: "transparent",
+  fontSize: 13,
+  color: "#333"
+}
+
+const resultInfo = {
+  color: "#888",
+  fontSize: 12,
+  marginBottom: 14
+}
+
+/* =========================
+   BOTÕES
+========================= */
+
+const primaryBtn = {
+  padding: "11px 18px",
+  borderRadius: 13,
+  border: "1px solid #d4af37",
+  background:
+    "linear-gradient(135deg,#d4af37,#f3d76b)",
+  cursor: "pointer",
+  boxShadow:
+    "0 5px 15px rgba(212,175,55,0.20)",
+  whiteSpace: "nowrap" as const,
+  transition: "0.2s",
+  color: "#6f5715",
+  fontWeight: 600
+}
+
+const secondaryBtn = {
+  padding: "10px 15px",
+  borderRadius: 11,
+  border: "1px solid #ddd",
+  background: "#fafafa",
+  cursor: "pointer",
+  color: "#555"
+}
+
+const primaryBtnSmall = {
+  padding: "10px 16px",
+  borderRadius: 11,
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  border: "none",
+  cursor: "pointer",
+  color: "#604d10",
+  fontWeight: 600
+}
+
+const primaryBtnCreate = {
+  width: "100%",
+  padding: "13px 24px",
+  borderRadius: 12,
+  border: "none",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  boxShadow:
+    "0 7px 18px rgba(212,175,55,0.23)",
+  cursor: "pointer",
+  color: "#604d10",
+  fontWeight: 600
+}
+
+const whatsBtn = {
+  padding: "10px 15px",
+  borderRadius: 11,
+  border: "1px solid #e6e0c9",
+  background: "#fffbe6",
+  cursor: "pointer",
+  color: "#75601e"
+}
+
+/* =========================
+   FILTROS
+========================= */
+
+const filters = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3,1fr)",
+  gap: 10,
+  marginBottom: 18,
+  width: "100%"
+}
+
+const inputSpacing = {
+  padding: 12,
+  borderRadius: 11,
+  border: "1px solid #e5e5e5",
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box" as const,
+  background: "#fff",
+  outline: "none",
+  marginBottom: 10,
+  fontSize: 13
+}
+
+const select = {
+  padding: 11,
+  borderRadius: 11,
+  border: "1px solid #e5e5e5",
+  width: "100%",
+  minWidth: 0,
+  background: "#fff",
+  boxSizing: "border-box" as const,
+  color: "#555",
+  outline: "none"
+}
+
+/* =========================
+   GRID
+========================= */
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fill,minmax(240px,1fr))",
+  gap: 16,
+  width: "100%"
+}
+
+const card = {
+  background: "#fff",
+  padding: 18,
+  borderRadius: 17,
+  border: "1px solid #eee",
+  cursor: "pointer",
+  transition: "0.25s",
+  position: "relative" as const,
+  minWidth: 0,
+  boxSizing: "border-box" as const
+}
+
+const avatar = {
+  width: 42,
+  height: 42,
+  borderRadius: "50%",
+  background:
+    "linear-gradient(135deg,#f8edbc,#d4af37)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#715914",
+  fontWeight: 600,
+  marginBottom: 12
+}
+
+const rank = {
+  position: "absolute" as const,
+  top: 14,
+  right: 14,
+  color: "#b8962e",
+  fontSize: 12,
+  fontWeight: 600
+}
+
+const name = {
+  fontWeight: 600,
+  fontSize: 16,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const,
+  paddingRight: 35,
+  color: "#222"
+}
+
+const muted = {
+  color: "#888",
+  fontSize: 13,
+  marginTop: 4
+}
+
+const mutedSmall = {
+  fontSize: 11,
+  color: "#999"
+}
+
+const cardBottom = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  marginTop: 14
+}
+
+const coupon = {
+  color: "#b8962e",
+  fontSize: 13,
+  fontWeight: 500
+}
+
+const points = {
+  color: "#999",
+  fontSize: 11
+}
+
+const progressBg = {
+  height: 6,
+  background: "#eee",
+  borderRadius: 999,
+  overflow: "hidden" as const,
+  marginTop: 8
+}
+
+const progressFill = {
+  height: "100%",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  borderRadius: 999,
+  transition: "width 0.3s"
+}
+
+const emptyState = {
+  gridColumn: "1 / -1",
+  background: "#fff",
+  borderRadius: 16,
+  padding: 45,
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  color: "#777",
+  border: "1px solid #eee"
+}
+
+const emptyIcon = {
+  fontSize: 30,
+  color: "#d4af37",
+  marginBottom: 5
+}
+
+/* =========================
+   MODAL
+========================= */
+
+const overlay = {
+  position: "fixed" as const,
+  inset: 0,
+  background: "rgba(20,20,20,0.35)",
+  backdropFilter: "blur(3px)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  boxSizing: "border-box" as const,
+  zIndex: 2000
+}
+
+const modal = {
+  background: "#fff",
+  padding: 24,
+  borderRadius: 20,
+  width: "100%",
+  maxWidth: 500,
+  maxHeight: "calc(100vh - 32px)",
+  overflowY: "auto" as const,
+  boxShadow:
+    "0 25px 70px rgba(0,0,0,0.18)",
+  boxSizing: "border-box" as const
+}
+
+const modalHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 15,
+  marginBottom: 20
+}
+
+const profileHeader = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  minWidth: 0
+}
+
+const modalAvatar = {
+  width: 48,
+  height: 48,
+  minWidth: 48,
+  borderRadius: "50%",
+  background:
+    "linear-gradient(135deg,#f8edbc,#d4af37)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#715914",
+  fontWeight: 600,
+  fontSize: 18
+}
+
+const modalTitle = {
+  margin: 0,
+  fontSize: 21,
+  fontWeight: 600,
+  color: "#222",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const
+}
+
+const modalSubtitle = {
+  display: "block",
+  marginTop: 3,
+  fontSize: 11,
+  color: "#999"
+}
+
+const closeBtn = {
+  width: 34,
+  height: 34,
+  minWidth: 34,
+  borderRadius: 50,
+  border: "1px solid #eee",
+  background: "#fafafa",
+  color: "#777",
+  fontSize: 23,
+  lineHeight: 1,
+  cursor: "pointer"
+}
+
+const pointsBox = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 15,
+  padding: 15,
+  borderRadius: 14,
+  background: "#fffbe9",
+  border: "1px solid #f1e5b9",
+  marginBottom: 20
+}
+
+const pointsBoxLabel = {
+  display: "block",
+  fontSize: 11,
+  color: "#9a823d",
+  marginBottom: 4
+}
+
+const pointsBoxValue = {
+  fontSize: 20,
+  color: "#8b6d1d"
+}
+
+const couponBox = {
+  padding: "8px 11px",
+  borderRadius: 10,
+  background: "#fff",
+  color: "#9b7b2f",
+  fontSize: 12,
+  border: "1px solid #eadfb9"
+}
+
+const sectionTitle = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#b8962e",
+  marginTop: 20,
+  marginBottom: 13,
+  paddingBottom: 8,
+  borderBottom: "1px solid #eee"
+}
+
+const infoGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 8
+}
+
+const info = {
+  marginBottom: 10,
+  minWidth: 0
+}
+
+const infoValue = {
+  marginTop: 3,
+  wordBreak: "break-word" as const,
+  color: "#333",
+  fontSize: 13
+}
+
+const measureGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3,1fr)",
+  gap: 8
+}
+
+const measure = {
+  background: "#fafafa",
+  border: "1px solid #eee",
+  borderRadius: 11,
+  padding: 10,
+  minWidth: 0
+}
+
+const measureLabel = {
+  display: "block",
+  fontSize: 10,
+  color: "#999",
+  marginBottom: 4
+}
+
+const measureValue = {
+  fontSize: 13,
+  color: "#444",
+  wordBreak: "break-word" as const
+}
+
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10
+}
+
+const modalActions = {
+  display: "flex",
+  gap: 8,
+  marginTop: 20,
+  justifyContent: "flex-end",
+  flexWrap: "wrap" as const
+}
+
+const createActions = {
+  display: "flex",
+  justifyContent: "center",
+  marginTop: 8
 }
