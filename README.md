@@ -1,73 +1,105 @@
-# React + TypeScript + Vite
+# Portal Cami & Duda
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> Plataforma web em desenvolvimento para auxiliar na gestão da loja **Cami & Duda**, centralizando informações de clientes, compras e programa de fidelidade em uma única solução digital.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Sobre o projeto
 
-## React Compiler
+O **Portal Cami & Duda** é uma aplicação web desenvolvida para digitalizar e facilitar processos da loja, com foco em **gestão de clientes, controle de compras e relacionamento com clientes**.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+O projeto está sendo desenvolvido de forma incremental, adicionando novas funcionalidades e melhorias conforme as necessidades reais da loja.
 
-## Expanding the ESLint configuration
+A ideia é substituir controles manuais e informações dispersas por uma plataforma centralizada, simples de utilizar e acessível em diferentes dispositivos.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+---
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Objetivo
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+O projeto tem como objetivo criar uma ferramenta que facilite a rotina da loja e permita um melhor acompanhamento dos clientes.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Entre os principais objetivos estão:
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+* Centralizar informações dos clientes
+* Registrar e consultar compras
+* Automatizar o controle do programa de fidelidade
+* Facilitar o acompanhamento de pontos e benefícios
+* Melhorar a organização das informações
+* Agilizar o atendimento
+* Facilitar a comunicação com clientes
+* Disponibilizar uma experiência adequada para dispositivos móveis
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Funcionalidades
+
+O sistema está sendo desenvolvido por etapas.
+
+### Clientes
+
+* Cadastro de clientes
+* Consulta de clientes
+* Busca e filtros
+* Visualização de informações do cliente
+* Histórico de compras
+
+### Compras
+
+* Registro de compras
+* Associação de compras aos clientes
+* Histórico de compras
+* Controle das informações relacionadas à venda
+
+### Programa de fidelidade
+
+* Controle de pontuação
+* Acompanhamento de pontos acumulados
+* Controle de cupons
+* Regras de conversão de pontos em benefícios
+
+### Comunicação
+
+* Integração com WhatsApp
+* Facilitação do contato com clientes
+
+### Interface
+
+* Interface responsiva
+* Adaptação para dispositivos móveis
+* Foco em uma utilização simples e rápida durante o atendimento
+
+> Algumas funcionalidades ainda estão em desenvolvimento.
+
+---
+
+## Tecnologias
+
+### Front-end
+
+* **React**
+* **TypeScript**
+* **Vite**
+* **HTML5**
+* **CSS3**
+
+### Banco de dados
+
+* **Supabase**
+
+### Ferramentas e serviços
+
+* **Git**
+* **GitHub**
+* **Vercel**
+
+### Integrações
+
+* WhatsApp
+* Supabase
+
+
+---
+
+## Estrutura do projeto
+
+> A estrutura está  sendo melhorada juntamente com o código.
