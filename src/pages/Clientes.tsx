@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+```tsx
+import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Cliente = {
@@ -10,17 +11,16 @@ type Cliente = {
   cidade: string
   estado: string
   rua: string
+  criadoEm: string
   CEP: string
   Complemento: string
   cintura: string
   "Data de Nascimento": string
-  criadoEm: string
-
-  tamanhoSaia: string
-  tamanhoVestido: string
-  tamanhoBlusa: string
-  busto: string
-  quadril: string
+  tamanhoSaia?: string
+  tamanhoVestido?: string
+  tamanhoBlusa?: string
+  busto?: string
+  quadril?: string
 }
 
 type Compra = {
@@ -36,15 +36,13 @@ type Compra = {
   cupomusado: number
 }
 
-type FormCliente = Partial<Cliente>
-
 export default function Clientes({
   irParaCompra
 }: {
   irParaCompra?: (clienteId: string, clienteNome: string) => void
 }) {
-  const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
 
   const [busca, setBusca] = useState("")
   const [cidadeFiltro, setCidadeFiltro] = useState("")
@@ -52,16 +50,17 @@ export default function Clientes({
   const [ordenacao, setOrdenacao] = useState("ranking")
 
   const [selected, setSelected] = useState<Cliente | null>(null)
-
-  const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [creating, setCreating] = useState(false)
+
   const [editarDados, setEditarDados] = useState(false)
   const [editarMedidas, setEditarMedidas] = useState(false)
 
-  const [mostrarRelatorio, setMostrarRelatorio] = useState(false)
+  const [form, setForm] = useState<Partial<Cliente>>({})
+  const [novo, setNovo] = useState<Partial<Cliente>>({})
 
-  const [form, setForm] = useState<FormCliente>({})
-  const [novo, setNovo] = useState<FormCliente>({})
+  const [relatorioAberto, setRelatorioAberto] = useState(false)
+  const [relatorioTexto, setRelatorioTexto] = useState("")
 
   async function fetchClientes() {
     const { data, error } = await supabase
@@ -70,7 +69,7 @@ export default function Clientes({
       .order("pontos", { ascending: false })
 
     if (error) {
-      console.error("Erro ao buscar clientes:", error)
+      console.log("Erro ao buscar clientes:", error)
       alert("Erro ao buscar clientes: " + error.message)
       return
     }
@@ -85,12 +84,11 @@ export default function Clientes({
         cidade: c.cidade || "",
         estado: c.estado || "",
         rua: c.rua || "",
+        criadoEm: c.criadoEm || "",
         CEP: c.CEP || "",
         Complemento: c.Complemento || "",
         cintura: c.cintura || "",
         "Data de Nascimento": c["Data de Nascimento"] || "",
-        criadoEm: c.criadoEm || "",
-
         tamanhoSaia: c.tamanhoSaia || "",
         tamanhoVestido: c.tamanhoVestido || "",
         tamanhoBlusa: c.tamanhoBlusa || "",
@@ -109,25 +107,25 @@ export default function Clientes({
       .order("criadoem", { ascending: false })
 
     if (error) {
-      console.error("Erro compras:", error)
+      console.log("Erro compras:", error)
       return
     }
 
     if (data) {
-      const comprasFormatadas: Compra[] = data.map((c: any) => ({
-        id: String(c.id),
-        clienteid: String(c.clienteid),
-        cliente: c.cliente || "",
-        cpf: c.cpf || "",
-        valor: Number(c.valor || 0),
-        pagamento: c.pagamento || "",
-        parcelas: Number(c.parcelas || 1),
-        pontosgerados: Number(c.pontosgerados || 0),
-        criadoem: c.criadoem || "",
-        cupomusado: Number(c.cupomusado || 0)
-      }))
-
-      setCompras(comprasFormatadas)
+      setCompras(
+        data.map((c: any) => ({
+          id: String(c.id),
+          clienteid: String(c.clienteid),
+          cliente: c.cliente || "",
+          cpf: c.cpf || "",
+          valor: Number(c.valor || 0),
+          pagamento: c.pagamento || "",
+          parcelas: Number(c.parcelas || 1),
+          pontosgerados: Number(c.pontosgerados || 0),
+          criadoem: c.criadoem || "",
+          cupomusado: Number(c.cupomusado || 0)
+        }))
+      )
     }
   }
 
@@ -146,23 +144,22 @@ export default function Clientes({
         cpf: form.cpf || "",
         celular: form.celular || "",
         rua: form.rua || "",
-        CEP: form.CEP || "",
-        Complemento: form.Complemento || "",
         cidade: form.cidade || "",
         estado: form.estado || "",
+        CEP: form.CEP || "",
+        Complemento: form.Complemento || "",
         "Data de Nascimento": form["Data de Nascimento"] || "",
-
+        cintura: form.cintura || "",
         tamanhoSaia: form.tamanhoSaia || "",
         tamanhoVestido: form.tamanhoVestido || "",
         tamanhoBlusa: form.tamanhoBlusa || "",
         busto: form.busto || "",
-        cintura: form.cintura || "",
         quadril: form.quadril || ""
       })
       .eq("id", selected.id)
 
     if (error) {
-      console.error("Erro ao editar:", error)
+      console.log("Erro ao editar:", error)
       alert("Erro ao editar cliente: " + error.message)
       return
     }
@@ -173,14 +170,13 @@ export default function Clientes({
     setEditarDados(false)
     setEditarMedidas(false)
     setSelected(null)
-    setForm({})
 
-    await fetchClientes()
+    fetchClientes()
   }
 
   async function criarCliente() {
     if (!novo.nome?.trim()) {
-      alert("Preencha o nome do cliente.")
+      alert("Preencha o nome do cliente")
       return
     }
 
@@ -191,31 +187,26 @@ export default function Clientes({
           nome: novo.nome || "",
           cpf: novo.cpf || "",
           celular: novo.celular || "",
-
+          cidade: novo.cidade || "",
+          estado: novo.estado || "",
           rua: novo.rua || "",
           CEP: novo.CEP || "",
           Complemento: novo.Complemento || "",
-          cidade: novo.cidade || "",
-          estado: novo.estado || "",
-
           "Data de Nascimento":
             novo["Data de Nascimento"] || "",
-
+          cintura: novo.cintura || "",
           pontos: 0,
-
           criadoEm: new Date().toISOString(),
-
           tamanhoSaia: novo.tamanhoSaia || "",
           tamanhoVestido: novo.tamanhoVestido || "",
           tamanhoBlusa: novo.tamanhoBlusa || "",
           busto: novo.busto || "",
-          cintura: novo.cintura || "",
           quadril: novo.quadril || ""
         }
       ])
 
     if (error) {
-      console.error("Erro ao criar:", error)
+      console.log("Erro ao criar:", error)
       alert("Erro ao criar cliente: " + error.message)
       return
     }
@@ -225,7 +216,35 @@ export default function Clientes({
     setCreating(false)
     setNovo({})
 
-    await fetchClientes()
+    fetchClientes()
+  }
+
+  async function excluirCliente() {
+    if (!selected) return
+
+    const confirmar = window.confirm(
+      `Tem certeza que deseja excluir o cliente "${selected.nome}"?\n\nEssa ação não poderá ser desfeita.`
+    )
+
+    if (!confirmar) return
+
+    const { error } = await supabase
+      .from("clientes")
+      .delete()
+      .eq("id", selected.id)
+
+    if (error) {
+      console.log("Erro ao excluir cliente:", error)
+      alert("Erro ao excluir cliente: " + error.message)
+      return
+    }
+
+    alert("Cliente excluído com sucesso!")
+
+    setSelected(null)
+    setForm({})
+
+    fetchClientes()
   }
 
   function calc(pontos: number) {
@@ -240,18 +259,11 @@ export default function Clientes({
 
     const dataObj = new Date(data)
 
-    if (Number.isNaN(dataObj.getTime())) {
+    if (isNaN(dataObj.getTime())) {
       return data
     }
 
     return dataObj.toLocaleDateString("pt-BR")
-  }
-
-  function formatarMoeda(valor: number) {
-    return valor.toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL"
-    })
   }
 
   function gerarMensagem(cliente: Cliente) {
@@ -268,15 +280,7 @@ Te esperamos!`
 
   function enviarWhats(cliente: Cliente) {
     const numero = "55" + cliente.celular.replace(/\D/g, "")
-
-    if (numero.length < 12) {
-      alert("O celular deste cliente não está preenchido corretamente.")
-      return
-    }
-
-    const mensagem = encodeURIComponent(
-      gerarMensagem(cliente)
-    )
+    const mensagem = encodeURIComponent(gerarMensagem(cliente))
 
     window.open(
       `https://wa.me/${numero}?text=${mensagem}`,
@@ -284,60 +288,39 @@ Te esperamos!`
     )
   }
 
-  const comprasDoCliente = useMemo(() => {
-    if (!selected) return []
+  function gerarRelatorio(cliente: Cliente) {
+    const comprasCliente = compras.filter(
+      c => c.clienteid === cliente.id
+    )
 
-    return compras
-      .filter(c => c.clienteid === selected.id)
-      .sort(
-        (a, b) =>
-          new Date(b.criadoem).getTime() -
-          new Date(a.criadoem).getTime()
-      )
-  }, [compras, selected])
-
-  const resumoRelatorio = useMemo(() => {
-    const totalGasto = comprasDoCliente.reduce(
-      (total, compra) => total + compra.valor,
+    const totalGasto = comprasCliente.reduce(
+      (a, c) => a + c.valor,
       0
     )
 
-    const totalCompras = comprasDoCliente.length
+    const totalCompras = comprasCliente.length
 
     const ticketMedio =
       totalCompras > 0
         ? totalGasto / totalCompras
         : 0
 
-    const cuponsUsados = comprasDoCliente.reduce(
-      (total, compra) => total + compra.cupomusado,
+    const cuponsUsados = comprasCliente.reduce(
+      (a, c) => a + c.cupomusado,
       0
     )
 
-    const pontosGerados = comprasDoCliente.reduce(
-      (total, compra) => total + compra.pontosgerados,
+    const pontosGerados = comprasCliente.reduce(
+      (a, c) => a + c.pontosgerados,
       0
     )
 
     const ultimaCompra =
-      comprasDoCliente.length > 0
-        ? formatarData(comprasDoCliente[0].criadoem)
+      comprasCliente.length > 0
+        ? formatarData(comprasCliente[0].criadoem)
         : "Nenhuma"
 
-    return {
-      totalGasto,
-      totalCompras,
-      ticketMedio,
-      cuponsUsados,
-      pontosGerados,
-      ultimaCompra
-    }
-  }, [comprasDoCliente])
-
-  function gerarTextoRelatorio(cliente: Cliente) {
-    const resumo = resumoRelatorio
-
-    return `RELATÓRIO CAMI&DUDA
+    const conteudo = `RELATÓRIO CAMIDUDA
 
 CLIENTE
 Nome: ${cliente.nome}
@@ -351,49 +334,63 @@ Data de nascimento: ${
 
 ENDEREÇO
 Rua: ${cliente.rua || "-"}
-CEP: ${cliente.CEP || "-"}
+Número: -
 Complemento: ${cliente.Complemento || "-"}
+CEP: ${cliente.CEP || "-"}
 Cidade: ${cliente.cidade || "-"}
 Estado: ${cliente.estado || "-"}
 
-FIDELIDADE
+Cliente desde: ${formatarData(cliente.criadoEm)}
+
+------------------------------
+RESUMO DE FIDELIDADE
+------------------------------
+
 Pontos atuais: ${cliente.pontos}
 Cupons disponíveis: ${calc(cliente.pontos).cupons}
 Pontos para próximo cupom: ${calc(cliente.pontos).resto}/10
 
-Cliente desde: ${formatarData(cliente.criadoEm)}
-
+------------------------------
 RESUMO DE COMPRAS
-Total gasto: ${formatarMoeda(resumo.totalGasto)}
-Compras realizadas: ${resumo.totalCompras}
-Ticket médio: ${formatarMoeda(resumo.ticketMedio)}
-Última compra: ${resumo.ultimaCompra}
-Cupons utilizados: ${resumo.cuponsUsados}
-Pontos gerados: ${resumo.pontosGerados}
+------------------------------
 
-HISTÓRICO DE COMPRAS
+Total gasto: R$ ${totalGasto.toFixed(2)}
+Compras realizadas: ${totalCompras}
+Ticket médio: R$ ${ticketMedio.toFixed(2)}
+Última compra: ${ultimaCompra}
+Valor em cupons utilizados: R$ ${cuponsUsados.toFixed(2)}
+Pontos gerados: ${pontosGerados}
+
+------------------------------
+HISTÓRICO
+------------------------------
 
 ${
-  comprasDoCliente.length > 0
-    ? comprasDoCliente
+  comprasCliente.length > 0
+    ? comprasCliente
         .map(
-          compra =>
-            `${formatarData(
-              compra.criadoem
-            )} | ${formatarMoeda(
-              compra.valor
-            )} | ${
-              compra.pagamento || "-"
-            } | ${compra.pontosgerados} ponto(s)`
+          c =>
+            `${formatarData(c.criadoem)} | R$ ${c.valor.toFixed(
+              2
+            )} | ${c.pagamento || "-"}`
         )
         .join("\n")
     : "Nenhuma compra registrada."
 }
 `
+
+    return conteudo
+  }
+
+  function visualizarRelatorio(cliente: Cliente) {
+    const texto = gerarRelatorio(cliente)
+
+    setRelatorioTexto(texto)
+    setRelatorioAberto(true)
   }
 
   function baixarRelatorio(cliente: Cliente) {
-    const conteudo = gerarTextoRelatorio(cliente)
+    const conteudo = gerarRelatorio(cliente)
 
     const blob = new Blob([conteudo], {
       type: "text/plain;charset=utf-8"
@@ -415,20 +412,12 @@ ${
   }
 
   const cidades = Array.from(
-    new Set(
-      clientes
-        .map(c => c.cidade)
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b))
+    new Set(clientes.map(c => c.cidade).filter(Boolean))
+  ).sort()
 
   const estados = Array.from(
-    new Set(
-      clientes
-        .map(c => c.estado)
-        .filter(Boolean)
-    )
-  ).sort((a, b) => a.localeCompare(b))
+    new Set(clientes.map(c => c.estado).filter(Boolean))
+  ).sort()
 
   let lista = [...clientes]
 
@@ -436,9 +425,7 @@ ${
     ordenacao === "ranking" ||
     ordenacao === "pontos"
   ) {
-    lista.sort(
-      (a, b) => b.pontos - a.pontos
-    )
+    lista.sort((a, b) => b.pontos - a.pontos)
   }
 
   if (ordenacao === "alfabetica") {
@@ -454,14 +441,10 @@ ${
         .includes(busca.toLowerCase())
     )
     .filter(
-      c =>
-        !cidadeFiltro ||
-        c.cidade === cidadeFiltro
+      c => !cidadeFiltro || c.cidade === cidadeFiltro
     )
     .filter(
-      c =>
-        !estadoFiltro ||
-        c.estado === estadoFiltro
+      c => !estadoFiltro || c.estado === estadoFiltro
     )
 
   function fecharModal() {
@@ -470,9 +453,8 @@ ${
     setEditing(false)
     setEditarDados(false)
     setEditarMedidas(false)
-    setMostrarRelatorio(false)
-    setForm({})
-    setNovo({})
+    setRelatorioAberto(false)
+    setRelatorioTexto("")
   }
 
   function iniciarEdicaoDados() {
@@ -493,111 +475,65 @@ ${
     setEditarMedidas(true)
   }
 
-  function abrirRelatorio() {
-    if (!selected) return
-
-    setMostrarRelatorio(true)
-  }
-
   return (
     <div style={container}>
       <style>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        .clientes-header {
+        .clientes-filtros {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 20px;
-          margin-bottom: 28px;
+          gap: 12px;
+          margin-bottom: 30px;
           flex-wrap: wrap;
         }
 
-        .clientes-filtros {
-          display: grid;
-          grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr));
-          gap: 12px;
-          margin-bottom: 30px;
+        .clientes-busca {
+          flex: 2;
+          min-width: 220px;
+        }
+
+        .clientes-select {
+          flex: 1;
+          min-width: 140px;
         }
 
         .clientes-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-          gap: 18px;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(240px, 1fr)
+          );
+          gap: 20px;
         }
 
-        .cliente-card {
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease,
-            border-color 0.2s ease;
+        .clientes-modal-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 20px;
+          justify-content: center;
+          flex-wrap: wrap;
         }
 
         .cliente-card:hover {
           transform: translateY(-4px);
-          box-shadow: 0 14px 35px rgba(40, 32, 15, 0.08);
-          border-color: #eadfbf !important;
+          box-shadow: 0 12px 30px rgba(0,0,0,0.08) !important;
         }
 
-        .cliente-modal-actions {
-          display: flex;
-          gap: 9px;
-          margin-top: 20px;
-          justify-content: flex-end;
-          flex-wrap: wrap;
-        }
-
-        .form-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-
-        .form-full {
-          grid-column: 1 / -1;
-        }
-
-        .relatorio-resumo {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 10px;
-          margin: 18px 0;
-        }
-
-        .relatorio-card {
-          padding: 13px;
-          border-radius: 13px;
-          background: #faf9f5;
-          border: 1px solid #eee8d8;
-        }
-
-        .relatorio-historico {
-          border-top: 1px solid #eee;
-          margin-top: 18px;
-          padding-top: 16px;
-        }
-
-        .relatorio-compra {
-          display: grid;
-          grid-template-columns: 90px 1fr 100px;
-          gap: 10px;
-          padding: 11px 0;
-          border-bottom: 1px solid #f0f0f0;
-          align-items: center;
+        .relatorio-texto {
+          white-space: pre-wrap;
+          font-family: Inter, sans-serif;
           font-size: 13px;
-        }
-
-        @media (max-width: 850px) {
-          .clientes-filtros {
-            grid-template-columns: 1fr 1fr;
-          }
+          line-height: 1.7;
+          color: #333;
+          background: #fcfbf7;
+          border: 1px solid #eee6d2;
+          border-radius: 14px;
+          padding: 18px;
+          max-height: 55vh;
+          overflow-y: auto;
         }
 
         @media (max-width: 600px) {
           .clientes-header {
-            margin-bottom: 20px !important;
+            margin-bottom: 18px !important;
           }
 
           .clientes-header-title {
@@ -605,22 +541,46 @@ ${
           }
 
           .clientes-header-button {
-            padding: 10px 14px !important;
+            padding: 9px 14px !important;
           }
 
           .clientes-filtros {
-            grid-template-columns: 1.35fr 1fr !important;
+            display: grid !important;
+            grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
             gap: 8px !important;
             margin-bottom: 22px !important;
+            width: 100%;
+          }
+
+          .clientes-busca,
+          .clientes-select {
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: none !important;
           }
 
           .clientes-busca {
-            grid-column: 1 / -1;
+            grid-column: 1;
+          }
+
+          .clientes-select.cidade {
+            grid-column: 2;
+          }
+
+          .clientes-select.estado {
+            grid-column: 1;
+          }
+
+          .clientes-select.ranking {
+            grid-column: 2;
           }
 
           .clientes-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(
+              2,
+              minmax(0, 1fr)
+            ) !important;
+            gap: 10px !important;
           }
 
           .cliente-card {
@@ -633,16 +593,26 @@ ${
           }
 
           .cliente-card-city {
+            font-size: 12px !important;
+          }
+
+          .cliente-card-coupon {
+            font-size: 13px !important;
+            margin: 8px 0 !important;
+          }
+
+          .cliente-card-points {
             font-size: 11px !important;
           }
 
           .cliente-modal-overlay {
             padding: 10px !important;
+            align-items: center !important;
           }
 
           .cliente-modal {
             width: 100% !important;
-            max-width: 430px !important;
+            max-width: 410px !important;
             max-height: calc(100vh - 20px) !important;
             padding: 18px !important;
             border-radius: 20px !important;
@@ -652,8 +622,23 @@ ${
             font-size: 21px !important;
           }
 
+          .cliente-modal-points {
+            padding: 12px !important;
+            margin-bottom: 16px !important;
+          }
+
+          .clientes-modal-actions {
+            gap: 8px !important;
+          }
+
+          .clientes-modal-actions button {
+            padding: 9px 12px !important;
+            font-size: 13px !important;
+          }
+
           .cliente-info-grid {
-            grid-template-columns: 1fr 1fr !important;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 4px 14px;
           }
 
@@ -661,39 +646,15 @@ ${
             grid-column: 1 / -1;
           }
 
-          .form-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .form-full {
-            grid-column: auto;
-          }
-
-          .relatorio-resumo {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .relatorio-compra {
-            grid-template-columns: 75px 1fr;
-          }
-
-          .relatorio-compra strong {
-            grid-column: 2;
-          }
-
-          .clientes-modal-actions {
-            justify-content: center;
-          }
-
-          .clientes-modal-actions button {
-            flex: 1;
-            min-width: 100px;
+          .relatorio-texto {
+            max-height: 48vh;
+            font-size: 12px;
           }
         }
 
         @media (max-width: 380px) {
           .clientes-grid {
-            gap: 8px;
+            gap: 8px !important;
           }
 
           .cliente-card {
@@ -715,10 +676,6 @@ ${
           .cliente-info-full {
             grid-column: auto;
           }
-
-          .relatorio-resumo {
-            grid-template-columns: 1fr;
-          }
         }
       `}</style>
 
@@ -728,18 +685,12 @@ ${
         className="clientes-header"
         style={header}
       >
-        <div>
-          <h1
-            className="clientes-header-title"
-            style={title}
-          >
-            Clientes
-          </h1>
-
-          <p style={subtitle}>
-            Gestão de clientes e fidelidade
-          </p>
-        </div>
+        <h1
+          className="clientes-header-title"
+          style={title}
+        >
+          Clientes
+        </h1>
 
         <button
           className="clientes-header-button"
@@ -767,58 +718,51 @@ ${
         />
 
         <select
+          className="clientes-select cidade"
           value={cidadeFiltro}
           onChange={e =>
             setCidadeFiltro(e.target.value)
           }
           style={select}
         >
-          <option value="">Todas as cidades</option>
+          <option value="">Cidades</option>
 
-          {cidades.map(cidade => (
-            <option
-              key={cidade}
-              value={cidade}
-            >
-              {cidade}
+          {cidades.map(c => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>
 
         <select
+          className="clientes-select estado"
           value={estadoFiltro}
           onChange={e =>
             setEstadoFiltro(e.target.value)
           }
           style={select}
         >
-          <option value="">Todos os estados</option>
+          <option value="">Estados</option>
 
-          {estados.map(estado => (
-            <option
-              key={estado}
-              value={estado}
-            >
-              {estado}
+          {estados.map(e => (
+            <option key={e} value={e}>
+              {e}
             </option>
           ))}
         </select>
 
         <select
+          className="clientes-select ranking"
           value={ordenacao}
           onChange={e =>
             setOrdenacao(e.target.value)
           }
           style={select}
         >
-          <option value="ranking">
-            Mais pontos
-          </option>
-
+          <option value="ranking">Ranking</option>
           <option value="alfabetica">
             A–Z
           </option>
-
           <option value="pontos">
             Pontos
           </option>
@@ -828,21 +772,21 @@ ${
       {/* CLIENTES */}
 
       <div className="clientes-grid">
-        {lista.map((cliente, index) => {
+        {lista.map((c, index) => {
           const { cupons, resto } =
-            calc(cliente.pontos)
+            calc(c.pontos)
 
-          const porcentagem =
+          const pct =
             (resto / 10) * 100
 
           return (
             <div
-              key={cliente.id}
+              key={c.id}
               className="cliente-card"
               style={card}
               onClick={() => {
-                setSelected(cliente)
-                setForm({ ...cliente })
+                setSelected(c)
+                setForm({ ...c })
               }}
             >
               {ordenacao === "ranking" &&
@@ -856,21 +800,21 @@ ${
                 className="cliente-card-name"
                 style={name}
               >
-                {cliente.nome}
+                {c.nome}
               </div>
 
               <div
                 className="cliente-card-city"
                 style={muted}
               >
-                {cliente.cidade ||
+                {c.cidade ||
                   "Cidade não informada"}
-                {cliente.estado
-                  ? ` · ${cliente.estado}`
-                  : ""}
               </div>
 
-              <div style={coupon}>
+              <div
+                className="cliente-card-coupon"
+                style={coupon}
+              >
                 {cupons} cupom(ns)
               </div>
 
@@ -878,12 +822,15 @@ ${
                 <div
                   style={{
                     ...progressFill,
-                    width: `${porcentagem}%`
+                    width: `${pct}%`
                   }}
                 />
               </div>
 
-              <div style={mutedSmall}>
+              <div
+                className="cliente-card-points"
+                style={mutedSmall}
+              >
                 {resto}/10 pontos
               </div>
             </div>
@@ -891,20 +838,7 @@ ${
         })}
       </div>
 
-      {lista.length === 0 && (
-        <div style={emptyState}>
-          <strong>
-            Nenhum cliente encontrado
-          </strong>
-
-          <span>
-            Tente alterar os filtros ou cadastrar
-            um novo cliente.
-          </span>
-        </div>
-      )}
-
-      {/* MODAL PRINCIPAL */}
+      {/* MODAL CLIENTE */}
 
       {(selected || creating) && (
         <div
@@ -921,881 +855,15 @@ ${
           >
             {/* VISUALIZAÇÃO */}
 
-            {selected &&
-              !editing &&
-              !mostrarRelatorio && (
-                <>
-                  <div style={modalHeader}>
-                    <div>
-                      <h2
-                        className="cliente-modal-title"
-                        style={modalTitle}
-                      >
-                        {selected.nome}
-                      </h2>
-
-                      <span style={modalSubtitle}>
-                        Perfil do cliente
-                      </span>
-                    </div>
-
-                    <button
-                      style={closeBtn}
-                      onClick={fecharModal}
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  {/* FIDELIDADE */}
-
-                  <div
-                    style={pointsCard}
-                  >
-                    <div style={pointsTop}>
-                      <span
-                        style={pointsLabel}
-                      >
-                        Fidelidade
-                      </span>
-
-                      <strong
-                        style={pointsNumber}
-                      >
-                        {selected.pontos} pts
-                      </strong>
-                    </div>
-
-                    <div
-                      style={progressBgLarge}
-                    >
-                      <div
-                        style={{
-                          ...progressFill,
-                          width: `${
-                            (calc(
-                              selected.pontos
-                            ).resto /
-                              10) *
-                            100
-                          }%`
-                        }}
-                      />
-                    </div>
-
-                    <div
-                      style={pointsBottom}
-                    >
-                      <span>
-                        {
-                          calc(
-                            selected.pontos
-                          ).cupons
-                        }{" "}
-                        cupom(ns)
-                      </span>
-
-                      <span>
-                        {
-                          calc(
-                            selected.pontos
-                          ).resto
-                        }
-                        /10 para o próximo
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* DADOS PESSOAIS */}
-
-                  <div
-                    style={sectionHeader}
-                  >
-                    <span>
-                      Dados pessoais
-                    </span>
-
-                    <button
-                      style={editIcon}
-                      onClick={
-                        iniciarEdicaoDados
-                      }
-                    >
-                      Editar
-                    </button>
-                  </div>
-
-                  <div className="cliente-info-grid">
-                    <Info
-                      label="CPF"
-                      value={
-                        selected.cpf || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Celular"
-                      value={
-                        selected.celular || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Data de nascimento"
-                      value={
-                        selected[
-                          "Data de Nascimento"
-                        ]
-                          ? formatarData(
-                              selected[
-                                "Data de Nascimento"
-                              ]
-                            )
-                          : "-"
-                      }
-                    />
-
-                    <Info
-                      label="CEP"
-                      value={
-                        selected.CEP || "-"
-                      }
-                    />
-
-                    <div className="cliente-info-full">
-                      <Info
-                        label="Rua"
-                        value={
-                          selected.rua || "-"
-                        }
-                      />
-                    </div>
-
-                    <div className="cliente-info-full">
-                      <Info
-                        label="Complemento"
-                        value={
-                          selected.Complemento ||
-                          "-"
-                        }
-                      />
-                    </div>
-
-                    <Info
-                      label="Cidade"
-                      value={
-                        selected.cidade || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Estado"
-                      value={
-                        selected.estado || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Cliente desde"
-                      value={formatarData(
-                        selected.criadoEm
-                      )}
-                    />
-                  </div>
-
-                  {/* MEDIDAS */}
-
-                  <div
-                    style={{
-                      ...sectionHeader,
-                      marginTop: 18
-                    }}
-                  >
-                    <span>
-                      Medidas e tamanhos
-                    </span>
-
-                    <button
-                      style={editIcon}
-                      onClick={
-                        iniciarEdicaoMedidas
-                      }
-                    >
-                      Editar
-                    </button>
-                  </div>
-
-                  <div className="cliente-info-grid">
-                    <Info
-                      label="Saia"
-                      value={
-                        selected.tamanhoSaia ||
-                        "-"
-                      }
-                    />
-
-                    <Info
-                      label="Vestido"
-                      value={
-                        selected.tamanhoVestido ||
-                        "-"
-                      }
-                    />
-
-                    <Info
-                      label="Blusa"
-                      value={
-                        selected.tamanhoBlusa ||
-                        "-"
-                      }
-                    />
-
-                    <Info
-                      label="Busto"
-                      value={
-                        selected.busto || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Cintura"
-                      value={
-                        selected.cintura || "-"
-                      }
-                    />
-
-                    <Info
-                      label="Quadril"
-                      value={
-                        selected.quadril ||
-                        "-"
-                      }
-                    />
-                  </div>
-
-                  {/* AÇÕES */}
-
-                  <div className="clientes-modal-actions">
-                    <button
-                      style={secondaryBtn}
-                      onClick={() => {
-                        if (
-                          irParaCompra &&
-                          selected
-                        ) {
-                          irParaCompra(
-                            selected.id,
-                            selected.nome
-                          )
-                        }
-
-                        setSelected(null)
-                      }}
-                    >
-                      Nova compra
-                    </button>
-
-                    <button
-                      style={whatsBtn}
-                      onClick={() =>
-                        enviarWhats(
-                          selected
-                        )
-                      }
-                    >
-                      WhatsApp
-                    </button>
-
-                    <button
-                      style={secondaryBtn}
-                      onClick={
-                        abrirRelatorio
-                      }
-                    >
-                      Relatório
-                    </button>
-                  </div>
-                </>
-              )}
-
-            {/* RELATÓRIO */}
-
-            {selected &&
-              mostrarRelatorio && (
-                <>
-                  <div style={modalHeader}>
-                    <div>
-                      <h2
-                        className="cliente-modal-title"
-                        style={modalTitle}
-                      >
-                        Relatório
-                      </h2>
-
-                      <span
-                        style={modalSubtitle}
-                      >
-                        {selected.nome}
-                      </span>
-                    </div>
-
-                    <button
-                      style={closeBtn}
-                      onClick={() =>
-                        setMostrarRelatorio(
-                          false
-                        )
-                      }
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  <div
-                    style={reportIntro}
-                  >
-                    <strong>
-                      Resumo do cliente
-                    </strong>
-
-                    <span>
-                      Informações de compras,
-                      fidelidade e histórico.
-                    </span>
-                  </div>
-
-                  <div className="relatorio-resumo">
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Total gasto
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {formatarMoeda(
-                          resumoRelatorio.totalGasto
-                        )}
-                      </strong>
-                    </div>
-
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Compras
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {
-                          resumoRelatorio.totalCompras
-                        }
-                      </strong>
-                    </div>
-
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Ticket médio
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {formatarMoeda(
-                          resumoRelatorio.ticketMedio
-                        )}
-                      </strong>
-                    </div>
-
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Pontos gerados
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {
-                          resumoRelatorio.pontosGerados
-                        }
-                      </strong>
-                    </div>
-
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Cupons utilizados
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {
-                          resumoRelatorio.cuponsUsados
-                        }
-                      </strong>
-                    </div>
-
-                    <div className="relatorio-card">
-                      <span style={reportLabel}>
-                        Última compra
-                      </span>
-
-                      <strong
-                        style={reportValue}
-                      >
-                        {
-                          resumoRelatorio.ultimaCompra
-                        }
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div
-                    className="relatorio-historico"
-                  >
-                    <div
-                      style={
-                        reportSectionTitle
-                      }
-                    >
-                      Histórico de compras
-                    </div>
-
-                    {comprasDoCliente.length ===
-                    0 ? (
-                      <div
-                        style={
-                          reportEmpty
-                        }
-                      >
-                        Nenhuma compra registrada
-                        para este cliente.
-                      </div>
-                    ) : (
-                      comprasDoCliente.map(
-                        compra => (
-                          <div
-                            className="relatorio-compra"
-                            key={compra.id}
-                          >
-                            <span
-                              style={
-                                reportDate
-                              }
-                            >
-                              {formatarData(
-                                compra.criadoem
-                              )}
-                            </span>
-
-                            <div>
-                              <strong>
-                                {formatarMoeda(
-                                  compra.valor
-                                )}
-                              </strong>
-
-                              <div
-                                style={
-                                  reportPayment
-                                }
-                              >
-                                {compra.pagamento ||
-                                  "Pagamento não informado"}
-
-                                {compra.parcelas >
-                                  1
-                                  ? ` · ${compra.parcelas}x`
-                                  : ""}
-                              </div>
-                            </div>
-
-                            <strong
-                              style={
-                                reportPoints
-                              }
-                            >
-                              +
-                              {
-                                compra.pontosgerados
-                              }{" "}
-                              pts
-                            </strong>
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-
-                  <div
-                    className="clientes-modal-actions"
-                  >
-                    <button
-                      style={secondaryBtn}
-                      onClick={() =>
-                        setMostrarRelatorio(
-                          false
-                        )
-                      }
-                    >
-                      Voltar
-                    </button>
-
-                    <button
-                      style={primaryBtnSmall}
-                      onClick={() =>
-                        baixarRelatorio(
-                          selected
-                        )
-                      }
-                    >
-                      Baixar relatório
-                    </button>
-                  </div>
-                </>
-              )}
-
-            {/* EDITAR */}
-
-            {selected &&
-              editing && (
-                <>
-                  <div style={modalHeader}>
-                    <div>
-                      <h2
-                        className="cliente-modal-title"
-                        style={modalTitle}
-                      >
-                        Editar cliente
-                      </h2>
-
-                      <span
-                        style={modalSubtitle}
-                      >
-                        Atualize as informações
-                      </span>
-                    </div>
-
-                    <button
-                      style={closeBtn}
-                      onClick={() => {
-                        setEditing(false)
-                        setEditarDados(false)
-                        setEditarMedidas(false)
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-
-                  {/* DADOS */}
-
-                  {editarDados && (
-                    <>
-                      <div
-                        style={
-                          editSectionLabel
-                        }
-                      >
-                        Dados pessoais
-                      </div>
-
-                      <div className="form-grid">
-                        <input
-                          style={inputSpacing}
-                          className="form-full"
-                          placeholder="Nome"
-                          value={
-                            form.nome || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              nome: e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="CPF"
-                          value={
-                            form.cpf || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              cpf: e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Celular"
-                          value={
-                            form.celular || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              celular:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          type="date"
-                          value={
-                            form[
-                              "Data de Nascimento"
-                            ]
-                              ? form[
-                                  "Data de Nascimento"
-                                ]!.substring(0, 10)
-                              : ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              "Data de Nascimento":
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="CEP"
-                          value={
-                            form.CEP || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              CEP: e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Rua"
-                          value={
-                            form.rua || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              rua: e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Complemento"
-                          value={
-                            form.Complemento || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              Complemento:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Cidade"
-                          value={
-                            form.cidade || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              cidade:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Estado"
-                          value={
-                            form.estado || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              estado:
-                                e.target.value
-                            })
-                          }
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* MEDIDAS */}
-
-                  {editarMedidas && (
-                    <>
-                      <div
-                        style={
-                          editSectionLabel
-                        }
-                      >
-                        Medidas e tamanhos
-                      </div>
-
-                      <div className="form-grid">
-                        <input
-                          style={inputSpacing}
-                          placeholder="Tamanho saia"
-                          value={
-                            form.tamanhoSaia ||
-                            ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              tamanhoSaia:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Tamanho vestido"
-                          value={
-                            form.tamanhoVestido ||
-                            ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              tamanhoVestido:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Tamanho blusa"
-                          value={
-                            form.tamanhoBlusa ||
-                            ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              tamanhoBlusa:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Busto"
-                          value={
-                            form.busto || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              busto:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Cintura"
-                          value={
-                            form.cintura || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              cintura:
-                                e.target.value
-                            })
-                          }
-                        />
-
-                        <input
-                          style={inputSpacing}
-                          placeholder="Quadril"
-                          value={
-                            form.quadril || ""
-                          }
-                          onChange={e =>
-                            setForm({
-                              ...form,
-                              quadril:
-                                e.target.value
-                            })
-                          }
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div
-                    className="clientes-modal-actions"
-                  >
-                    <button
-                      style={secondaryBtn}
-                      onClick={() => {
-                        setEditing(false)
-                        setEditarDados(false)
-                        setEditarMedidas(false)
-                      }}
-                    >
-                      Cancelar
-                    </button>
-
-                    <button
-                      style={primaryBtnSmall}
-                      onClick={
-                        salvarEdicao
-                      }
-                    >
-                      Salvar alterações
-                    </button>
-                  </div>
-                </>
-              )}
-
-            {/* CRIAR */}
-
-            {creating && (
+            {selected && !editing && (
               <>
                 <div style={modalHeader}>
-                  <div>
-                    <h2
-                      className="cliente-modal-title"
-                      style={modalTitle}
-                    >
-                      Novo cliente
-                    </h2>
-
-                    <span
-                      style={modalSubtitle}
-                    >
-                      Cadastre os dados da cliente
-                    </span>
-                  </div>
+                  <h2
+                    className="cliente-modal-title"
+                    style={modalTitle}
+                  >
+                    {selected.nome}
+                  </h2>
 
                   <button
                     style={closeBtn}
@@ -1805,275 +873,842 @@ ${
                   </button>
                 </div>
 
+                {/* FIDELIDADE */}
+
                 <div
-                  style={
-                    editSectionLabel
-                  }
+                  className="cliente-modal-points"
+                  style={pointsCard}
                 >
-                  Dados pessoais
+                  <div style={pointsTop}>
+                    <span style={pointsLabel}>
+                      Fidelidade
+                    </span>
+
+                    <strong
+                      style={pointsNumber}
+                    >
+                      {selected.pontos} pts
+                    </strong>
+                  </div>
+
+                  <div
+                    style={progressBgLarge}
+                  >
+                    <div
+                      style={{
+                        ...progressFill,
+                        width: `${
+                          (calc(
+                            selected.pontos
+                          ).resto /
+                            10) *
+                          100
+                        }%`
+                      }}
+                    />
+                  </div>
+
+                  <div style={pointsBottom}>
+                    <span>
+                      {
+                        calc(
+                          selected.pontos
+                        ).cupons
+                      }{" "}
+                      cupom(ns)
+                    </span>
+
+                    <span>
+                      {
+                        calc(
+                          selected.pontos
+                        ).resto
+                      }
+                      /10 para o próximo
+                    </span>
+                  </div>
                 </div>
 
-                <div className="form-grid">
-                  <input
-                    style={inputSpacing}
-                    className="form-full"
-                    placeholder="Nome completo"
-                    value={
-                      novo.nome || ""
+                {/* DADOS PESSOAIS */}
+
+                <div style={sectionHeader}>
+                  <span>
+                    Dados pessoais
+                  </span>
+
+                  <button
+                    style={editIcon}
+                    onClick={
+                      iniciarEdicaoDados
                     }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        nome: e.target.value
-                      })
+                  >
+                    Editar
+                  </button>
+                </div>
+
+                <div className="cliente-info-grid">
+                  <Info
+                    label="CPF"
+                    value={
+                      selected.cpf || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="CPF"
+                  <Info
+                    label="Celular"
                     value={
-                      novo.cpf || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        cpf: e.target.value
-                      })
+                      selected.celular || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Celular"
+                  <Info
+                    label="Data de nascimento"
                     value={
-                      novo.celular || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        celular:
-                          e.target.value
-                      })
-                    }
-                  />
-
-                  <input
-                    style={inputSpacing}
-                    type="date"
-                    value={
-                      novo[
+                      selected[
                         "Data de Nascimento"
-                      ] || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        "Data de Nascimento":
-                          e.target.value
-                      })
-                    }
-                  />
-
-                  <input
-                    style={inputSpacing}
-                    placeholder="CEP"
-                    value={
-                      novo.CEP || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        CEP: e.target.value
-                      })
+                      ]
+                        ? formatarData(
+                            selected[
+                              "Data de Nascimento"
+                            ]
+                          )
+                        : "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Rua"
+                  <Info
+                    label="CEP"
                     value={
-                      novo.rua || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        rua: e.target.value
-                      })
+                      selected.CEP || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Complemento"
+                  <Info
+                    label="Cidade"
                     value={
-                      novo.Complemento || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        Complemento:
-                          e.target.value
-                      })
+                      selected.cidade || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Cidade"
+                  <Info
+                    label="Estado"
                     value={
-                      novo.cidade || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        cidade:
-                          e.target.value
-                      })
+                      selected.estado || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Estado"
-                    value={
-                      novo.estado || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        estado:
-                          e.target.value
-                      })
-                    }
+                  <div className="cliente-info-full">
+                    <Info
+                      label="Rua"
+                      value={
+                        selected.rua || "-"
+                      }
+                    />
+                  </div>
+
+                  <div className="cliente-info-full">
+                    <Info
+                      label="Complemento"
+                      value={
+                        selected.Complemento ||
+                        "-"
+                      }
+                    />
+                  </div>
+
+                  <Info
+                    label="Cliente desde"
+                    value={formatarData(
+                      selected.criadoEm
+                    )}
                   />
                 </div>
+
+                {/* MEDIDAS */}
 
                 <div
                   style={{
-                    ...editSectionLabel,
-                    marginTop: 8
+                    ...sectionHeader,
+                    marginTop: 18
                   }}
                 >
-                  Medidas e tamanhos
+                  <span>
+                    Medidas e tamanhos
+                  </span>
+
+                  <button
+                    style={editIcon}
+                    onClick={
+                      iniciarEdicaoMedidas
+                    }
+                  >
+                    Editar
+                  </button>
                 </div>
 
-                <div className="form-grid">
-                  <input
-                    style={inputSpacing}
-                    placeholder="Tamanho saia"
+                <div className="cliente-info-grid">
+                  <Info
+                    label="Saia"
                     value={
-                      novo.tamanhoSaia ||
-                      ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        tamanhoSaia:
-                          e.target.value
-                      })
+                      selected.tamanhoSaia ||
+                      "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Tamanho vestido"
+                  <Info
+                    label="Vestido"
                     value={
-                      novo.tamanhoVestido ||
-                      ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        tamanhoVestido:
-                          e.target.value
-                      })
+                      selected.tamanhoVestido ||
+                      "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Tamanho blusa"
+                  <Info
+                    label="Blusa"
                     value={
-                      novo.tamanhoBlusa ||
-                      ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        tamanhoBlusa:
-                          e.target.value
-                      })
+                      selected.tamanhoBlusa ||
+                      "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Busto"
+                  <Info
+                    label="Busto"
                     value={
-                      novo.busto || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        busto:
-                          e.target.value
-                      })
+                      selected.busto || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Cintura"
+                  <Info
+                    label="Cintura"
                     value={
-                      novo.cintura || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        cintura:
-                          e.target.value
-                      })
+                      selected.cintura || "-"
                     }
                   />
 
-                  <input
-                    style={inputSpacing}
-                    placeholder="Quadril"
+                  <Info
+                    label="Quadril"
                     value={
-                      novo.quadril || ""
-                    }
-                    onChange={e =>
-                      setNovo({
-                        ...novo,
-                        quadril:
-                          e.target.value
-                      })
+                      selected.quadril ||
+                      "-"
                     }
                   />
                 </div>
 
-                <div
-                  style={fidelidadeInfo}
-                >
-                  A cliente começará com
-                  <strong> 0 pontos</strong>.
-                  Os pontos serão gerados
-                  automaticamente pelas compras.
-                </div>
+                {/* AÇÕES */}
 
-                <div
-                  style={createActions}
-                >
+                <div className="clientes-modal-actions">
                   <button
                     style={secondaryBtn}
-                    onClick={fecharModal}
+                    onClick={() => {
+                      if (
+                        irParaCompra &&
+                        selected
+                      ) {
+                        irParaCompra(
+                          selected.id,
+                          selected.nome
+                        )
+                      }
+
+                      setSelected(null)
+                    }}
+                  >
+                    Nova compra
+                  </button>
+
+                  <button
+                    style={whatsBtn}
+                    onClick={() =>
+                      enviarWhats(
+                        selected
+                      )
+                    }
+                  >
+                    WhatsApp
+                  </button>
+
+                  <button
+                    style={secondaryBtn}
+                    onClick={() =>
+                      visualizarRelatorio(
+                        selected
+                      )
+                    }
+                  >
+                    Relatório
+                  </button>
+
+                  <button
+                    style={deleteBtn}
+                    onClick={excluirCliente}
+                  >
+                    Excluir cliente
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* EDITAR */}
+
+            {selected && editing && (
+              <>
+                <div style={modalHeader}>
+                  <h2
+                    className="cliente-modal-title"
+                    style={modalTitle}
+                  >
+                    Editar cliente
+                  </h2>
+
+                  <button
+                    style={closeBtn}
+                    onClick={() => {
+                      setEditing(false)
+                      setEditarDados(false)
+                      setEditarMedidas(false)
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {editarDados && (
+                  <>
+                    <div
+                      style={
+                        editSectionLabel
+                      }
+                    >
+                      Dados pessoais
+                    </div>
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Nome"
+                      value={
+                        form.nome || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          nome: e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="CPF"
+                      value={
+                        form.cpf || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          cpf: e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Celular"
+                      value={
+                        form.celular || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          celular:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Data de nascimento"
+                      type="date"
+                      value={
+                        form[
+                          "Data de Nascimento"
+                        ] || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          "Data de Nascimento":
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="CEP"
+                      value={
+                        form.CEP || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          CEP: e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Rua"
+                      value={
+                        form.rua || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          rua: e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Complemento"
+                      value={
+                        form.Complemento ||
+                        ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          Complemento:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Cidade"
+                      value={
+                        form.cidade || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          cidade:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Estado"
+                      value={
+                        form.estado || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          estado:
+                            e.target.value
+                        })
+                      }
+                    />
+                  </>
+                )}
+
+                {editarMedidas && (
+                  <>
+                    <div
+                      style={
+                        editSectionLabel
+                      }
+                    >
+                      Medidas e tamanhos
+                    </div>
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Tamanho saia"
+                      value={
+                        form.tamanhoSaia ||
+                        ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          tamanhoSaia:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Tamanho vestido"
+                      value={
+                        form.tamanhoVestido ||
+                        ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          tamanhoVestido:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Tamanho blusa"
+                      value={
+                        form.tamanhoBlusa ||
+                        ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          tamanhoBlusa:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Busto"
+                      value={
+                        form.busto || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          busto:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Cintura"
+                      value={
+                        form.cintura || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          cintura:
+                            e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Quadril"
+                      value={
+                        form.quadril || ""
+                      }
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          quadril:
+                            e.target.value
+                        })
+                      }
+                    />
+                  </>
+                )}
+
+                <div className="clientes-modal-actions">
+                  <button
+                    style={secondaryBtn}
+                    onClick={() => {
+                      setEditing(false)
+                      setEditarDados(false)
+                      setEditarMedidas(false)
+                    }}
                   >
                     Cancelar
                   </button>
 
                   <button
-                    style={primaryBtnCreate}
+                    style={primaryBtnSmall}
+                    onClick={
+                      salvarEdicao
+                    }
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* CRIAR CLIENTE */}
+
+            {creating && (
+              <>
+                <div style={modalHeader}>
+                  <h2
+                    className="cliente-modal-title"
+                    style={modalTitle}
+                  >
+                    Novo cliente
+                  </h2>
+
+                  <button
+                    style={closeBtn}
+                    onClick={fecharModal}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Nome"
+                  value={
+                    novo.nome || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      nome: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="CPF"
+                  value={
+                    novo.cpf || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      cpf: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Celular"
+                  value={
+                    novo.celular || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      celular:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Data de nascimento"
+                  type="date"
+                  value={
+                    novo[
+                      "Data de Nascimento"
+                    ] || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      "Data de Nascimento":
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="CEP"
+                  value={
+                    novo.CEP || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      CEP: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Rua"
+                  value={
+                    novo.rua || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      rua: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Complemento"
+                  value={
+                    novo.Complemento ||
+                    ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      Complemento:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Cidade"
+                  value={
+                    novo.cidade || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      cidade:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Estado"
+                  value={
+                    novo.estado || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      estado:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <div
+                  style={editSectionLabel}
+                >
+                  Medidas e tamanhos
+                </div>
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Tamanho saia"
+                  value={
+                    novo.tamanhoSaia ||
+                    ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      tamanhoSaia:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Tamanho vestido"
+                  value={
+                    novo.tamanhoVestido ||
+                    ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      tamanhoVestido:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Tamanho blusa"
+                  value={
+                    novo.tamanhoBlusa ||
+                    ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      tamanhoBlusa:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Busto"
+                  value={
+                    novo.busto || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      busto:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Cintura"
+                  value={
+                    novo.cintura || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      cintura:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Quadril"
+                  value={
+                    novo.quadril || ""
+                  }
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      quadril:
+                        e.target.value
+                    })
+                  }
+                />
+
+                <div
+                  style={createActions}
+                >
+                  <button
+                    style={
+                      primaryBtnCreate
+                    }
                     onClick={
                       criarCliente
                     }
@@ -2086,12 +1721,96 @@ ${
           </div>
         </div>
       )}
+
+      {/* MODAL RELATÓRIO */}
+
+      {relatorioAberto && selected && (
+        <div
+          className="cliente-modal-overlay"
+          style={{
+            ...overlay,
+            zIndex: 3000
+          }}
+          onClick={() =>
+            setRelatorioAberto(false)
+          }
+        >
+          <div
+            className="cliente-modal"
+            style={{
+              ...modal,
+              maxWidth: 600
+            }}
+            onClick={e =>
+              e.stopPropagation()
+            }
+          >
+            <div style={modalHeader}>
+              <div>
+                <h2
+                  className="cliente-modal-title"
+                  style={modalTitle}
+                >
+                  Relatório
+                </h2>
+
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#888",
+                    marginTop: 4
+                  }}
+                >
+                  {selected.nome}
+                </div>
+              </div>
+
+              <button
+                style={closeBtn}
+                onClick={() =>
+                  setRelatorioAberto(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="relatorio-texto">
+              {relatorioTexto}
+            </div>
+
+            <div
+              className="clientes-modal-actions"
+            >
+              <button
+                style={secondaryBtn}
+                onClick={() =>
+                  baixarRelatorio(
+                    selected
+                  )
+                }
+              >
+                Baixar relatório
+              </button>
+
+              <button
+                style={primaryBtnSmall}
+                onClick={() =>
+                  setRelatorioAberto(false)
+                }
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 /* =========================================================
-   COMPONENTE INFO
+   INFO
 ========================================================= */
 
 function Info({
@@ -2115,18 +1834,20 @@ function Info({
 }
 
 /* =========================================================
-   ESTILOS
+   CONTAINER
 ========================================================= */
 
 const container = {
   width: "100%",
   minWidth: 0,
   boxSizing: "border-box" as const,
-  background: "#f8f7f3",
-  fontFamily:
-    "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  color: "#292722"
+  background: "#f6f6f7",
+  fontFamily: "Inter, sans-serif"
 }
+
+/* =========================================================
+   HEADER
+========================================================= */
 
 const header = {
   display: "flex",
@@ -2140,116 +1861,120 @@ const header = {
 const title = {
   fontSize: 32,
   fontWeight: 500,
-  margin: 0,
-  letterSpacing: "-0.5px"
+  margin: 0
 }
 
-const subtitle = {
-  margin: "5px 0 0",
-  color: "#99958b",
-  fontSize: 13
-}
-
-/* BOTÕES */
+/* =========================================================
+   BOTÕES
+========================================================= */
 
 const primaryBtn = {
-  padding: "11px 19px",
-  borderRadius: 13,
-  border: "1px solid #caa94a",
+  padding: "10px 18px",
+  borderRadius: 14,
+  border: "1px solid #d4af37",
   background:
-    "linear-gradient(135deg, #d7b95c, #f1d982)",
-  color: "#514218",
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  color: "#5f4a12",
   fontWeight: 600,
   cursor: "pointer",
   boxShadow:
-    "0 7px 20px rgba(191,157,59,0.18)",
+    "0 5px 14px rgba(212,175,55,0.22)",
+  whiteSpace: "nowrap" as const
+}
+
+const secondaryBtn = {
+  padding: "10px 16px",
+  borderRadius: 12,
+  border: "1px solid #ddd",
+  background: "#fafafa",
+  cursor: "pointer",
   whiteSpace: "nowrap" as const
 }
 
 const primaryBtnSmall = {
   padding: "10px 16px",
-  borderRadius: 11,
-  border: "1px solid #caa94a",
+  borderRadius: 12,
   background:
-    "linear-gradient(135deg, #d7b95c, #f1d982)",
-  color: "#514218",
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  color: "#5f4a12",
   fontWeight: 600,
+  border: "none",
   cursor: "pointer",
   whiteSpace: "nowrap" as const
 }
 
 const primaryBtnCreate = {
-  padding: "11px 20px",
-  borderRadius: 12,
-  border: "1px solid #caa94a",
+  padding: "12px 24px",
+  borderRadius: 14,
+  border: "none",
   background:
-    "linear-gradient(135deg, #d7b95c, #f1d982)",
-  color: "#514218",
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  color: "#5f4a12",
   fontWeight: 600,
-  cursor: "pointer",
   boxShadow:
-    "0 7px 20px rgba(191,157,59,0.18)",
-  whiteSpace: "nowrap" as const
-}
-
-const secondaryBtn = {
-  padding: "10px 15px",
-  borderRadius: 11,
-  border: "1px solid #e4e1d9",
-  background: "#fff",
-  color: "#4c4942",
-  cursor: "pointer",
-  whiteSpace: "nowrap" as const
+    "0 8px 20px rgba(212,175,55,0.25)",
+  cursor: "pointer"
 }
 
 const whatsBtn = {
-  padding: "10px 15px",
-  borderRadius: 11,
-  border: "1px solid #e5dfc7",
-  background: "#fffdf3",
-  color: "#806b27",
+  padding: "10px 16px",
+  borderRadius: 12,
+  border: "1px solid #e6e0c9",
+  background: "#fffbe6",
+  color: "#80651d",
   cursor: "pointer",
   whiteSpace: "nowrap" as const
 }
 
-/* INPUTS */
+const deleteBtn = {
+  padding: "10px 16px",
+  borderRadius: 12,
+  border: "1px solid #ead6d6",
+  background: "#fffafa",
+  color: "#a35f5f",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const
+}
+
+/* =========================================================
+   INPUTS
+========================================================= */
 
 const input = {
-  padding: "12px 13px",
-  borderRadius: 12,
-  border: "1px solid #e2dfd8",
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #e5e5e5",
   width: "100%",
   minWidth: 0,
   boxSizing: "border-box" as const,
   background: "#fff",
-  color: "#292722",
   outline: "none"
 }
 
 const inputSpacing = {
   ...input,
-  marginBottom: 0
+  marginBottom: 12
 }
 
 const select = {
-  padding: "12px 13px",
-  borderRadius: 12,
-  border: "1px solid #e2dfd8",
-  width: "100%",
-  minWidth: 0,
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #e5e5e5",
+  flex: 1,
+  minWidth: 140,
   background: "#fff",
-  color: "#555148",
-  boxSizing: "border-box" as const,
-  outline: "none"
+  boxSizing: "border-box" as const
 }
 
-/* CARDS */
+/* =========================================================
+   GRID
+========================================================= */
 
 const card = {
   background: "#fff",
   padding: 18,
-  borderRadius: 17,
-  border: "1px solid #ece9e1",
+  borderRadius: 18,
+  border: "1px solid #eee",
   cursor: "pointer",
   transition: "0.25s",
   position: "relative" as const,
@@ -2260,15 +1985,14 @@ const card = {
 const rank = {
   position: "absolute" as const,
   top: 12,
-  right: 13,
-  color: "#ad8b2e",
-  fontSize: 12,
+  right: 12,
+  color: "#b8962e",
+  fontSize: 13,
   fontWeight: 600
 }
 
 const name = {
-  fontWeight: 600,
-  color: "#302e29",
+  fontWeight: 500,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap" as const,
@@ -2276,26 +2000,22 @@ const name = {
 }
 
 const muted = {
-  color: "#96928a",
-  marginTop: 4
+  color: "#888"
 }
 
 const mutedSmall = {
-  fontSize: 11,
-  color: "#99958c",
-  marginTop: 6
+  fontSize: 12,
+  color: "#999"
 }
 
 const coupon = {
-  margin: "13px 0 9px",
-  color: "#a98627",
-  fontSize: 13,
-  fontWeight: 500
+  margin: "10px 0",
+  color: "#b8962e"
 }
 
 const progressBg = {
-  height: 5,
-  background: "#eeece6",
+  height: 6,
+  background: "#eee",
   borderRadius: 999,
   overflow: "hidden" as const
 }
@@ -2303,18 +2023,18 @@ const progressBg = {
 const progressFill = {
   height: "100%",
   background:
-    "linear-gradient(90deg, #c7a43e, #ead276)",
-  borderRadius: 999,
-  transition: "width 0.3s ease"
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  borderRadius: 999
 }
 
-/* MODAL */
+/* =========================================================
+   MODAL
+========================================================= */
 
 const overlay = {
   position: "fixed" as const,
   inset: 0,
-  background: "rgba(35,31,20,0.34)",
-  backdropFilter: "blur(3px)",
+  background: "rgba(0,0,0,0.25)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -2326,13 +2046,13 @@ const overlay = {
 const modal = {
   background: "#fff",
   padding: 24,
-  borderRadius: 20,
+  borderRadius: 18,
   width: "100%",
-  maxWidth: 500,
+  maxWidth: 430,
   maxHeight: "calc(100vh - 32px)",
   overflowY: "auto" as const,
   boxShadow:
-    "0 25px 70px rgba(35,31,20,0.18)",
+    "0 20px 60px rgba(0,0,0,0.12)",
   boxSizing: "border-box" as const
 }
 
@@ -2341,22 +2061,13 @@ const modalHeader = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 15,
-  marginBottom: 18
+  marginBottom: 16
 }
 
 const modalTitle = {
   margin: 0,
   fontSize: 24,
-  fontWeight: 500,
-  color: "#2e2c27",
-  letterSpacing: "-0.3px"
-}
-
-const modalSubtitle = {
-  display: "block",
-  marginTop: 3,
-  color: "#aaa69c",
-  fontSize: 12
+  fontWeight: 500
 }
 
 const closeBtn = {
@@ -2364,23 +2075,24 @@ const closeBtn = {
   height: 34,
   minWidth: 34,
   borderRadius: 50,
-  border: "1px solid #e8e5dd",
-  background: "#faf9f6",
-  color: "#77736a",
-  fontSize: 23,
+  border: "1px solid #eee",
+  background: "#fafafa",
+  color: "#777",
+  fontSize: 24,
   lineHeight: 1,
   cursor: "pointer"
 }
 
-/* PONTOS */
+/* =========================================================
+   FIDELIDADE
+========================================================= */
 
 const pointsCard = {
-  background:
-    "linear-gradient(135deg, #fcfaf2, #fffdf8)",
-  border: "1px solid #eee5cc",
-  borderRadius: 15,
-  padding: 15,
-  marginBottom: 20
+  background: "#fcfbf7",
+  border: "1px solid #f1ead7",
+  borderRadius: 14,
+  padding: 14,
+  marginBottom: 18
 }
 
 const pointsTop = {
@@ -2388,23 +2100,22 @@ const pointsTop = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 10,
-  marginBottom: 10
+  marginBottom: 9
 }
 
 const pointsLabel = {
-  fontSize: 12,
-  color: "#89847a"
+  fontSize: 13,
+  color: "#777"
 }
 
 const pointsNumber = {
   fontSize: 18,
-  color: "#a98527",
-  fontWeight: 600
+  color: "#b8962e"
 }
 
 const progressBgLarge = {
   height: 8,
-  background: "#ece9df",
+  background: "#eee",
   borderRadius: 999,
   overflow: "hidden" as const
 }
@@ -2413,12 +2124,14 @@ const pointsBottom = {
   display: "flex",
   justifyContent: "space-between",
   gap: 10,
-  marginTop: 9,
+  marginTop: 8,
   fontSize: 11,
-  color: "#8f8a80"
+  color: "#888"
 }
 
-/* SEÇÕES */
+/* =========================================================
+   SEÇÕES
+========================================================= */
 
 const sectionHeader = {
   display: "flex",
@@ -2427,31 +2140,32 @@ const sectionHeader = {
   gap: 10,
   fontSize: 14,
   fontWeight: 600,
-  color: "#a98527",
-  marginBottom: 13,
+  color: "#b8962e",
+  marginBottom: 12,
   paddingBottom: 8,
-  borderBottom: "1px solid #eeeae2"
+  borderBottom: "1px solid #eee"
 }
 
 const editIcon = {
   padding: "5px 9px",
-  borderRadius: 7,
-  border: "1px solid #e9dfbf",
-  background: "#fffdf5",
-  color: "#967821",
+  borderRadius: 8,
+  border: "1px solid #eadfbf",
+  background: "#fffbe6",
+  color: "#a88320",
   cursor: "pointer",
-  fontSize: 11,
-  fontWeight: 500
+  fontSize: 12
 }
 
 const editSectionLabel = {
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 600,
-  color: "#a98527",
-  marginBottom: 12
+  color: "#b8962e",
+  marginBottom: 14
 }
 
-/* INFORMAÇÕES */
+/* =========================================================
+   INFORMAÇÕES
+========================================================= */
 
 const info = {
   marginBottom: 12,
@@ -2459,99 +2173,18 @@ const info = {
 }
 
 const infoValue = {
-  marginTop: 3,
+  marginTop: 2,
   wordBreak: "break-word" as const,
-  fontSize: 13,
-  color: "#37342e"
+  fontSize: 14
 }
 
-/* RELATÓRIO */
-
-const reportIntro = {
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 3,
-  padding: "12px 14px",
-  background: "#faf9f5",
-  border: "1px solid #eeeae0",
-  borderRadius: 12,
-  fontSize: 13,
-  color: "#777269"
-}
-
-const reportLabel = {
-  display: "block",
-  fontSize: 11,
-  color: "#99948a",
-  marginBottom: 5
-}
-
-const reportValue = {
-  fontSize: 15,
-  color: "#39362f"
-}
-
-const reportSectionTitle = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: "#a98527",
-  marginBottom: 8
-}
-
-const reportDate = {
-  color: "#8d887f",
-  fontSize: 11
-}
-
-const reportPayment = {
-  marginTop: 3,
-  color: "#99958d",
-  fontSize: 11
-}
-
-const reportPoints = {
-  color: "#a98527",
-  fontSize: 12
-}
-
-const reportEmpty = {
-  padding: "20px 0",
-  textAlign: "center" as const,
-  color: "#99958d",
-  fontSize: 13
-}
-
-/* OUTROS */
-
-const fidelidadeInfo = {
-  marginTop: 5,
-  padding: "11px 13px",
-  borderRadius: 11,
-  background: "#faf9f5",
-  border: "1px solid #eee9dc",
-  color: "#89847b",
-  fontSize: 11,
-  lineHeight: 1.5
-}
+/* =========================================================
+   CRIAÇÃO
+========================================================= */
 
 const createActions = {
   display: "flex",
-  justifyContent: "flex-end",
-  gap: 9,
-  marginTop: 18
-}
-
-const emptyState = {
-  width: "100%",
-  padding: "50px 20px",
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
   justifyContent: "center",
-  gap: 7,
-  color: "#77736b",
-  textAlign: "center" as const,
-  background: "#fff",
-  border: "1px solid #ece9e1",
-  borderRadius: 17
+  marginTop: 8
 }
+```
