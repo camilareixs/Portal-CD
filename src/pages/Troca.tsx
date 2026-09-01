@@ -18,9 +18,28 @@ type Resgate = {
   criadoem: string
 }
 
+/* =====================================================
+   FORMATAÇÃO DE MOEDA
+===================================================== */
+
+function formatarMoeda(valor: number) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  })
+}
+
+/* =====================================================
+   COMPONENTE PRINCIPAL
+===================================================== */
+
 export default function Trocas() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [resgates, setResgates] = useState<Resgate[]>([])
+
+  /* ===================================================
+     BUSCAR CLIENTES
+  =================================================== */
 
   async function fetchClientes() {
     const { data, error } = await supabase
@@ -49,6 +68,10 @@ export default function Trocas() {
     )
   }
 
+  /* ===================================================
+     BUSCAR TROCAS
+  =================================================== */
+
   async function fetchTrocas() {
     const { data, error } = await supabase
       .from("trocas")
@@ -75,18 +98,32 @@ export default function Trocas() {
         tipo:
           r.tipo ||
           "Cupom Fidelidade",
+
+        /*
+         * REGRA ATUAL:
+         * 10 pontos = R$ 60,00
+         */
         valorcupom: Number(
-          r.valorcupom || 150
+          r.valorcupom ?? 60
         ),
+
         criadoem: r.criadoem || ""
       }))
     )
   }
 
+  /* ===================================================
+     CARREGAMENTO
+  =================================================== */
+
   useEffect(() => {
     fetchClientes()
     fetchTrocas()
   }, [])
+
+  /* ===================================================
+     BUSCAR CLIENTE
+  =================================================== */
 
   function getCliente(clienteid: string) {
     return clientes.find(
@@ -94,10 +131,22 @@ export default function Trocas() {
     )
   }
 
+  /* ===================================================
+     DATA ATUAL
+  =================================================== */
+
   const hoje = new Date()
+
+  /* ===================================================
+     RESGATES NO MÊS
+  =================================================== */
 
   const totalMes = resgates.filter(r => {
     const d = new Date(r.criadoem)
+
+    if (Number.isNaN(d.getTime())) {
+      return false
+    }
 
     return (
       d.getMonth() === hoje.getMonth() &&
@@ -106,24 +155,68 @@ export default function Trocas() {
     )
   }).length
 
+  /* ===================================================
+     CLIENTES ELEGÍVEIS
+
+     10 pontos = 1 cupom
+  =================================================== */
+
   const clientesElegiveis =
     clientes.filter(
       c => c.pontos >= 10
     ).length
 
+  /* ===================================================
+     CUPONS ATIVOS
+
+     Cada 10 pontos representam
+     1 cupom disponível.
+  =================================================== */
+
   const cuponsAtivos =
     clientes.reduce(
       (acc, c) =>
-        acc + Math.floor(c.pontos / 10),
+        acc + Math.floor(
+          Number(c.pontos || 0) / 10
+        ),
       0
     )
 
-  const agrupados = resgates.reduce(
-    (acc: Record<string, Resgate[]>, r) => {
-      const data = new Date(r.criadoem)
+  /* ===================================================
+     VALOR TOTAL DOS RESGATES
+  =================================================== */
 
+  const valorTotalResgates =
+    resgates.reduce(
+      (total, r) =>
+        total +
+        Number(r.valorcupom || 0),
+      0
+    )
+
+  /* ===================================================
+     AGRUPAR POR MÊS
+  =================================================== */
+
+  const agrupados = resgates.reduce(
+    (
+      acc: Record<string, Resgate[]>,
+      r
+    ) => {
+      const data = new Date(
+        r.criadoem
+      )
+
+      if (Number.isNaN(data.getTime())) {
+        return acc
+      }
+
+      /*
+       * Usamos mês + 1 porque getMonth()
+       * começa em 0.
+       */
       const chave = `${data.getFullYear()}-${String(
-        data.getMonth()
+        data.getMonth() + 1
       ).padStart(2, "0")}`
 
       if (!acc[chave]) {
@@ -137,13 +230,22 @@ export default function Trocas() {
     {}
   )
 
+  /* ===================================================
+     MESES ORDENADOS
+  =================================================== */
+
   const mesesOrdenados =
     Object.keys(agrupados).sort(
-      (a, b) => b.localeCompare(a)
+      (a, b) =>
+        b.localeCompare(a)
     )
 
   return (
     <div style={container}>
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div style={header}>
         <div>
           <h1 style={title}>
@@ -156,6 +258,31 @@ export default function Trocas() {
           </span>
         </div>
       </div>
+
+      {/* =================================================
+          REGRA DE FIDELIDADE
+      ================================================= */}
+
+      <div style={regraCard}>
+        <div>
+          <span style={regraLabel}>
+            Programa de fidelidade
+          </span>
+
+          <strong style={regraValor}>
+            10 pontos = R$ 60,00
+          </strong>
+        </div>
+
+        <span style={regraDescricao}>
+          Cada cupom utilizado corresponde
+          a R$ 60,00 em benefício.
+        </span>
+      </div>
+
+      {/* =================================================
+          INDICADORES
+      ================================================= */}
 
       <div style={dashGrid}>
         <Dash
@@ -172,29 +299,83 @@ export default function Trocas() {
           label="Clientes elegíveis"
           value={clientesElegiveis}
         />
+
+        <Dash
+          label="Valor dos resgates"
+          value={formatarMoeda(
+            valorTotalResgates
+          )}
+        />
       </div>
+
+      {/* =================================================
+          HISTÓRICO
+      ================================================= */}
 
       {mesesOrdenados.map(m => {
         const lista = agrupados[m]
+
         const [ano, mes] =
           m.split("-")
 
         const nomeMes = new Date(
           Number(ano),
-          Number(mes)
-        ).toLocaleString("pt-BR", {
-          month: "long"
-        })
+          Number(mes) - 1
+        ).toLocaleString(
+          "pt-BR",
+          {
+            month: "long"
+          }
+        )
+
+        const valorMes =
+          lista.reduce(
+            (total, r) =>
+              total +
+              Number(
+                r.valorcupom || 0
+              ),
+            0
+          )
 
         return (
           <div
             key={m}
             style={monthSection}
           >
-            <h2 style={mesTitulo}>
-              {nomeMes.toUpperCase()}{" "}
-              {ano}
-            </h2>
+            {/* TÍTULO DO MÊS */}
+
+            <div
+              style={monthHeader}
+            >
+              <div>
+                <h2
+                  style={mesTitulo}
+                >
+                  {nomeMes.toUpperCase()}{" "}
+                  {ano}
+                </h2>
+
+                <span
+                  style={monthSub}
+                >
+                  {lista.length}{" "}
+                  {lista.length === 1
+                    ? "resgate"
+                    : "resgates"}
+                </span>
+              </div>
+
+              <strong
+                style={monthTotal}
+              >
+                {formatarMoeda(
+                  valorMes
+                )}
+              </strong>
+            </div>
+
+            {/* LISTA */}
 
             <div style={card}>
               {lista.map(
@@ -209,8 +390,12 @@ export default function Trocas() {
                       key={r.id}
                       style={row}
                     >
+                      {/* CLIENTE */}
+
                       <div
-                        style={clientInfo}
+                        style={
+                          clientInfo
+                        }
                       >
                         <strong>
                           {cliente?.nome ||
@@ -218,15 +403,21 @@ export default function Trocas() {
                         </strong>
 
                         <div
-                          style={muted}
+                          style={
+                            muted
+                          }
                         >
                           {cliente?.cpf ||
                             "-"}
                         </div>
                       </div>
 
+                      {/* DATA */}
+
                       <div
-                        style={rowInfo}
+                        style={
+                          rowInfo
+                        }
                       >
                         <span
                           style={
@@ -237,16 +428,22 @@ export default function Trocas() {
                         </span>
 
                         <span>
-                          {new Date(
-                            r.criadoem
-                          ).toLocaleDateString(
-                            "pt-BR"
-                          )}
+                          {r.criadoem
+                            ? new Date(
+                                r.criadoem
+                              ).toLocaleDateString(
+                                "pt-BR"
+                              )
+                            : "-"}
                         </span>
                       </div>
 
+                      {/* CUPOM */}
+
                       <div
-                        style={rowInfo}
+                        style={
+                          rowInfo
+                        }
                       >
                         <span
                           style={
@@ -261,8 +458,38 @@ export default function Trocas() {
                         </span>
                       </div>
 
+                      {/* VALOR */}
+
                       <div
-                        style={checkWrap}
+                        style={
+                          rowInfo
+                        }
+                      >
+                        <span
+                          style={
+                            mobileLabel
+                          }
+                        >
+                          Valor
+                        </span>
+
+                        <strong
+                          style={
+                            valorCupom
+                          }
+                        >
+                          {formatarMoeda(
+                            r.valorcupom
+                          )}
+                        </strong>
+                      </div>
+
+                      {/* STATUS */}
+
+                      <div
+                        style={
+                          checkWrap
+                        }
                       >
                         <span
                           style={
@@ -280,16 +507,99 @@ export default function Trocas() {
           </div>
         )
       })}
+
+      {/* =================================================
+          SEM REGISTROS
+      ================================================= */}
+
+      {mesesOrdenados.length ===
+        0 && (
+        <div style={empty}>
+          Ainda não existem trocas
+          ou cupons utilizados.
+        </div>
+      )}
+
+      {/* =================================================
+          RESPONSIVIDADE
+      ================================================= */}
+
+      <style>{`
+
+        @media (max-width: 900px) {
+
+          .trocas-row {
+            grid-template-columns:
+              minmax(180px, 2fr)
+              minmax(100px, 1fr)
+              minmax(90px, 1fr)
+              minmax(100px, 1fr)
+              50px !important;
+          }
+
+        }
+
+        @media (max-width: 700px) {
+
+          .trocas-container {
+            padding: 20px !important;
+          }
+
+          .trocas-row {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+          }
+
+          .trocas-row > div {
+            width: 100%;
+          }
+
+          .trocas-check {
+            width: 100% !important;
+            justify-content: flex-start !important;
+          }
+
+          .trocas-mobile-label {
+            display: block !important;
+          }
+
+          .trocas-month-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+            gap: 5px !important;
+          }
+
+        }
+
+        @media (max-width: 450px) {
+
+          .trocas-container {
+            padding: 16px !important;
+          }
+
+          .trocas-title {
+            font-size: 28px !important;
+          }
+
+        }
+
+      `}</style>
     </div>
   )
 }
+
+/* =====================================================
+   COMPONENTE DASH
+===================================================== */
 
 function Dash({
   label,
   value
 }: {
   label: string
-  value: React.ReactNode
+  value: string | number
 }) {
   return (
     <div style={dash}>
@@ -304,27 +614,41 @@ function Dash({
   )
 }
 
+/* =====================================================
+   CONTAINER
+===================================================== */
+
 const container = {
   width: "100%",
   minWidth: 0,
-  minHeight: "100%",
+  minHeight: "100vh",
   padding: 40,
   background: "#f6f6f7",
-  fontFamily: "Inter",
+  fontFamily:
+    "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+  boxSizing:
+    "border-box" as const,
   overflow: "hidden"
 }
 
+/* =====================================================
+   HEADER
+===================================================== */
+
 const header = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   alignItems: "flex-start",
-  marginBottom: 30
+  marginBottom: 25
 }
 
 const title = {
   fontSize: 34,
   margin: 0,
-  fontWeight: 600
+  fontWeight: 600,
+  letterSpacing:
+    "-0.5px"
 }
 
 const sub = {
@@ -332,19 +656,65 @@ const sub = {
   fontSize: 13
 }
 
+/* =====================================================
+   REGRA
+===================================================== */
+
+const regraCard = {
+  background:
+    "linear-gradient(135deg,#fffdf7,#fff)",
+  border:
+    "1px solid #eadfbf",
+  borderRadius: 16,
+  padding: 18,
+  marginBottom: 18,
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 20,
+  flexWrap:
+    "wrap" as const
+}
+
+const regraLabel = {
+  display: "block",
+  fontSize: 11,
+  color: "#8a8a8a",
+  marginBottom: 5
+}
+
+const regraValor = {
+  fontSize: 17,
+  color: "#6d561b"
+}
+
+const regraDescricao = {
+  fontSize: 12,
+  color: "#777"
+}
+
+/* =====================================================
+   DASH GRID
+===================================================== */
+
 const dashGrid = {
   display: "grid",
   gridTemplateColumns:
     "repeat(auto-fit,minmax(190px,1fr))",
   gap: 12,
-  marginBottom: 25
+  marginBottom: 30
 }
 
 const dash = {
   background: "#fff",
   padding: 18,
   borderRadius: 14,
-  minWidth: 0
+  minWidth: 0,
+  border:
+    "1px solid #eeeeee",
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,0.025)"
 }
 
 const dashLabel = {
@@ -355,48 +725,100 @@ const dashLabel = {
 }
 
 const dashValue = {
-  fontSize: 24
+  fontSize: 22,
+  fontWeight: 600,
+  color: "#2d2d2d",
+  overflowWrap:
+    "anywhere" as const
 }
+
+/* =====================================================
+   MÊS
+===================================================== */
 
 const monthSection = {
   marginBottom: 36,
   minWidth: 0
 }
 
+const monthHeader = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 20,
+  marginBottom: 10,
+  flexWrap:
+    "wrap" as const
+}
+
 const mesTitulo = {
   fontSize: 16,
-  marginBottom: 10,
+  margin: 0,
   fontWeight: 600
 }
+
+const monthSub = {
+  display: "block",
+  color: "#999",
+  fontSize: 11,
+  marginTop: 3
+}
+
+const monthTotal = {
+  fontSize: 15,
+  color: "#6d561b"
+}
+
+/* =====================================================
+   CARD
+===================================================== */
 
 const card = {
   background: "#fff",
   borderRadius: 14,
   overflow: "hidden",
-  minWidth: 0
+  minWidth: 0,
+  border:
+    "1px solid #eeeeee"
 }
+
+/* =====================================================
+   LINHA
+===================================================== */
 
 const row = {
   display: "grid",
   gridTemplateColumns:
-    "minmax(200px,2fr) minmax(120px,1fr) minmax(100px,1fr) 60px",
+    "minmax(200px,2fr) minmax(120px,1fr) minmax(100px,1fr) minmax(110px,1fr) 60px",
   gap: 16,
   padding: 16,
-  borderTop: "1px solid #eee",
+  borderTop:
+    "1px solid #eee",
   alignItems: "center",
   minWidth: 0
 }
+
+/* =====================================================
+   CLIENTE
+===================================================== */
 
 const clientInfo = {
   minWidth: 0,
   overflow: "hidden"
 }
 
+/* =====================================================
+   INFORMAÇÕES
+===================================================== */
+
 const rowInfo = {
   display: "flex",
-  flexDirection: "column" as const,
+  flexDirection:
+    "column" as const,
   gap: 3,
-  fontSize: 14
+  fontSize: 14,
+  minWidth: 0
 }
 
 const mobileLabel = {
@@ -405,15 +827,34 @@ const mobileLabel = {
   color: "#999"
 }
 
+/* =====================================================
+   VALOR CUPOM
+===================================================== */
+
+const valorCupom = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#6d561b"
+}
+
+/* =====================================================
+   TEXTO SECUNDÁRIO
+===================================================== */
+
 const muted = {
   fontSize: 12,
   color: "#999",
   marginTop: 3
 }
 
+/* =====================================================
+   CHECK
+===================================================== */
+
 const checkWrap = {
   display: "flex",
-  justifyContent: "center"
+  justifyContent: "center",
+  alignItems: "center"
 }
 
 const checkIcon = {
@@ -421,9 +862,25 @@ const checkIcon = {
   height: 30,
   borderRadius: "50%",
   background: "#22c55e",
-  color: "white",
+  color: "#fff",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   fontWeight: 700
+}
+
+/* =====================================================
+   VAZIO
+===================================================== */
+
+const empty = {
+  padding: 30,
+  textAlign:
+    "center" as const,
+  color: "#999",
+  fontSize: 13,
+  background: "#fff",
+  borderRadius: 14,
+  border:
+    "1px solid #eeeeee"
 }

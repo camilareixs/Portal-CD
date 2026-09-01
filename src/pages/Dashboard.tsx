@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -19,80 +18,150 @@ type Compra = {
   criadoem: string
 }
 
+/* =====================================================
+   FORMATAÇÃO DE MOEDA
+===================================================== */
+
+function formatarMoeda(
+  valor: number | null | undefined
+): string {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+/* =====================================================
+   DASHBOARD
+===================================================== */
+
 export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
 
-  const [visao, setVisao] = useState<Visao>("geral")
-  const [periodo, setPeriodo] = useState<Periodo>("mes")
+  const [visao, setVisao] =
+    useState<Visao>("geral")
 
-  const [meta, setMeta] = useState(30000)
-  const [editarMeta, setEditarMeta] = useState(false)
+  const [periodo, setPeriodo] =
+    useState<Periodo>("mes")
+
+  const [meta, setMeta] =
+    useState(30000)
+
+  const [editarMeta, setEditarMeta] =
+    useState(false)
 
   useEffect(() => {
     fetchData()
   }, [])
 
+  /* =====================================================
+     BUSCAR DADOS
+  ===================================================== */
+
   async function fetchData() {
-    const { data: clientesData, error: clientesError } =
-      await supabase
-        .from("clientes")
-        .select("id,nome,cpf,pontos")
+    const {
+      data: clientesData,
+      error: clientesError
+    } = await supabase
+      .from("clientes")
+      .select("id,nome,cpf,pontos")
 
     if (clientesError) {
-      console.log("Erro ao buscar clientes:", clientesError)
+      console.log(
+        "Erro ao buscar clientes:",
+        clientesError
+      )
     }
 
-    const { data: comprasData, error: comprasError } =
-      await supabase
-        .from("compras")
-        .select("id,clienteid,valor,criadoem")
-        .order("criadoem", { ascending: false })
+    const {
+      data: comprasData,
+      error: comprasError
+    } = await supabase
+      .from("compras")
+      .select(
+        "id,clienteid,valor,criadoem"
+      )
+      .order("criadoem", {
+        ascending: false
+      })
 
     if (comprasError) {
-      console.log("Erro ao buscar compras:", comprasError)
+      console.log(
+        "Erro ao buscar compras:",
+        comprasError
+      )
     }
 
-    setClientes((clientesData || []) as Cliente[])
-    setCompras((comprasData || []) as Compra[])
+    setClientes(
+      (clientesData || []) as Cliente[]
+    )
+
+    setCompras(
+      (comprasData || []) as Compra[]
+    )
   }
 
-  /*
-   * COMPRAS DO PERÍODO SELECIONADO
-   */
+  /* =====================================================
+     COMPRAS DO PERÍODO
+  ===================================================== */
 
   const comprasFiltradas = useMemo(() => {
     const agora = new Date()
 
     return compras.filter(compra => {
-      const data = new Date(compra.criadoem)
+      const data = new Date(
+        compra.criadoem
+      )
 
-      if (Number.isNaN(data.getTime())) {
+      if (
+        Number.isNaN(
+          data.getTime()
+        )
+      ) {
         return false
       }
 
       if (periodo === "dia") {
         return (
-          data.getDate() === agora.getDate() &&
-          data.getMonth() === agora.getMonth() &&
-          data.getFullYear() === agora.getFullYear()
+          data.getDate() ===
+            agora.getDate() &&
+          data.getMonth() ===
+            agora.getMonth() &&
+          data.getFullYear() ===
+            agora.getFullYear()
         )
       }
 
       if (periodo === "mes") {
         return (
-          data.getMonth() === agora.getMonth() &&
-          data.getFullYear() === agora.getFullYear()
+          data.getMonth() ===
+            agora.getMonth() &&
+          data.getFullYear() ===
+            agora.getFullYear()
         )
       }
 
       if (periodo === "trimestre") {
         const inicio = new Date(agora)
 
-        inicio.setDate(agora.getDate() - 90)
-        inicio.setHours(0, 0, 0, 0)
+        inicio.setDate(
+          agora.getDate() - 90
+        )
 
-        return data >= inicio && data <= agora
+        inicio.setHours(
+          0,
+          0,
+          0,
+          0
+        )
+
+        return (
+          data >= inicio &&
+          data <= agora
+        )
       }
 
       if (periodo === "ano") {
@@ -106,88 +175,95 @@ export default function Dashboard() {
     })
   }, [compras, periodo])
 
-  /*
-   * INDICADORES PRINCIPAIS
-   */
+  /* =====================================================
+     INDICADORES
+  ===================================================== */
 
-  const faturamento = comprasFiltradas.reduce(
-    (total, compra) =>
-      total + Number(compra.valor || 0),
-    0
-  )
+  const faturamento =
+    comprasFiltradas.reduce(
+      (total, compra) =>
+        total +
+        Number(
+          compra.valor || 0
+        ),
+      0
+    )
 
   const quantidadePedidos =
     comprasFiltradas.length
 
   const ticketMedio =
     quantidadePedidos > 0
-      ? faturamento / quantidadePedidos
+      ? faturamento /
+        quantidadePedidos
       : 0
 
-  const clientesAtivos = new Set(
-    comprasFiltradas.map(
-      compra => compra.clienteid
-    )
-  ).size
+  const clientesAtivos =
+    new Set(
+      comprasFiltradas.map(
+        compra =>
+          compra.clienteid
+      )
+    ).size
 
-  /*
-   * LUCRO ESTIMADO
-   *
-   * Como a tabela de compras atualmente
-   * possui apenas o valor da venda,
-   * usamos uma margem estimada de 45%.
-   */
+  /* =====================================================
+     LUCRO ESTIMADO
+  ===================================================== */
 
   const margemEstimada = 0.45
 
   const lucroEstimado =
-    faturamento * margemEstimada
+    faturamento *
+    margemEstimada
 
-  /*
-   * META
-   */
+  /* =====================================================
+     META
+  ===================================================== */
 
   const progressoMeta =
     meta > 0
       ? Math.min(
-          (faturamento / meta) * 100,
+          (faturamento / meta) *
+            100,
           100
         )
       : 0
 
-  /*
-   * MÉDIA POR CLIENTE
-   */
+  /* =====================================================
+     MÉDIA POR CLIENTE
+  ===================================================== */
 
   const mediaPorCliente =
     clientesAtivos > 0
-      ? faturamento / clientesAtivos
+      ? faturamento /
+        clientesAtivos
       : 0
 
-  /*
-   * CLIENTES EM RISCO
-   */
+  /* =====================================================
+     CLIENTES EM RISCO
+  ===================================================== */
 
   const clientesRisco = useMemo(() => {
     const hoje = new Date()
 
     return clientes
       .map(cliente => {
-        const comprasCliente = compras
-          .filter(
-            compra =>
-              compra.clienteid ===
-              cliente.id
-          )
-          .sort(
-            (a, b) =>
-              new Date(
-                b.criadoem
-              ).getTime() -
-              new Date(
-                a.criadoem
-              ).getTime()
-          )
+        const comprasCliente =
+          compras
+            .filter(
+              compra =>
+                compra.clienteid ===
+                cliente.id
+            )
+            .sort(
+              (a, b) =>
+                new Date(
+                  b.criadoem
+                ).getTime() -
+                new Date(
+                  a.criadoem
+                ).getTime()
+            )
 
         const ultimaCompra =
           comprasCliente[0]
@@ -224,21 +300,27 @@ export default function Dashboard() {
       )
   }, [clientes, compras])
 
-  /*
-   * TOP CLIENTES
-   */
+  /* =====================================================
+     TOP CLIENTES
+  ===================================================== */
 
-  const topClientes = [...clientes]
+  const topClientes = [
+    ...clientes
+  ]
     .sort(
       (a, b) =>
-        Number(b.pontos || 0) -
-        Number(a.pontos || 0)
+        Number(
+          b.pontos || 0
+        ) -
+        Number(
+          a.pontos || 0
+        )
     )
     .slice(0, 5)
 
-  /*
-   * VENDAS POR MÊS
-   */
+  /* =====================================================
+     VENDAS POR MÊS
+  ===================================================== */
 
   const vendasPorMesMap: Record<
     string,
@@ -250,103 +332,138 @@ export default function Dashboard() {
       compra.criadoem
     )
 
-    if (Number.isNaN(data.getTime())) {
+    if (
+      Number.isNaN(
+        data.getTime()
+      )
+    ) {
       return
     }
 
     const chave = `${String(
       data.getMonth() + 1
-    ).padStart(2, "0")}/${data.getFullYear()}`
+    ).padStart(
+      2,
+      "0"
+    )}/${data.getFullYear()}`
 
     vendasPorMesMap[chave] =
-      (vendasPorMesMap[chave] || 0) +
-      Number(compra.valor || 0)
+      (vendasPorMesMap[chave] ||
+        0) +
+      Number(
+        compra.valor || 0
+      )
   })
 
-  const melhorMes = Object.entries(
-    vendasPorMesMap
-  ).sort(
-    (a, b) => b[1] - a[1]
-  )[0]
+  const melhorMes =
+    Object.entries(
+      vendasPorMesMap
+    ).sort(
+      (a, b) =>
+        b[1] - a[1]
+    )[0]
 
-  /*
-   * VENDAS DOS ÚLTIMOS 7 DIAS
-   */
+  /* =====================================================
+     ÚLTIMOS 7 DIAS
+  ===================================================== */
 
-  const vendasUltimosDias = useMemo(() => {
-    const hoje = new Date()
+  const vendasUltimosDias =
+    useMemo(() => {
+      const hoje = new Date()
 
-    const resultado: {
-      data: string
-      valor: number
-      pedidos: number
-    }[] = []
+      const resultado: {
+        data: string
+        valor: number
+        pedidos: number
+      }[] = []
 
-    for (let i = 6; i >= 0; i--) {
-      const dia = new Date(hoje)
+      for (
+        let i = 6;
+        i >= 0;
+        i--
+      ) {
+        const dia = new Date(
+          hoje
+        )
 
-      dia.setDate(
-        hoje.getDate() - i
-      )
+        dia.setDate(
+          hoje.getDate() - i
+        )
 
-      const vendasDia =
-        compras.filter(compra => {
-          const data = new Date(
-            compra.criadoem
+        const vendasDia =
+          compras.filter(
+            compra => {
+              const data =
+                new Date(
+                  compra.criadoem
+                )
+
+              if (
+                Number.isNaN(
+                  data.getTime()
+                )
+              ) {
+                return false
+              }
+
+              return (
+                data.getDate() ===
+                  dia.getDate() &&
+                data.getMonth() ===
+                  dia.getMonth() &&
+                data.getFullYear() ===
+                  dia.getFullYear()
+              )
+            }
           )
 
-          if (Number.isNaN(data.getTime())) {
-            return false
-          }
+        resultado.push({
+          data: dia.toLocaleDateString(
+            "pt-BR",
+            {
+              day: "2-digit",
+              month: "2-digit"
+            }
+          ),
 
-          return (
-            data.getDate() ===
-              dia.getDate() &&
-            data.getMonth() ===
-              dia.getMonth() &&
-            data.getFullYear() ===
-              dia.getFullYear()
-          )
-        })
-
-      resultado.push({
-        data: dia.toLocaleDateString(
-          "pt-BR",
-          {
-            day: "2-digit",
-            month: "2-digit"
-          }
-        ),
-
-        valor: vendasDia.reduce(
-          (total, compra) =>
-            total +
-            Number(
-              compra.valor || 0
+          valor:
+            vendasDia.reduce(
+              (
+                total,
+                compra
+              ) =>
+                total +
+                Number(
+                  compra.valor ||
+                    0
+                ),
+              0
             ),
-          0
-        ),
 
-        pedidos:
-          vendasDia.length
-      })
-    }
+          pedidos:
+            vendasDia.length
+        })
+      }
 
-    return resultado
-  }, [compras])
+      return resultado
+    }, [compras])
 
-  /*
-   * CAMPANHAS
-   */
+  /* =====================================================
+     CAMPANHAS
+  ===================================================== */
 
-  function campanha(tipo: string) {
+  function campanha(
+    tipo: string
+  ) {
     if (tipo === "vip") {
       alert(
         "Campanha VIP enviada para os melhores clientes."
       )
     }
 
-    if (tipo === "estoque") {
+    if (
+      tipo === "estoque"
+    ) {
       alert(
         "Campanha de queima de estoque ativada."
       )
@@ -358,16 +475,18 @@ export default function Dashboard() {
       )
     }
 
-    if (tipo === "inativos") {
+    if (
+      tipo === "inativos"
+    ) {
       alert(
         "Campanha de recuperação para clientes inativos enviada."
       )
     }
   }
 
-  /*
-   * CALENDÁRIO SAZONAL
-   */
+  /* =====================================================
+     CALENDÁRIO
+  ===================================================== */
 
   const calendario = [
     [
@@ -417,9 +536,9 @@ export default function Dashboard() {
     ]
   ]
 
-  /*
-   * NOME DO PERÍODO
-   */
+  /* =====================================================
+     NOME DO PERÍODO
+  ===================================================== */
 
   const nomePeriodo =
     periodo === "dia"
@@ -431,6 +550,10 @@ export default function Dashboard() {
       : periodo === "ano"
       ? "Este ano"
       : "Todo o período"
+
+  /* =====================================================
+     RENDER
+  ===================================================== */
 
   return (
     <div
@@ -540,7 +663,9 @@ export default function Dashboard() {
           </span>
         </div>
 
-        <div style={topControls}>
+        <div
+          style={topControls}
+        >
           <select
             value={periodo}
             onChange={e =>
@@ -577,7 +702,9 @@ export default function Dashboard() {
           VISÃO
       ===================================================== */}
 
-      <div style={viewSwitch}>
+      <div
+        style={viewSwitch}
+      >
         <button
           style={
             visao === "geral"
@@ -634,17 +761,17 @@ export default function Dashboard() {
           >
             <Dash
               label="Faturamento"
-              value={`R$ ${faturamento.toFixed(
-                2
-              )}`}
+              value={formatarMoeda(
+                faturamento
+              )}
               destaque
             />
 
             <Dash
               label="Lucro estimado"
-              value={`R$ ${lucroEstimado.toFixed(
-                2
-              )}`}
+              value={formatarMoeda(
+                lucroEstimado
+              )}
             />
 
             <Dash
@@ -656,9 +783,9 @@ export default function Dashboard() {
 
             <Dash
               label="Ticket médio"
-              value={`R$ ${ticketMedio.toFixed(
-                2
-              )}`}
+              value={formatarMoeda(
+                ticketMedio
+              )}
             />
 
             <Dash
@@ -670,9 +797,9 @@ export default function Dashboard() {
 
             <Dash
               label="Média por cliente"
-              value={`R$ ${mediaPorCliente.toFixed(
-                2
-              )}`}
+              value={formatarMoeda(
+                mediaPorCliente
+              )}
             />
           </div>
 
@@ -684,22 +811,20 @@ export default function Dashboard() {
             style={metaCard}
             className="dashboard-meta"
           >
-            <div style={metaHeader}>
+            <div
+              style={metaHeader}
+            >
               <div>
                 <strong>
-                  Meta de {nomePeriodo}
+                  Meta de{" "}
+                  {nomePeriodo}
                 </strong>
 
                 <div
                   style={metaValue}
                 >
-                  {meta.toLocaleString(
-                    "pt-BR",
-                    {
-                      style:
-                        "currency",
-                      currency: "BRL"
-                    }
+                  {formatarMoeda(
+                    meta
                   )}
                 </div>
               </div>
@@ -735,10 +860,10 @@ export default function Dashboard() {
             )}
 
             <div
-              title={`R$ ${faturamento.toFixed(
-                2
-              )} de R$ ${meta.toFixed(
-                2
+              title={`${formatarMoeda(
+                faturamento
+              )} de ${formatarMoeda(
+                meta
               )}`}
               style={progressBg}
             >
@@ -750,7 +875,9 @@ export default function Dashboard() {
               />
             </div>
 
-            <div style={progressText}>
+            <div
+              style={progressText}
+            >
               {progressoMeta.toFixed(
                 1
               )}
@@ -781,7 +908,9 @@ export default function Dashboard() {
                   Vendas recentes
                 </h3>
 
-                <span style={smallText}>
+                <span
+                  style={smallText}
+                >
                   Últimos 7 dias
                 </span>
               </div>
@@ -816,7 +945,9 @@ export default function Dashboard() {
 
                   return (
                     <div
-                      key={dia.data}
+                      key={
+                        dia.data
+                      }
                       style={
                         dailyCard
                       }
@@ -847,9 +978,8 @@ export default function Dashboard() {
                           dailyValue
                         }
                       >
-                        R${" "}
-                        {dia.valor.toFixed(
-                          0
+                        {formatarMoeda(
+                          dia.valor
                         )}
                       </strong>
 
@@ -884,10 +1014,14 @@ export default function Dashboard() {
             {/* FATURAMENTO POR MÊS */}
 
             <div
-              style={chartCard}
+              style={
+                chartCard
+              }
             >
               <h3
-                style={chartTitle}
+                style={
+                  chartTitle
+                }
               >
                 Faturamento por mês
               </h3>
@@ -895,14 +1029,18 @@ export default function Dashboard() {
               {Object.entries(
                 vendasPorMesMap
               )
-                .sort((a, b) =>
-                  a[0].localeCompare(
-                    b[0]
-                  )
+                .sort(
+                  (a, b) =>
+                    a[0].localeCompare(
+                      b[0]
+                    )
                 )
                 .slice(-6)
                 .map(
-                  ([mes, total]) => {
+                  ([
+                    mes,
+                    total
+                  ]) => {
                     const maiorValor =
                       Math.max(
                         ...Object.values(
@@ -912,7 +1050,9 @@ export default function Dashboard() {
                       )
 
                     const largura =
-                      (Number(total) /
+                      (Number(
+                        total
+                      ) /
                         maiorValor) *
                       100
 
@@ -933,11 +1073,10 @@ export default function Dashboard() {
                           </span>
 
                           <strong>
-                            R${" "}
-                            {Number(
-                              total
-                            ).toFixed(
-                              0
+                            {formatarMoeda(
+                              Number(
+                                total
+                              )
                             )}
                           </strong>
                         </div>
@@ -961,7 +1100,8 @@ export default function Dashboard() {
 
               {Object.keys(
                 vendasPorMesMap
-              ).length === 0 && (
+              ).length ===
+                0 && (
                 <Empty text="Ainda não existem vendas cadastradas." />
               )}
             </div>
@@ -969,10 +1109,14 @@ export default function Dashboard() {
             {/* PERFORMANCE */}
 
             <div
-              style={chartCard}
+              style={
+                chartCard
+              }
             >
               <h3
-                style={chartTitle}
+                style={
+                  chartTitle
+                }
               >
                 Performance
               </h3>
@@ -1002,7 +1146,7 @@ export default function Dashboard() {
                       clientes.length,
                       1
                     )) *
-                    100
+                  100
                 ).toFixed(
                   1
                 )}%`}
@@ -1021,12 +1165,14 @@ export default function Dashboard() {
                 label="Faturamento recorde"
                 value={
                   melhorMes
-                    ? `R$ ${Number(
-                        melhorMes[1]
-                      ).toFixed(
-                        2
-                      )}`
-                    : "R$ 0,00"
+                    ? formatarMoeda(
+                        Number(
+                          melhorMes[1]
+                        )
+                      )
+                    : formatarMoeda(
+                        0
+                      )
                 }
               />
             </div>
@@ -1055,7 +1201,9 @@ export default function Dashboard() {
                 </h3>
 
                 <span
-                  style={smallText}
+                  style={
+                    smallText
+                  }
                 >
                   Indicadores para apoiar
                   as decisões da loja
@@ -1136,7 +1284,9 @@ export default function Dashboard() {
                 </h3>
 
                 <span
-                  style={smallText}
+                  style={
+                    smallText
+                  }
                 >
                   Clientes há mais tempo
                   sem realizar uma compra
@@ -1152,32 +1302,36 @@ export default function Dashboard() {
             >
               {clientesRisco
                 .slice(0, 8)
-                .map(cliente => (
-                  <div
-                    key={
-                      cliente.id
-                    }
-                    style={
-                      riskCard
-                    }
-                  >
-                    <strong>
-                      {cliente.nome}
-                    </strong>
-
+                .map(
+                  cliente => (
                     <div
-                      style={{
-                        ...muted,
-                        marginTop: 5
-                      }}
+                      key={
+                        cliente.id
+                      }
+                      style={
+                        riskCard
+                      }
                     >
-                      {cliente.dias >=
-                      999
-                        ? "Nunca comprou"
-                        : `${cliente.dias} dias sem comprar`}
+                      <strong>
+                        {
+                          cliente.nome
+                        }
+                      </strong>
+
+                      <div
+                        style={{
+                          ...muted,
+                          marginTop: 5
+                        }}
+                      >
+                        {cliente.dias >=
+                        999
+                          ? "Nunca comprou"
+                          : `${cliente.dias} dias sem comprar`}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                )}
             </div>
 
             {clientesRisco.length ===
@@ -1196,12 +1350,16 @@ export default function Dashboard() {
               Top clientes por fidelidade
             </h3>
 
-            {topClientes.length === 0 && (
+            {topClientes.length ===
+              0 && (
               <Empty text="Nenhum cliente cadastrado." />
             )}
 
             {topClientes.map(
-              (cliente, index) => (
+              (
+                cliente,
+                index
+              ) => (
                 <div
                   key={
                     cliente.id
@@ -1336,7 +1494,11 @@ export default function Dashboard() {
             </h3>
 
             {calendario.map(
-              ([mes, data, acao]) => (
+              ([
+                mes,
+                data,
+                acao
+              ]) => (
                 <div
                   key={mes}
                   style={
@@ -1389,13 +1551,17 @@ function Dash({
       }}
     >
       <span
-        style={dashLabel}
+        style={
+          dashLabel
+        }
       >
         {label}
       </span>
 
       <strong
-        style={dashValue}
+        style={
+          dashValue
+        }
       >
         {value}
       </strong>
@@ -1416,16 +1582,22 @@ function MiniMetric({
 }) {
   return (
     <div
-      style={miniMetric}
+      style={
+        miniMetric
+      }
     >
       <span
-        style={miniLabel}
+        style={
+          miniLabel
+        }
       >
         {label}
       </span>
 
       <strong
-        style={miniValue}
+        style={
+          miniValue
+        }
       >
         {value}
       </strong>
@@ -1446,16 +1618,22 @@ function InsightCard({
 }) {
   return (
     <div
-      style={insightCard}
+      style={
+        insightCard
+      }
     >
       <span
-        style={insightTitle}
+        style={
+          insightTitle
+        }
       >
         {title}
       </span>
 
       <strong
-        style={insightText}
+        style={
+          insightText
+        }
       >
         {text}
       </strong>
@@ -1474,7 +1652,9 @@ function Empty({
 }) {
   return (
     <div
-      style={empty}
+      style={
+        empty
+      }
     >
       {text}
     </div>
@@ -1530,7 +1710,8 @@ const topControls = {
 }
 
 const select = {
-  padding: "11px 14px",
+  padding:
+    "11px 14px",
   borderRadius: 12,
   border:
     "1px solid #dedede",
@@ -1993,4 +2174,3 @@ const empty = {
   background: "#fafafa",
   borderRadius: 12
 }
-
