@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Visao = "geral" | "clientes"
-type Periodo = "hoje" | "mes" | "trimestre" | "ano" | "todos"
+type Periodo = "dia" | "mes" | "trimestre" | "ano" | "todos"
 
 type Cliente = {
   id: string
@@ -16,13 +16,7 @@ type Compra = {
   clienteid: string
   valor: number
   criadoem: string
-  cliente?: string
-  pagamento?: string
 }
-
-/* =====================================================
-   DASHBOARD
-===================================================== */
 
 export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -45,97 +39,91 @@ export default function Dashboard() {
         .select("id,nome,cpf,pontos")
 
     if (clientesError) {
-      console.log(
-        "Erro ao buscar clientes:",
-        clientesError
-      )
+      console.log("Erro ao buscar clientes:", clientesError)
     }
 
     const { data: comprasData, error: comprasError } =
       await supabase
         .from("compras")
-        .select("id,clienteid,valor,criadoem,cliente,pagamento")
+        .select("id,clienteid,valor,criadoem")
         .order("criadoem", { ascending: false })
 
     if (comprasError) {
-      console.log(
-        "Erro ao buscar compras:",
-        comprasError
+      console.log("Erro ao buscar compras:", comprasError)
+    }
+
+    setClientes((clientesData || []) as Cliente[])
+    setCompras((comprasData || []) as Compra[])
+  }
+
+  function inicioDoPeriodo(periodoSelecionado: Periodo) {
+    const hoje = new Date()
+
+    if (periodoSelecionado === "dia") {
+      const inicio = new Date(hoje)
+      inicio.setHours(0, 0, 0, 0)
+      return inicio
+    }
+
+    if (periodoSelecionado === "mes") {
+      return new Date(
+        hoje.getFullYear(),
+        hoje.getMonth(),
+        1,
+        0,
+        0,
+        0,
+        0
       )
     }
 
-    setClientes(
-      (clientesData || []) as Cliente[]
-    )
+    if (periodoSelecionado === "trimestre") {
+      const inicio = new Date(hoje)
+      inicio.setDate(hoje.getDate() - 90)
+      inicio.setHours(0, 0, 0, 0)
+      return inicio
+    }
 
-    setCompras(
-      (comprasData || []) as Compra[]
-    )
+    if (periodoSelecionado === "ano") {
+      return new Date(
+        hoje.getFullYear(),
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      )
+    }
+
+    return null
   }
-
-  /* =====================================================
-     FUNÇÕES DE DATA
-  ===================================================== */
-
-  function inicioDoDia(data: Date) {
-    const nova = new Date(data)
-
-    nova.setHours(0, 0, 0, 0)
-
-    return nova
-  }
-
-  function inicioDoMes(data: Date) {
-    return new Date(
-      data.getFullYear(),
-      data.getMonth(),
-      1
-    )
-  }
-
-  function diferencaDias(
-    dataInicial: Date,
-    dataFinal: Date
-  ) {
-    return (
-      (inicioDoDia(dataFinal).getTime() -
-        inicioDoDia(dataInicial).getTime()) /
-      86400000
-    )
-  }
-
-  /* =====================================================
-     COMPRAS FILTRADAS
-  ===================================================== */
 
   const comprasFiltradas = useMemo(() => {
     const hoje = new Date()
 
-    return compras.filter(c => {
-      const data = new Date(c.criadoem)
+    return compras.filter(compra => {
+      const data = new Date(compra.criadoem)
 
-      if (periodo === "hoje") {
+      if (periodo === "dia") {
         return (
           data.getDate() === hoje.getDate() &&
           data.getMonth() === hoje.getMonth() &&
-          data.getFullYear() ===
-            hoje.getFullYear()
+          data.getFullYear() === hoje.getFullYear()
         )
       }
 
       if (periodo === "mes") {
         return (
           data.getMonth() === hoje.getMonth() &&
-          data.getFullYear() ===
-            hoje.getFullYear()
+          data.getFullYear() === hoje.getFullYear()
         )
       }
 
       if (periodo === "trimestre") {
-        const diff = diferencaDias(
-          data,
-          hoje
-        )
+        const diff =
+          (hoje.getTime() - data.getTime()) /
+          86400000
 
         return diff >= 0 && diff <= 90
       }
@@ -151,34 +139,37 @@ export default function Dashboard() {
     })
   }, [compras, periodo])
 
-  /* =====================================================
-     INDICADORES PRINCIPAIS
-  ===================================================== */
-
-  const faturamento =
-    comprasFiltradas.reduce(
-      (a, b) =>
-        a + Number(b.valor || 0),
-      0
-    )
+  const faturamento = comprasFiltradas.reduce(
+    (total, compra) =>
+      total + Number(compra.valor || 0),
+    0
+  )
 
   const quantidadePedidos =
     comprasFiltradas.length
 
   const ticketMedio =
     quantidadePedidos > 0
-      ? faturamento /
-        quantidadePedidos
+      ? faturamento / quantidadePedidos
       : 0
 
   const clientesAtivos = new Set(
     comprasFiltradas.map(
-      c => c.clienteid
+      compra => compra.clienteid
     )
   ).size
 
+  /*
+   * Atualmente estamos usando uma margem estimada
+   * de 45% para apresentar o lucro.
+   *
+   * Posteriormente podemos substituir isso pelo
+   * lucro real baseado no custo dos produtos.
+   */
+  const margemEstimada = 0.45
+
   const lucroEstimado =
-    faturamento * 0.45
+    faturamento * margemEstimada
 
   const progressoMeta =
     meta > 0
@@ -188,55 +179,14 @@ export default function Dashboard() {
         )
       : 0
 
-  /* =====================================================
-     META DIÁRIA
-  ===================================================== */
-
-  const metaDiaria =
-    periodo === "hoje"
-      ? 1500
-      : meta
-
-  const progressoMetaPeriodo =
-    metaDiaria > 0
-      ? Math.min(
-          (faturamento /
-            metaDiaria) *
-            100,
-          100
-        )
+  const mediaPorCliente =
+    clientesAtivos > 0
+      ? faturamento / clientesAtivos
       : 0
 
-  /* =====================================================
-     TÍTULO DO PERÍODO
-  ===================================================== */
-
-  const periodoTitulo =
-    periodo === "hoje"
-      ? "Hoje"
-      : periodo === "mes"
-      ? "Este mês"
-      : periodo === "trimestre"
-      ? "Últimos 3 meses"
-      : periodo === "ano"
-      ? "Este ano"
-      : "Todo o período"
-
-  const periodoDescricao =
-    periodo === "hoje"
-      ? new Date().toLocaleDateString(
-          "pt-BR",
-          {
-            day: "2-digit",
-            month: "long",
-            year: "numeric"
-          }
-        )
-      : periodoTitulo
-
-  /* =====================================================
-     CLIENTES EM RISCO
-  ===================================================== */
+  /*
+   * CLIENTES EM RISCO
+   */
 
   const clientesRisco = useMemo(() => {
     const hoje = new Date()
@@ -244,26 +194,24 @@ export default function Dashboard() {
     return clientes
       .map(cliente => {
         const comprasCliente =
-          compras.filter(
-            c =>
-              c.clienteid ===
-              cliente.id
-          )
+          compras
+            .filter(
+              compra =>
+                compra.clienteid ===
+                cliente.id
+            )
+            .sort(
+              (a, b) =>
+                new Date(
+                  b.criadoem
+                ).getTime() -
+                new Date(
+                  a.criadoem
+                ).getTime()
+            )
 
         const ultima =
-          comprasCliente.length > 0
-            ? comprasCliente.reduce(
-                (maisRecente, compra) =>
-                  new Date(
-                    compra.criadoem
-                  ) >
-                  new Date(
-                    maisRecente.criadoem
-                  )
-                    ? compra
-                    : maisRecente
-              )
-            : null
+          comprasCliente[0]
 
         if (!ultima) {
           return {
@@ -273,12 +221,11 @@ export default function Dashboard() {
         }
 
         const dias = Math.floor(
-          diferencaDias(
+          (hoje.getTime() -
             new Date(
               ultima.criadoem
-            ),
-            hoje
-          )
+            ).getTime()) /
+            86400000
         )
 
         return {
@@ -292,152 +239,139 @@ export default function Dashboard() {
       )
   }, [clientes, compras])
 
-  /* =====================================================
-     TOP CLIENTES
-  ===================================================== */
+  /*
+   * TOP CLIENTES
+   */
 
-  const topClientes = [
-    ...clientes
-  ]
+  const topClientes = [...clientes]
     .sort(
       (a, b) =>
         b.pontos - a.pontos
     )
     .slice(0, 5)
 
-  /* =====================================================
-     VENDAS POR MÊS
-  ===================================================== */
+  /*
+   * VENDAS POR MÊS
+   */
 
   const vendasPorMesMap: Record<
     string,
     number
   > = {}
 
-  compras.forEach(c => {
-    const d = new Date(
-      c.criadoem
+  compras.forEach(compra => {
+    const data = new Date(
+      compra.criadoem
     )
 
     const chave = `${String(
-      d.getMonth() + 1
-    ).padStart(2, "0")}/${d.getFullYear()}`
+      data.getMonth() + 1
+    ).padStart(2, "0")}/${data.getFullYear()}`
 
     vendasPorMesMap[chave] =
-      (vendasPorMesMap[chave] ||
-        0) +
-      Number(c.valor || 0)
+      (vendasPorMesMap[chave] || 0) +
+      Number(compra.valor || 0)
   })
 
-  const melhorMes =
-    Object.entries(
-      vendasPorMesMap
-    ).sort(
-      (a, b) =>
-        b[1] - a[1]
-    )[0]
+  const melhorMes = Object.entries(
+    vendasPorMesMap
+  ).sort(
+    (a, b) => b[1] - a[1]
+  )[0]
 
-  /* =====================================================
-     COMPARAÇÃO COM DIA ANTERIOR
-  ===================================================== */
+  /*
+   * VENDAS DOS ÚLTIMOS 7 DIAS
+   */
 
-  const vendasOntem = useMemo(() => {
-    if (periodo !== "hoje") {
-      return 0
-    }
-
+  const vendasUltimosDias = useMemo(() => {
     const hoje = new Date()
 
-    return compras
-      .filter(c => {
-        const data = new Date(
-          c.criadoem
-        )
+    const resultado: {
+      data: string
+      valor: number
+      pedidos: number
+    }[] = []
 
-        const diff =
-          diferencaDias(
-            data,
-            hoje
+    for (let i = 6; i >= 0; i--) {
+      const dia = new Date(hoje)
+
+      dia.setDate(
+        hoje.getDate() - i
+      )
+
+      const vendasDia =
+        compras.filter(compra => {
+          const data = new Date(
+            compra.criadoem
           )
 
-        return diff === 1
+          return (
+            data.getDate() ===
+              dia.getDate() &&
+            data.getMonth() ===
+              dia.getMonth() &&
+            data.getFullYear() ===
+              dia.getFullYear()
+          )
+        })
+
+      resultado.push({
+        data: dia.toLocaleDateString(
+          "pt-BR",
+          {
+            day: "2-digit",
+            month: "2-digit"
+          }
+        ),
+        valor: vendasDia.reduce(
+          (total, compra) =>
+            total +
+            Number(
+              compra.valor || 0
+            ),
+          0
+        ),
+        pedidos:
+          vendasDia.length
       })
-      .reduce(
-        (a, b) =>
-          a +
-          Number(
-            b.valor || 0
-          ),
-        0
-      )
-  }, [compras, periodo])
-
-  const variacaoDia =
-    periodo === "hoje" &&
-    vendasOntem > 0
-      ? ((faturamento -
-          vendasOntem) /
-          vendasOntem) *
-        100
-      : null
-
-  /* =====================================================
-     VENDAS DO DIA
-  ===================================================== */
-
-  const vendasDoDia = useMemo(() => {
-    if (periodo !== "hoje") {
-      return []
     }
 
-    return [...comprasFiltradas]
-      .sort(
-        (a, b) =>
-          new Date(
-            b.criadoem
-          ).getTime() -
-          new Date(
-            a.criadoem
-          ).getTime()
-      )
-  }, [
-    comprasFiltradas,
-    periodo
-  ])
+    return resultado
+  }, [compras])
 
-  /* =====================================================
-     CAMPANHAS
-  ===================================================== */
+  /*
+   * CAMPANHAS
+   */
 
   function campanha(tipo: string) {
     if (tipo === "vip") {
       alert(
-        "Campanha VIP enviada para melhores clientes"
+        "Campanha VIP enviada para os melhores clientes."
       )
     }
 
     if (tipo === "estoque") {
       alert(
-        "Campanha Queima de Estoque ativada"
+        "Campanha de queima de estoque ativada."
       )
     }
 
     if (tipo === "pos") {
       alert(
-        "Campanha Pós-compra iniciada"
+        "Campanha pós-compra iniciada."
       )
     }
 
     if (tipo === "inativos") {
       alert(
-        "Campanha de recuperação para inativos enviada"
+        "Campanha de recuperação para clientes inativos enviada."
       )
     }
   }
 
-  /* =====================================================
-     CALENDÁRIO
-  ===================================================== */
+  /*
+   * CALENDÁRIO SAZONAL
+   */
 
   const calendario = [
     [
@@ -446,7 +380,7 @@ export default function Dashboard() {
       "Campanha de recompra + cupom progressivo"
     ],
     [
-      "Maio (2º domingo)",
+      "Maio",
       "Dia das Mães",
       "Kits premium + ticket médio elevado"
     ],
@@ -456,7 +390,7 @@ export default function Dashboard() {
       "Combos presenteáveis + venda cruzada"
     ],
     [
-      "Agosto (2º domingo)",
+      "Agosto",
       "Dia dos Pais",
       "Acessórios + campanhas de indicação"
     ],
@@ -481,55 +415,109 @@ export default function Dashboard() {
       "Luxo, presentes e retenção"
     ],
     [
-      "26 Dez–Jan",
+      "26 Dez - Jan",
       "Pós-Natal / Liquidação",
       "Queima estratégica"
     ]
   ]
 
-  /* =====================================================
-     FORMATAÇÃO
-  ===================================================== */
-
-  function moeda(valor: number) {
-    return valor.toLocaleString(
-      "pt-BR",
-      {
-        style: "currency",
-        currency: "BRL"
-      }
-    )
-  }
-
-  function hora(data: string) {
-    return new Date(
-      data
-    ).toLocaleTimeString(
-      "pt-BR",
-      {
-        hour: "2-digit",
-        minute: "2-digit"
-      }
-    )
-  }
-
-  /* =====================================================
-     RETURN
-  ===================================================== */
+  const nomePeriodo =
+    periodo === "dia"
+      ? "Hoje"
+      : periodo === "mes"
+      ? "Este mês"
+      : periodo === "trimestre"
+      ? "Últimos 3 meses"
+      : periodo === "ano"
+      ? "Este ano"
+      : "Todo o período"
 
   return (
     <div
       style={container}
       className="dashboard-container"
     >
+      <style>{`
 
-      {/* HEADER */}
+        .dashboard-graficos-grid {
+          display: grid;
+          grid-template-columns: 1.3fr 1fr;
+          gap: 16px;
+        }
+
+        .dashboard-daily-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 10px;
+        }
+
+        .dashboard-table-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 15px;
+          padding: 12px 0;
+          border-bottom: 1px solid #f1f1f1;
+        }
+
+        @media (max-width: 900px) {
+          .dashboard-graficos-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .dashboard-daily-grid {
+            grid-template-columns: repeat(4, 1fr);
+          }
+        }
+
+        @media (max-width: 600px) {
+          .dashboard-container {
+            padding: 18px !important;
+          }
+
+          .dashboard-header {
+            align-items: flex-start !important;
+          }
+
+          .dashboard-header h1 {
+            font-size: 28px !important;
+          }
+
+          .dashboard-kpis {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+
+          .dashboard-daily-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .dashboard-table-row {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 4px;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .dashboard-kpis {
+            grid-template-columns: 1fr !important;
+          }
+
+          .dashboard-daily-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+
+      `}</style>
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
       <div
         style={header}
         className="dashboard-header"
       >
-
         <div>
           <h1 style={title}>
             Dashboard
@@ -541,18 +529,16 @@ export default function Dashboard() {
         </div>
 
         <div style={topControls}>
-
           <select
             value={periodo}
             onChange={e =>
               setPeriodo(
-                e.target
-                  .value as Periodo
+                e.target.value as Periodo
               )
             }
             style={select}
           >
-            <option value="hoje">
+            <option value="dia">
               Hoje
             </option>
 
@@ -569,29 +555,17 @@ export default function Dashboard() {
             </option>
 
             <option value="todos">
-              Todos
+              Todo o período
             </option>
           </select>
-
         </div>
       </div>
 
-      {/* PERÍODO ATUAL */}
-
-      <div style={periodBadge}>
-        <span>
-          Período analisado
-        </span>
-
-        <strong>
-          {periodoDescricao}
-        </strong>
-      </div>
-
-      {/* VISÃO */}
+      {/* =====================================================
+          VISÃO
+      ===================================================== */}
 
       <div style={viewSwitch}>
-
         <button
           style={
             visao === "geral"
@@ -602,7 +576,7 @@ export default function Dashboard() {
             setVisao("geral")
           }
         >
-          Visão Lucro
+          Visão Geral
         </button>
 
         <button
@@ -617,40 +591,49 @@ export default function Dashboard() {
         >
           Visão Clientes
         </button>
-
       </div>
-
-      {/* =================================================
-          VISÃO GERAL
-      ================================================= */}
 
       {visao === "geral" && (
         <>
+          {/* =================================================
+              RESUMO DO PERÍODO
+          ================================================= */}
 
-          {/* KPIs */}
+          <div style={periodLabel}>
+            <span>
+              Resumo de vendas
+            </span>
+
+            <strong>
+              {nomePeriodo}
+            </strong>
+          </div>
+
+          {/* =================================================
+              KPIs PRINCIPAIS
+          ================================================= */}
 
           <div
             style={dashGrid}
             className="dashboard-kpis"
           >
-
             <Dash
-              label={
-                periodo === "hoje"
-                  ? "Faturamento de hoje"
-                  : `Faturamento — ${periodoTitulo}`
-              }
-              value={moeda(
-                faturamento
-              )}
+              label="Faturamento"
+              value={`R$ ${faturamento.toFixed(
+                2
+              )}`}
+              destaque
             />
 
             <Dash
-              label={
-                periodo === "hoje"
-                  ? "Pedidos hoje"
-                  : `Pedidos — ${periodoTitulo}`
-              }
+              label="Lucro estimado"
+              value={`R$ ${lucroEstimado.toFixed(
+                2
+              )}`}
+            />
+
+            <Dash
+              label="Pedidos"
               value={
                 quantidadePedidos
               }
@@ -658,37 +641,13 @@ export default function Dashboard() {
 
             <Dash
               label="Ticket médio"
-              value={moeda(
-                ticketMedio
-              )}
+              value={`R$ ${ticketMedio.toFixed(
+                2
+              )}`}
             />
 
             <Dash
-              label={
-                periodo === "hoje"
-                  ? "Lucro estimado hoje"
-                  : "Lucro estimado"
-              }
-              value={moeda(
-                lucroEstimado
-              )}
-            />
-
-          </div>
-
-          {/* CLIENTES */}
-
-          <div
-            style={dashGrid}
-            className="dashboard-kpis"
-          >
-
-            <Dash
-              label={
-                periodo === "hoje"
-                  ? "Clientes atendidos"
-                  : "Clientes ativos"
-              }
+              label="Clientes ativos"
               value={
                 clientesAtivos
               }
@@ -696,75 +655,38 @@ export default function Dashboard() {
 
             <Dash
               label="Média por cliente"
-              value={moeda(
-                clientesAtivos
-                  ? faturamento /
-                      clientesAtivos
-                  : 0
-              )}
+              value={`R$ ${mediaPorCliente.toFixed(
+                2
+              )}`}
             />
-
-            {periodo === "hoje" && (
-              <Dash
-                label="Vendas ontem"
-                value={moeda(
-                  vendasOntem
-                )}
-              />
-            )}
-
-            {periodo === "hoje" && (
-              <Dash
-                label="Variação vs. ontem"
-                value={
-                  variacaoDia !==
-                  null
-                    ? `${
-                        variacaoDia >=
-                        0
-                          ? "+"
-                          : ""
-                      }${variacaoDia.toFixed(
-                        1
-                      )}%`
-                    : "Sem comparação"
-                }
-              />
-            )}
-
           </div>
 
-          {/* META */}
+          {/* =================================================
+              META
+          ================================================= */}
 
           <div
             style={metaCard}
             className="dashboard-meta"
           >
-
-            <div
-              style={metaHeader}
-            >
-
+            <div style={metaHeader}>
               <div>
                 <strong>
-                  {periodo ===
-                  "hoje"
-                    ? "Meta diária"
-                    : "Meta do período"}
+                  Meta de {nomePeriodo}
                 </strong>
 
-                <span
-                  style={
-                    metaSubtitle
-                  }
+                <div
+                  style={metaValue}
                 >
-                  {moeda(
-                    periodo ===
-                      "hoje"
-                      ? metaDiaria
-                      : meta
+                  {meta.toLocaleString(
+                    "pt-BR",
+                    {
+                      style:
+                        "currency",
+                      currency: "BRL"
+                    }
                   )}
-                </span>
+                </div>
               </div>
 
               <button
@@ -774,392 +696,160 @@ export default function Dashboard() {
                     !editarMeta
                   )
                 }
-                aria-label={
-                  editarMeta
-                    ? "Fechar edição da meta"
-                    : "Editar meta"
-                }
+                aria-label="Editar meta"
               >
                 {editarMeta
                   ? "×"
-                  : "+"}
+                  : "✎"}
               </button>
-
             </div>
 
             {editarMeta && (
               <input
                 type="number"
-                value={
-                  periodo ===
-                  "hoje"
-                    ? metaDiaria
-                    : meta
-                }
-                onChange={e => {
-                  const valor =
+                value={meta}
+                onChange={e =>
+                  setMeta(
                     Number(
                       e.target.value
                     )
-
-                  if (
-                    periodo ===
-                    "hoje"
-                  ) {
-                    return
-                  }
-
-                  setMeta(valor)
-                }}
+                  )
+                }
                 style={input}
               />
             )}
 
             <div
-              title={`${moeda(
-                faturamento
-              )} de ${moeda(
-                periodo ===
-                  "hoje"
-                  ? metaDiaria
-                  : meta
+              title={`R$ ${faturamento.toFixed(
+                2
+              )} de R$ ${meta.toFixed(
+                2
               )}`}
-              style={
-                progressBg
-              }
+              style={progressBg}
             >
-
               <div
                 style={{
                   ...progressFill,
-                  width: `${
-                    periodo ===
-                    "hoje"
-                      ? progressoMetaPeriodo
-                      : progressoMeta
-                  }%`
+                  width: `${progressoMeta}%`
                 }}
               />
-
             </div>
 
-            <div
-              style={
-                progressText
-              }
-            >
-              {(
-                periodo ===
-                "hoje"
-                  ? progressoMetaPeriodo
-                  : progressoMeta
-              ).toFixed(
+            <div style={progressText}>
+              {progressoMeta.toFixed(
                 1
               )}
               % da meta
             </div>
-
           </div>
 
           {/* =================================================
-              RESUMO DIÁRIO
-          ================================================= */}
-
-          {periodo === "hoje" && (
-            <div
-              style={
-                dailySection
-              }
-            >
-
-              <div
-                style={
-                  dailyHeader
-                }
-              >
-
-                <div>
-                  <h3
-                    style={
-                      dailyTitle
-                    }
-                  >
-                    Resumo de hoje
-                  </h3>
-
-                  <span
-                    style={
-                      dailySubtitle
-                    }
-                  >
-                    Acompanhe o desempenho
-                    da loja em tempo real
-                  </span>
-                </div>
-
-                <div
-                  style={
-                    dailyDate
-                  }
-                >
-                  {new Date().toLocaleDateString(
-                    "pt-BR",
-                    {
-                      weekday:
-                        "long",
-                      day: "2-digit",
-                      month:
-                        "long"
-                    }
-                  )}
-                </div>
-
-              </div>
-
-              <div
-                style={
-                  dailyGrid
-                }
-              >
-
-                <MiniDaily
-                  label="Faturamento"
-                  value={moeda(
-                    faturamento
-                  )}
-                />
-
-                <MiniDaily
-                  label="Pedidos"
-                  value={
-                    quantidadePedidos
-                  }
-                />
-
-                <MiniDaily
-                  label="Lucro estimado"
-                  value={moeda(
-                    lucroEstimado
-                  )}
-                />
-
-                <MiniDaily
-                  label="Ticket médio"
-                  value={moeda(
-                    ticketMedio
-                  )}
-                />
-
-              </div>
-
-            </div>
-          )}
-
-          {/* =================================================
-              VENDAS DE HOJE
-          ================================================= */}
-
-          {periodo === "hoje" && (
-            <div
-              style={
-                section
-              }
-              className="dashboard-section"
-            >
-
-              <div
-                style={
-                  sectionTop
-                }
-              >
-
-                <div>
-                  <h3
-                    style={
-                      sectionTitle
-                    }
-                  >
-                    Vendas de hoje
-                  </h3>
-
-                  <span
-                    style={
-                      sectionSubtitle
-                    }
-                  >
-                    {vendasDoDia.length}{" "}
-                    pedido
-                    {vendasDoDia.length !==
-                    1
-                      ? "s"
-                      : ""}{" "}
-                    registrado
-                    {vendasDoDia.length !==
-                    1
-                      ? "s"
-                      : ""}
-                  </span>
-                </div>
-
-                <strong
-                  style={
-                    sectionTotal
-                  }
-                >
-                  {moeda(
-                    faturamento
-                  )}
-                </strong>
-
-              </div>
-
-              {vendasDoDia.length ===
-              0 ? (
-                <div
-                  style={
-                    emptyState
-                  }
-                >
-                  <strong>
-                    Nenhuma venda hoje
-                  </strong>
-
-                  <span>
-                    As vendas realizadas
-                    aparecerão aqui.
-                  </span>
-                </div>
-              ) : (
-                <div
-                  style={
-                    dailySalesList
-                  }
-                >
-
-                  {vendasDoDia
-                    .slice(0, 10)
-                    .map(
-                      (
-                        compra,
-                        index
-                      ) => (
-                        <div
-                          key={
-                            compra.id
-                          }
-                          style={
-                            saleRow
-                          }
-                        >
-
-                          <div
-                            style={
-                              saleNumber
-                            }
-                          >
-                            {String(
-                              index +
-                                1
-                            ).padStart(
-                              2,
-                              "0"
-                            )}
-                          </div>
-
-                          <div
-                            style={
-                              saleInfo
-                            }
-                          >
-
-                            <strong>
-                              {compra.cliente ||
-                                "Cliente não identificado"}
-                            </strong>
-
-                            <span>
-                              {hora(
-                                compra.criadoem
-                              )}
-
-                              {compra.pagamento
-                                ? ` • ${compra.pagamento}`
-                                : ""}
-                            </span>
-
-                          </div>
-
-                          <strong
-                            style={
-                              saleValue
-                            }
-                          >
-                            {moeda(
-                              Number(
-                                compra.valor ||
-                                  0
-                              )
-                            )}
-                          </strong>
-
-                        </div>
-                      )
-                    )}
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {/* =================================================
-              KPIs EXECUTIVOS
+              VENDAS DOS ÚLTIMOS 7 DIAS
           ================================================= */}
 
           <div
-            style={dashGrid}
-            className="dashboard-kpis dashboard-kpis-executivos"
+            style={chartCard}
+            className="dashboard-section"
           >
+            <div
+              style={sectionTitleRow}
+            >
+              <div>
+                <h3
+                  style={{
+                    ...chartTitle,
+                    marginBottom: 4
+                  }}
+                >
+                  Vendas recentes
+                </h3>
 
-            <Dash
-              label="Lucro estimado"
-              value={moeda(
-                lucroEstimado
-              )}
-            />
+                <span style={smallText}>
+                  Últimos 7 dias
+                </span>
+              </div>
+            </div>
 
-            <Dash
-              label="Melhor mês"
-              value={
-                melhorMes
-                  ? melhorMes[0]
-                  : "-"
-              }
-            />
-
-            <Dash
-              label="Valor melhor mês"
-              value={
-                melhorMes
-                  ? moeda(
-                      Number(
-                        melhorMes[1]
-                      )
+            <div
+              className="dashboard-daily-grid"
+              style={{
+                marginTop: 18
+              }}
+            >
+              {vendasUltimosDias.map(
+                dia => {
+                  const maior =
+                    Math.max(
+                      ...vendasUltimosDias.map(
+                        item =>
+                          item.valor
+                      ),
+                      1
                     )
-                  : "-"
-              }
-            />
 
-            <Dash
-              label="Média por cliente"
-              value={moeda(
-                clientesAtivos
-                  ? faturamento /
-                      clientesAtivos
-                  : 0
+                  const altura =
+                    Math.max(
+                      8,
+                      (dia.valor /
+                        maior) *
+                        100
+                    )
+
+                  return (
+                    <div
+                      key={dia.data}
+                      style={
+                        dailyCard
+                      }
+                    >
+                      <span
+                        style={
+                          dailyDate
+                        }
+                      >
+                        {dia.data}
+                      </span>
+
+                      <div
+                        style={
+                          dailyChart
+                        }
+                      >
+                        <div
+                          style={{
+                            ...dailyBar,
+                            height: `${altura}%`
+                          }}
+                        />
+                      </div>
+
+                      <strong
+                        style={
+                          dailyValue
+                        }
+                      >
+                        R${" "}
+                        {dia.valor.toFixed(
+                          0
+                        )}
+                      </strong>
+
+                      <span
+                        style={
+                          dailyOrders
+                        }
+                      >
+                        {dia.pedidos}{" "}
+                        {dia.pedidos ===
+                        1
+                          ? "pedido"
+                          : "pedidos"}
+                      </span>
+                    </div>
+                  )
+                }
               )}
-            />
-
+            </div>
           </div>
 
           {/* =================================================
@@ -1167,18 +857,18 @@ export default function Dashboard() {
           ================================================= */}
 
           <div
-            style={profitGrid}
-            className="dashboard-graficos"
+            className="dashboard-graficos-grid"
+            style={{
+              marginBottom: 20
+            }}
           >
+            {/* FATURAMENTO POR MÊS */}
 
             <div
               style={chartCard}
             >
-
               <h3
-                style={
-                  chartTitle
-                }
+                style={chartTitle}
               >
                 Faturamento por mês
               </h3>
@@ -1186,63 +876,51 @@ export default function Dashboard() {
               {Object.entries(
                 vendasPorMesMap
               )
-                .sort(
-                  (a, b) =>
-                    a[0].localeCompare(
-                      b[0]
-                    )
+                .sort((a, b) =>
+                  a[0].localeCompare(
+                    b[0]
+                  )
                 )
                 .slice(-6)
                 .map(
-                  ([
-                    mes,
-                    total
-                  ]) => {
-
+                  ([mes, total]) => {
                     const maiorValor =
                       Math.max(
                         ...Object.values(
                           vendasPorMesMap
-                        )
+                        ),
+                        1
                       )
 
                     const largura =
-                      maiorValor >
-                      0
-                        ? (Number(
-                            total
-                          ) /
-                            maiorValor) *
-                          100
-                        : 0
+                      (Number(total) /
+                        maiorValor) *
+                      100
 
                     return (
                       <div
                         key={mes}
                         style={{
-                          marginBottom:
-                            12
+                          marginBottom: 14
                         }}
                       >
-
                         <div
                           style={
                             barLabel
                           }
                         >
-
                           <span>
                             {mes}
                           </span>
 
                           <strong>
-                            {moeda(
-                              Number(
-                                total
-                              )
+                            R${" "}
+                            {Number(
+                              total
+                            ).toFixed(
+                              0
                             )}
                           </strong>
-
                         </div>
 
                         <div
@@ -1250,47 +928,39 @@ export default function Dashboard() {
                             barBg
                           }
                         >
-
                           <div
                             style={{
                               ...barFill,
                               width: `${largura}%`
                             }}
                           />
-
                         </div>
-
                       </div>
                     )
                   }
                 )}
 
+              {Object.keys(
+                vendasPorMesMap
+              ).length === 0 && (
+                <Empty text="Ainda não existem vendas cadastradas." />
+              )}
             </div>
 
             {/* PERFORMANCE */}
 
             <div
-              style={
-                chartCard
-              }
+              style={chartCard}
             >
-
               <h3
-                style={
-                  chartTitle
-                }
+                style={chartTitle}
               >
-                Performance estratégica
+                Performance
               </h3>
 
               <MiniMetric
-                label="Conversão da meta"
-                value={`${(
-                  periodo ===
-                  "hoje"
-                    ? progressoMetaPeriodo
-                    : progressoMeta
-                ).toFixed(
+                label="Meta atingida"
+                value={`${progressoMeta.toFixed(
                   1
                 )}%`}
               />
@@ -1298,12 +968,10 @@ export default function Dashboard() {
               <MiniMetric
                 label="Margem estimada"
                 value={`${(
-                  (lucroEstimado /
-                    faturamento) *
-                    100 ||
-                  0
+                  margemEstimada *
+                  100
                 ).toFixed(
-                  1
+                  0
                 )}%`}
               />
 
@@ -1311,21 +979,38 @@ export default function Dashboard() {
                 label="Recorrência"
                 value={`${(
                   (clientesAtivos /
-                    clientes.length) *
-                    100 ||
-                  0
+                    Math.max(
+                      clientes.length,
+                      1
+                    )) *
+                    100
                 ).toFixed(
                   1
                 )}%`}
               />
 
               <MiniMetric
-                label="Potencial VIP"
-                value={`${topClientes.length} clientes`}
+                label="Melhor mês"
+                value={
+                  melhorMes
+                    ? melhorMes[0]
+                    : "-"
+                }
               />
 
+              <MiniMetric
+                label="Faturamento recorde"
+                value={
+                  melhorMes
+                    ? `R$ ${Number(
+                        melhorMes[1]
+                      ).toFixed(
+                        2
+                      )}`
+                    : "R$ 0,00"
+                }
+              />
             </div>
-
           </div>
 
           {/* =================================================
@@ -1336,105 +1021,150 @@ export default function Dashboard() {
             style={section}
             className="dashboard-section"
           >
+            <div
+              style={
+                sectionTitleRow
+              }
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: 0
+                  }}
+                >
+                  Insights estratégicos
+                </h3>
 
-            <h3>
-              Insights estratégicos
-            </h3>
+                <span
+                  style={smallText}
+                >
+                  Indicadores para apoiar
+                  as decisões da loja
+                </span>
+              </div>
+            </div>
 
             <div
               style={
                 insightGrid
               }
             >
-
               <InsightCard
                 title="Melhor oportunidade"
                 text={
                   melhorMes
-                    ? `Replicar estratégia de ${melhorMes[0]}`
-                    : "Acompanhar sazonalidade"
+                    ? `O melhor resultado foi em ${melhorMes[0]}.`
+                    : "Acompanhar a evolução das vendas."
                 }
               />
 
               <InsightCard
-                title="Ação recomendada"
+                title="Ticket médio"
                 text={
                   ticketMedio <
                   150
-                    ? "Criar combos para elevar ticket médio"
-                    : "Focar retenção premium"
+                    ? "Criar combos e venda cruzada pode aumentar o ticket."
+                    : "O ticket médio está em um patamar interessante."
                 }
               />
 
               <InsightCard
-                title="Atenção"
+                title="Meta"
                 text={
                   progressoMeta <
                   60
-                    ? "Meta abaixo do esperado"
-                    : "Meta saudável"
+                    ? "O faturamento está abaixo de 60% da meta."
+                    : progressoMeta <
+                      100
+                    ? "A meta está em andamento."
+                    : "Meta atingida! Ótimo desempenho."
                 }
               />
 
               <InsightCard
-                title="Expansão"
-                text="Campanhas VIP + recompra pós-venda"
+                title="Retenção"
+                text="Campanhas de recompra e relacionamento podem aumentar a recorrência."
               />
-
             </div>
-
           </div>
-
         </>
       )}
 
-      {/* =================================================
+      {/* =====================================================
           VISÃO CLIENTES
-      ================================================= */}
+      ===================================================== */}
 
-      {visao ===
-        "clientes" && (
+      {visao === "clientes" && (
         <>
-
-          {/* RISCO */}
+          {/* CLIENTES EM RISCO */}
 
           <div
-            style={
-              riskGrid
-            }
-            className="dashboard-risk-grid"
+            style={section}
+            className="dashboard-section"
           >
-
-            {clientesRisco
-              .slice(0, 8)
-              .map(c => (
-
-                <div
-                  key={c.id}
-                  style={
-                    riskCard
-                  }
+            <div
+              style={
+                sectionTitleRow
+              }
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: 0
+                  }}
                 >
+                  Clientes que precisam de atenção
+                </h3>
 
-                  <strong>
-                    {c.nome}
-                  </strong>
+                <span
+                  style={smallText}
+                >
+                  Clientes há mais tempo
+                  sem realizar uma compra
+                </span>
+              </div>
+            </div>
 
+            <div
+              style={{
+                ...riskGrid,
+                marginTop: 18
+              }}
+            >
+              {clientesRisco
+                .slice(0, 8)
+                .map(cliente => (
                   <div
+                    key={
+                      cliente.id
+                    }
                     style={
-                      muted
+                      riskCard
                     }
                   >
-                    {c.dias >=
-                    999
-                      ? "Nunca comprou"
-                      : `${c.dias} dias sem comprar`}
+                    <strong>
+                      {cliente.nome}
+                    </strong>
+
+                    <div
+                      style={{
+                        ...muted,
+                        marginTop: 5
+                      }}
+                    >
+                      {cliente.dias >=
+                      999
+                        ? "Nunca comprou"
+                        : `${cliente.dias} dias sem comprar`}
+                    </div>
                   </div>
+                ))}
+            </div>
 
-                </div>
-
-              ))}
-
+            {clientesRisco.length ===
+              0 && (
+              <Empty text="Nenhum cliente cadastrado." />
+            )}
           </div>
 
           {/* TOP CLIENTES */}
@@ -1443,34 +1173,53 @@ export default function Dashboard() {
             style={section}
             className="dashboard-section"
           >
-
             <h3>
-              Top clientes por pontos
+              Top clientes por fidelidade
             </h3>
 
             {topClientes.map(
-              c => (
-
+              (cliente, index) => (
                 <div
-                  key={c.id}
+                  key={
+                    cliente.id
+                  }
                   style={
                     listRow
                   }
                 >
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      gap: 12
+                    }}
+                  >
+                    <span
+                      style={
+                        rankingNumber
+                      }
+                    >
+                      #{index + 1}
+                    </span>
 
-                  <span>
-                    {c.nome}
-                  </span>
+                    <span>
+                      {
+                        cliente.nome
+                      }
+                    </span>
+                  </div>
 
                   <strong>
-                    {c.pontos} pts
+                    {
+                      cliente.pontos
+                    }{" "}
+                    pts
                   </strong>
-
                 </div>
-
               )
             )}
-
           </div>
 
           {/* CAMPANHAS */}
@@ -1479,17 +1228,26 @@ export default function Dashboard() {
             style={section}
             className="dashboard-section"
           >
-
             <h3>
               Campanhas automáticas
             </h3>
+
+            <p
+              style={{
+                ...muted,
+                marginTop: -8,
+                marginBottom: 16
+              }}
+            >
+              Ações rápidas para
+              relacionamento e vendas.
+            </p>
 
             <div
               style={
                 campaignGrid
               }
             >
-
               <button
                 style={
                   actionBtn
@@ -1541,9 +1299,7 @@ export default function Dashboard() {
               >
                 Recuperar inativos
               </button>
-
             </div>
-
           </div>
 
           {/* CALENDÁRIO */}
@@ -1552,44 +1308,37 @@ export default function Dashboard() {
             style={section}
             className="dashboard-section"
           >
-
             <h3>
               Calendário sazonal
             </h3>
 
             {calendario.map(
-              ([
-                mes,
-                data,
-                acao
-              ]) => (
-
+              ([mes, data, acao]) => (
                 <div
                   key={mes}
                   style={
                     listRow
                   }
                 >
-
                   <span>
-                    {mes} •{" "}
+                    <strong>
+                      {mes}
+                    </strong>
+
+                    {" • "}
+
                     {data}
                   </span>
 
                   <strong>
                     {acao}
                   </strong>
-
                 </div>
-
               )
             )}
-
           </div>
-
         </>
       )}
-
     </div>
   )
 }
@@ -1600,38 +1349,39 @@ export default function Dashboard() {
 
 function Dash({
   label,
-  value
+  value,
+  destaque = false
 }: {
   label: string
   value: string | number
+  destaque?: boolean
 }) {
   return (
     <div
-      style={dash}
+      style={{
+        ...dash,
+        ...(destaque
+          ? dashDestaque
+          : {})
+      }}
     >
-
       <span
-        style={
-          dashLabel
-        }
+        style={dashLabel}
       >
         {label}
       </span>
 
       <strong
-        style={
-          dashValue
-        }
+        style={dashValue}
       >
         {value}
       </strong>
-
     </div>
   )
 }
 
 /* =====================================================
-   COMPONENTE MINI METRIC
+   MINI METRIC
 ===================================================== */
 
 function MiniMetric({
@@ -1643,71 +1393,25 @@ function MiniMetric({
 }) {
   return (
     <div
-      style={
-        miniMetric
-      }
+      style={miniMetric}
     >
-
       <span
-        style={
-          miniLabel
-        }
+        style={miniLabel}
       >
         {label}
       </span>
 
       <strong
-        style={
-          miniValue
-        }
+        style={miniValue}
       >
         {value}
       </strong>
-
     </div>
   )
 }
 
 /* =====================================================
-   COMPONENTE DAILY
-===================================================== */
-
-function MiniDaily({
-  label,
-  value
-}: {
-  label: string
-  value: string | number
-}) {
-  return (
-    <div
-      style={
-        miniDaily
-      }
-    >
-
-      <span
-        style={
-          miniDailyLabel
-        }
-      >
-        {label}
-      </span>
-
-      <strong
-        style={
-          miniDailyValue
-        }
-      >
-        {value}
-      </strong>
-
-    </div>
-  )
-}
-
-/* =====================================================
-   COMPONENTE INSIGHT
+   INSIGHT
 ===================================================== */
 
 function InsightCard({
@@ -1719,33 +1423,43 @@ function InsightCard({
 }) {
   return (
     <div
-      style={
-        insightCard
-      }
+      style={insightCard}
     >
-
       <span
-        style={
-          insightTitle
-        }
+        style={insightTitle}
       >
         {title}
       </span>
 
       <strong
-        style={
-          insightText
-        }
+        style={insightText}
       >
         {text}
       </strong>
-
     </div>
   )
 }
 
 /* =====================================================
-   ESTILOS GERAIS
+   EMPTY
+===================================================== */
+
+function Empty({
+  text
+}: {
+  text: string
+}) {
+  return (
+    <div
+      style={empty}
+    >
+      {text}
+    </div>
+  )
+}
+
+/* =====================================================
+   CONTAINER
 ===================================================== */
 
 const container = {
@@ -1753,11 +1467,15 @@ const container = {
   background: "#f6f6f7",
   minHeight: "100vh",
   fontFamily:
-    "Inter, sans-serif",
+    "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
   width: "100%",
   boxSizing:
     "border-box" as const
 }
+
+/* =====================================================
+   HEADER
+===================================================== */
 
 const header = {
   display: "flex",
@@ -1765,15 +1483,17 @@ const header = {
     "space-between",
   alignItems: "center",
   gap: 20,
-  marginBottom: 18,
+  marginBottom: 24,
   flexWrap:
     "wrap" as const
 }
 
 const title = {
   fontSize: 34,
+  fontWeight: 500,
   margin: 0,
-  fontWeight: 500
+  letterSpacing:
+    "-0.5px"
 }
 
 const sub = {
@@ -1787,42 +1507,24 @@ const topControls = {
 }
 
 const select = {
-  padding: 11,
+  padding: "11px 14px",
   borderRadius: 12,
   border:
-    "1px solid #ddd",
+    "1px solid #dedede",
   background: "#fff",
-  maxWidth: "100%",
+  color: "#444",
+  outline: "none",
   cursor: "pointer"
 }
 
 /* =====================================================
-   PERÍODO
+   VIEW SWITCH
 ===================================================== */
-
-const periodBadge = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent:
-    "space-between",
-  gap: 12,
-  padding:
-    "10px 14px",
-  marginBottom: 18,
-  background: "#fff",
-  border:
-    "1px solid #eee",
-  borderRadius: 12,
-  fontSize: 13,
-  color: "#777",
-  flexWrap:
-    "wrap" as const
-}
 
 const viewSwitch = {
   display: "flex",
-  gap: 10,
-  marginBottom: 20,
+  gap: 8,
+  marginBottom: 24,
   flexWrap:
     "wrap" as const
 }
@@ -1830,41 +1532,68 @@ const viewSwitch = {
 const tab = {
   padding:
     "10px 18px",
-  border: "none",
+  border: "1px solid #e5e5e5",
   borderRadius: 12,
   cursor: "pointer",
-  background: "#fff"
+  background: "#fff",
+  color: "#666",
+  fontWeight: 500
 }
 
 const activeTab = {
   ...tab,
   background:
-    "#f4e7a1",
-  color: "#6e5815",
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  border:
+    "1px solid #d4af37",
+  color: "#5f4a12",
   fontWeight: 600
 }
 
 /* =====================================================
-   KPIs
+   PERÍODO
+===================================================== */
+
+const periodLabel = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 15,
+  marginBottom: 12,
+  color: "#777",
+  fontSize: 13
+}
+
+/* =====================================================
+   DASH
 ===================================================== */
 
 const dashGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(180px, 1fr))",
+    "repeat(auto-fit,minmax(170px,1fr))",
   gap: 12,
   marginBottom: 20
 }
 
 const dash = {
   background: "#fff",
-  padding: 18,
-  borderRadius: 16,
-  minWidth: 0,
-  overflow:
-    "hidden" as const,
+  padding: 19,
+  borderRadius: 17,
   border:
-    "1px solid #eeeeee"
+    "1px solid #eeeeee",
+  minWidth: 0,
+  overflow: "hidden" as const,
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,0.025)"
+}
+
+const dashDestaque = {
+  border:
+    "1px solid #eadfbf",
+  background:
+    "#fffdf7"
 }
 
 const dashLabel = {
@@ -1875,10 +1604,11 @@ const dashLabel = {
 }
 
 const dashValue = {
-  fontSize: 24,
+  fontSize: 23,
   fontWeight: 600,
   overflowWrap:
-    "anywhere" as const
+    "anywhere" as const,
+  color: "#2d2d2d"
 }
 
 /* =====================================================
@@ -1887,14 +1617,14 @@ const dashValue = {
 
 const metaCard = {
   background: "#fff",
-  padding: 20,
-  borderRadius: 16,
+  padding: 21,
+  borderRadius: 17,
   marginBottom: 20,
   width: "100%",
   boxSizing:
     "border-box" as const,
   border:
-    "1px solid #eee"
+    "1px solid #eeeeee"
 }
 
 const metaHeader = {
@@ -1905,33 +1635,30 @@ const metaHeader = {
   gap: 12
 }
 
-const metaSubtitle = {
-  display: "block",
+const metaValue = {
   marginTop: 4,
-  color: "#777",
-  fontSize: 13
+  fontSize: 13,
+  color: "#888"
 }
 
 const dots = {
-  width: 34,
-  height: 34,
+  width: 36,
+  height: 36,
   border: "none",
   background: "#f9f3dc",
   borderRadius: "50%",
   cursor: "pointer",
-  fontSize: 24,
-  lineHeight: 1,
+  fontSize: 18,
   color: "#9b7b2f",
   display: "flex",
   alignItems: "center",
-  justifyContent:
-    "center",
+  justifyContent: "center",
   flexShrink: 0
 }
 
 const input = {
   marginTop: 10,
-  padding: 10,
+  padding: 11,
   width: "100%",
   borderRadius: 10,
   border:
@@ -1941,9 +1668,9 @@ const input = {
 }
 
 const progressBg = {
-  marginTop: 14,
-  height: 14,
-  background: "#eee",
+  marginTop: 16,
+  height: 12,
+  background: "#eeeeee",
   borderRadius: 999,
   overflow:
     "hidden" as const
@@ -1953,7 +1680,9 @@ const progressFill = {
   height: "100%",
   background:
     "linear-gradient(90deg,#d4af37,#f6e27a)",
-  borderRadius: 999
+  borderRadius: 999,
+  transition:
+    "width 0.3s ease"
 }
 
 const progressText = {
@@ -1963,206 +1692,40 @@ const progressText = {
 }
 
 /* =====================================================
-   RESUMO DIÁRIO
-===================================================== */
-
-const dailySection = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  marginBottom: 20,
-  border:
-    "1px solid #eee"
-}
-
-const dailyHeader = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems:
-    "flex-start",
-  gap: 20,
-  marginBottom: 18,
-  flexWrap:
-    "wrap" as const
-}
-
-const dailyTitle = {
-  margin: 0,
-  fontSize: 19,
-  fontWeight: 600
-}
-
-const dailySubtitle = {
-  display: "block",
-  marginTop: 5,
-  color: "#888",
-  fontSize: 13
-}
-
-const dailyDate = {
-  color: "#a88320",
-  background:
-    "#fffbe6",
-  padding:
-    "8px 12px",
-  borderRadius: 10,
-  fontSize: 12,
-  textTransform:
-    "capitalize" as const
-}
-
-const dailyGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(160px, 1fr))",
-  gap: 10
-}
-
-const miniDaily = {
-  background:
-    "#fcfbf7",
-  border:
-    "1px solid #f1ead7",
-  borderRadius: 13,
-  padding: 15
-}
-
-const miniDailyLabel = {
-  display: "block",
-  color: "#777",
-  fontSize: 12,
-  marginBottom: 6
-}
-
-const miniDailyValue = {
-  fontSize: 20,
-  color: "#8d701e"
-}
-
-/* =====================================================
-   VENDAS DO DIA
-===================================================== */
-
-const sectionTop = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems:
-    "center",
-  gap: 15,
-  marginBottom: 15,
-  flexWrap:
-    "wrap" as const
-}
-
-const sectionTitle = {
-  margin: 0,
-  fontSize: 18
-}
-
-const sectionSubtitle = {
-  display: "block",
-  color: "#888",
-  fontSize: 12,
-  marginTop: 4
-}
-
-const sectionTotal = {
-  fontSize: 18,
-  color: "#9b7b2f"
-}
-
-const dailySalesList = {
-  borderTop:
-    "1px solid #eee"
-}
-
-const saleRow = {
-  display: "flex",
-  alignItems:
-    "center",
-  gap: 12,
-  padding:
-    "13px 0",
-  borderBottom:
-    "1px solid #f1f1f1"
-}
-
-const saleNumber = {
-  width: 32,
-  height: 32,
-  borderRadius: 10,
-  background:
-    "#f9f3dc",
-  display: "flex",
-  alignItems:
-    "center",
-  justifyContent:
-    "center",
-  color: "#9b7b2f",
-  fontSize: 11,
-  flexShrink: 0
-}
-
-const saleInfo = {
-  flex: 1,
-  minWidth: 0
-}
-
-const saleInfoStrong = {
-  display: "block"
-}
-
-const saleValue = {
-  fontSize: 15,
-  whiteSpace:
-    "nowrap" as const
-}
-
-const emptyState = {
-  padding: 35,
-  display: "flex",
-  flexDirection:
-    "column" as const,
-  alignItems:
-    "center",
-  justifyContent:
-    "center",
-  gap: 6,
-  color: "#777",
-  textAlign:
-    "center" as const
-}
-
-/* =====================================================
    GRÁFICOS
 ===================================================== */
 
-const profitGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 16,
-  marginBottom: 20,
-  width: "100%"
-}
-
 const chartCard = {
   background: "#fff",
-  padding: 20,
-  borderRadius: 16,
+  padding: 21,
+  borderRadius: 17,
   minWidth: 0,
   overflow:
     "hidden" as const,
   border:
-    "1px solid #eee"
+    "1px solid #eeeeee",
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,0.025)"
 }
 
 const chartTitle = {
   fontSize: 18,
-  marginTop: 0,
-  marginBottom: 16
+  fontWeight: 600,
+  margin:
+    "0 0 16px 0"
+}
+
+const sectionTitleRow = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 15
+}
+
+const smallText = {
+  color: "#888",
+  fontSize: 12
 }
 
 const barLabel = {
@@ -2175,8 +1738,8 @@ const barLabel = {
 }
 
 const barBg = {
-  height: 10,
-  background: "#f1f1f1",
+  height: 9,
+  background: "#f0f0f0",
   borderRadius: 999,
   overflow:
     "hidden" as const
@@ -2186,41 +1749,119 @@ const barFill = {
   height: "100%",
   background:
     "linear-gradient(90deg,#d4af37,#f6e27a)",
-  borderRadius: 999
+  borderRadius: 999,
+  transition:
+    "width 0.3s ease"
 }
+
+/* =====================================================
+   GRÁFICO DIÁRIO
+===================================================== */
+
+const dailyCard = {
+  minWidth: 0,
+  padding: 10,
+  borderRadius: 12,
+  background: "#fafafa",
+  border:
+    "1px solid #f0f0f0",
+  display: "flex",
+  flexDirection:
+    "column" as const,
+  alignItems: "center",
+  gap: 5
+}
+
+const dailyDate = {
+  fontSize: 11,
+  color: "#888"
+}
+
+const dailyChart = {
+  height: 75,
+  width: 15,
+  background: "#eeeeee",
+  borderRadius: 999,
+  display: "flex",
+  alignItems: "flex-end",
+  overflow:
+    "hidden" as const,
+  margin:
+    "5px 0"
+}
+
+const dailyBar = {
+  width: "100%",
+  minHeight: 5,
+  background:
+    "linear-gradient(180deg,#f6e27a,#d4af37)",
+  borderRadius: 999,
+  transition:
+    "height 0.3s ease"
+}
+
+const dailyValue = {
+  fontSize: 12
+}
+
+const dailyOrders = {
+  fontSize: 10,
+  color: "#999"
+}
+
+/* =====================================================
+   MINI METRIC
+===================================================== */
 
 const miniMetric = {
   padding:
-    "12px 0",
+    "13px 0",
   borderBottom:
-    "1px solid #f1f1f1"
+    "1px solid #f1f1f1",
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 10
 }
 
 const miniLabel = {
-  display: "block",
   fontSize: 12,
   color: "#777"
 }
 
 const miniValue = {
-  fontSize: 18
+  fontSize: 16,
+  fontWeight: 600
 }
 
 /* =====================================================
    INSIGHTS
 ===================================================== */
 
+const section = {
+  background: "#fff",
+  padding: 21,
+  borderRadius: 17,
+  marginBottom: 20,
+  width: "100%",
+  boxSizing:
+    "border-box" as const,
+  border:
+    "1px solid #eeeeee"
+}
+
 const insightGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: 12
+    "repeat(auto-fit,minmax(200px,1fr))",
+  gap: 12,
+  marginTop: 18
 }
 
 const insightCard = {
-  background:
-    "#fcfbf7",
-  padding: 16,
+  background: "#fcfbf7",
+  padding: 17,
   borderRadius: 14,
   border:
     "1px solid #f1ead7",
@@ -2236,80 +1877,94 @@ const insightTitle = {
 
 const insightText = {
   fontSize: 14,
+  lineHeight: 1.45,
   overflowWrap:
     "anywhere" as const
-}
-
-/* =====================================================
-   SEÇÕES
-===================================================== */
-
-const section = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  marginBottom: 20,
-  width: "100%",
-  boxSizing:
-    "border-box" as const,
-  border:
-    "1px solid #eee"
 }
 
 /* =====================================================
    CLIENTES
 ===================================================== */
 
-const campaignGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 10
-}
-
-const actionBtn = {
-  padding: 14,
-  border: "none",
-  borderRadius: 12,
-  background:
-    "#f9f3dc",
-  cursor: "pointer",
-  minHeight: 50
-}
-
 const riskGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(180px, 1fr))",
+    "repeat(auto-fit,minmax(180px,1fr))",
   gap: 12,
   marginBottom: 20
 }
 
 const riskCard = {
-  background: "#fff",
+  background: "#fcfbf7",
   padding: 16,
   borderRadius: 14,
   minWidth: 0,
   border:
-    "1px solid #eee"
+    "1px solid #f1ead7"
 }
 
 const listRow = {
   display: "flex",
   justifyContent:
     "space-between",
-  alignItems:
-    "center",
+  alignItems: "center",
   gap: 15,
   padding:
-    "10px 0",
+    "12px 0",
   borderBottom:
     "1px solid #f1f1f1",
   flexWrap:
     "wrap" as const
 }
 
+const rankingNumber = {
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  background: "#f9f3dc",
+  color: "#9b7b2f",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 11,
+  fontWeight: 600
+}
+
+const campaignGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(180px,1fr))",
+  gap: 10,
+  marginTop: 16
+}
+
+const actionBtn = {
+  padding: 14,
+  border:
+    "1px solid #eadfbf",
+  borderRadius: 12,
+  background: "#f9f3dc",
+  color: "#70591d",
+  cursor: "pointer",
+  minHeight: 50,
+  fontWeight: 500
+}
+
 const muted = {
   color: "#777",
   fontSize: 12
+}
+
+/* =====================================================
+   EMPTY
+===================================================== */
+
+const empty = {
+  padding: 25,
+  textAlign:
+    "center" as const,
+  color: "#999",
+  fontSize: 13,
+  background: "#fafafa",
+  borderRadius: 12
 }
