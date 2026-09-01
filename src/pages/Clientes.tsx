@@ -1,4 +1,3 @@
-```tsx
 import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -2187,4 +2186,4 @@ const createActions = {
   justifyContent: "center",
   marginTop: 8
 }
-```
+
