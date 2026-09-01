@@ -16,7 +16,7 @@ type Compra = {
   valor: number
   pagamento: string
   parcelas: number
-  pontosgerados: number
+  pontosGerados: number
   criadoem: string
   cupomusado: number
 }
