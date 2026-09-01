@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -56,88 +57,58 @@ export default function Dashboard() {
     setCompras((comprasData || []) as Compra[])
   }
 
-  function inicioDoPeriodo(periodoSelecionado: Periodo) {
-    const hoje = new Date()
-
-    if (periodoSelecionado === "dia") {
-      const inicio = new Date(hoje)
-      inicio.setHours(0, 0, 0, 0)
-      return inicio
-    }
-
-    if (periodoSelecionado === "mes") {
-      return new Date(
-        hoje.getFullYear(),
-        hoje.getMonth(),
-        1,
-        0,
-        0,
-        0,
-        0
-      )
-    }
-
-    if (periodoSelecionado === "trimestre") {
-      const inicio = new Date(hoje)
-      inicio.setDate(hoje.getDate() - 90)
-      inicio.setHours(0, 0, 0, 0)
-      return inicio
-    }
-
-    if (periodoSelecionado === "ano") {
-      return new Date(
-        hoje.getFullYear(),
-        0,
-        1,
-        0,
-        0,
-        0,
-        0
-      )
-    }
-
-    return null
-  }
+  /*
+   * COMPRAS DO PERÍODO SELECIONADO
+   */
 
   const comprasFiltradas = useMemo(() => {
-    const hoje = new Date()
+    const agora = new Date()
 
     return compras.filter(compra => {
       const data = new Date(compra.criadoem)
 
+      if (Number.isNaN(data.getTime())) {
+        return false
+      }
+
       if (periodo === "dia") {
         return (
-          data.getDate() === hoje.getDate() &&
-          data.getMonth() === hoje.getMonth() &&
-          data.getFullYear() === hoje.getFullYear()
+          data.getDate() === agora.getDate() &&
+          data.getMonth() === agora.getMonth() &&
+          data.getFullYear() === agora.getFullYear()
         )
       }
 
       if (periodo === "mes") {
         return (
-          data.getMonth() === hoje.getMonth() &&
-          data.getFullYear() === hoje.getFullYear()
+          data.getMonth() === agora.getMonth() &&
+          data.getFullYear() === agora.getFullYear()
         )
       }
 
       if (periodo === "trimestre") {
-        const diff =
-          (hoje.getTime() - data.getTime()) /
-          86400000
+        const inicio = new Date(agora)
 
-        return diff >= 0 && diff <= 90
+        inicio.setDate(agora.getDate() - 90)
+        inicio.setHours(0, 0, 0, 0)
+
+        return data >= inicio && data <= agora
       }
 
       if (periodo === "ano") {
         return (
           data.getFullYear() ===
-          hoje.getFullYear()
+          agora.getFullYear()
         )
       }
 
       return true
     })
   }, [compras, periodo])
+
+  /*
+   * INDICADORES PRINCIPAIS
+   */
 
   const faturamento = comprasFiltradas.reduce(
     (total, compra) =>
@@ -160,16 +131,21 @@ export default function Dashboard() {
   ).size
 
   /*
-   * Atualmente estamos usando uma margem estimada
-   * de 45% para apresentar o lucro.
+   * LUCRO ESTIMADO
    *
-   * Posteriormente podemos substituir isso pelo
-   * lucro real baseado no custo dos produtos.
+   * Como a tabela de compras atualmente
+   * possui apenas o valor da venda,
+   * usamos uma margem estimada de 45%.
    */
+
   const margemEstimada = 0.45
 
   const lucroEstimado =
     faturamento * margemEstimada
+
+  /*
+   * META
+   */
 
   const progressoMeta =
     meta > 0
@@ -178,6 +154,10 @@ export default function Dashboard() {
           100
         )
       : 0
+
+  /*
+   * MÉDIA POR CLIENTE
+   */
 
   const mediaPorCliente =
     clientesAtivos > 0
@@ -193,39 +173,44 @@ export default function Dashboard() {
 
     return clientes
       .map(cliente => {
-        const comprasCliente =
-          compras
-            .filter(
-              compra =>
-                compra.clienteid ===
-                cliente.id
-            )
-            .sort(
-              (a, b) =>
-                new Date(
-                  b.criadoem
-                ).getTime() -
-                new Date(
-                  a.criadoem
-                ).getTime()
-            )
+        const comprasCliente = compras
+          .filter(
+            compra =>
+              compra.clienteid ===
+              cliente.id
+          )
+          .sort(
+            (a, b) =>
+              new Date(
+                b.criadoem
+              ).getTime() -
+              new Date(
+                a.criadoem
+              ).getTime()
+          )
 
-        const ultima =
+        const ultimaCompra =
           comprasCliente[0]
 
-        if (!ultima) {
+        if (!ultimaCompra) {
           return {
             ...cliente,
             dias: 999
           }
         }
 
-        const dias = Math.floor(
-          (hoje.getTime() -
-            new Date(
-              ultima.criadoem
-            ).getTime()) /
-            86400000
+        const dataUltimaCompra =
+          new Date(
+            ultimaCompra.criadoem
+          )
+
+        const dias = Math.max(
+          0,
+          Math.floor(
+            (hoje.getTime() -
+              dataUltimaCompra.getTime()) /
+              86400000
+          )
         )
 
         return {
@@ -246,7 +231,8 @@ export default function Dashboard() {
   const topClientes = [...clientes]
     .sort(
       (a, b) =>
-        b.pontos - a.pontos
+        Number(b.pontos || 0) -
+        Number(a.pontos || 0)
     )
     .slice(0, 5)
 
@@ -263,6 +249,10 @@ export default function Dashboard() {
     const data = new Date(
       compra.criadoem
     )
+
+    if (Number.isNaN(data.getTime())) {
+      return
+    }
 
     const chave = `${String(
       data.getMonth() + 1
@@ -305,6 +295,10 @@ export default function Dashboard() {
             compra.criadoem
           )
 
+          if (Number.isNaN(data.getTime())) {
+            return false
+          }
+
           return (
             data.getDate() ===
               dia.getDate() &&
@@ -323,6 +317,7 @@ export default function Dashboard() {
             month: "2-digit"
           }
         ),
+
         valor: vendasDia.reduce(
           (total, compra) =>
             total +
@@ -331,6 +326,7 @@ export default function Dashboard() {
             ),
           0
         ),
+
         pedidos:
           vendasDia.length
       })
@@ -421,6 +417,10 @@ export default function Dashboard() {
     ]
   ]
 
+  /*
+   * NOME DO PERÍODO
+   */
+
   const nomePeriodo =
     periodo === "dia"
       ? "Hoje"
@@ -461,6 +461,7 @@ export default function Dashboard() {
         }
 
         @media (max-width: 900px) {
+
           .dashboard-graficos-grid {
             grid-template-columns: 1fr;
           }
@@ -468,9 +469,11 @@ export default function Dashboard() {
           .dashboard-daily-grid {
             grid-template-columns: repeat(4, 1fr);
           }
+
         }
 
         @media (max-width: 600px) {
+
           .dashboard-container {
             padding: 18px !important;
           }
@@ -496,9 +499,17 @@ export default function Dashboard() {
             flex-direction: column;
             gap: 4px;
           }
+
+          .dashboard-period-label {
+            align-items: flex-start !important;
+            flex-direction: column;
+            gap: 4px !important;
+          }
+
         }
 
         @media (max-width: 380px) {
+
           .dashboard-kpis {
             grid-template-columns: 1fr !important;
           }
@@ -506,6 +517,7 @@ export default function Dashboard() {
           .dashboard-daily-grid {
             grid-template-columns: 1fr 1fr;
           }
+
         }
 
       `}</style>
@@ -593,13 +605,18 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* =====================================================
+          VISÃO GERAL
+      ===================================================== */}
+
       {visao === "geral" && (
         <>
-          {/* =================================================
-              RESUMO DO PERÍODO
-          ================================================= */}
+          {/* RESUMO */}
 
-          <div style={periodLabel}>
+          <div
+            style={periodLabel}
+            className="dashboard-period-label"
+          >
             <span>
               Resumo de vendas
             </span>
@@ -609,9 +626,7 @@ export default function Dashboard() {
             </strong>
           </div>
 
-          {/* =================================================
-              KPIs PRINCIPAIS
-          ================================================= */}
+          {/* KPIs */}
 
           <div
             style={dashGrid}
@@ -744,7 +759,7 @@ export default function Dashboard() {
           </div>
 
           {/* =================================================
-              VENDAS DOS ÚLTIMOS 7 DIAS
+              VENDAS ÚLTIMOS 7 DIAS
           ================================================= */}
 
           <div
@@ -752,7 +767,9 @@ export default function Dashboard() {
             className="dashboard-section"
           >
             <div
-              style={sectionTitleRow}
+              style={
+                sectionTitleRow
+              }
             >
               <div>
                 <h3
@@ -788,12 +805,14 @@ export default function Dashboard() {
                     )
 
                   const altura =
-                    Math.max(
-                      8,
-                      (dia.valor /
-                        maior) *
-                        100
-                    )
+                    dia.valor > 0
+                      ? Math.max(
+                          8,
+                          (dia.valor /
+                            maior) *
+                            100
+                        )
+                      : 5
 
                   return (
                     <div
@@ -1177,6 +1196,10 @@ export default function Dashboard() {
               Top clientes por fidelidade
             </h3>
 
+            {topClientes.length === 0 && (
+              <Empty text="Nenhum cliente cadastrado." />
+            )}
+
             {topClientes.map(
               (cliente, index) => (
                 <div
@@ -1532,7 +1555,8 @@ const viewSwitch = {
 const tab = {
   padding:
     "10px 18px",
-  border: "1px solid #e5e5e5",
+  border:
+    "1px solid #e5e5e5",
   borderRadius: 12,
   cursor: "pointer",
   background: "#fff",
@@ -1584,7 +1608,8 @@ const dash = {
   border:
     "1px solid #eeeeee",
   minWidth: 0,
-  overflow: "hidden" as const,
+  overflow:
+    "hidden" as const,
   boxShadow:
     "0 3px 12px rgba(0,0,0,0.025)"
 }
@@ -1968,3 +1993,4 @@ const empty = {
   background: "#fafafa",
   borderRadius: 12
 }
+
