@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Visao = "geral" | "clientes"
-type Periodo = "mes" | "trimestre" | "ano" | "todos"
+type Periodo = "hoje" | "mes" | "trimestre" | "ano" | "todos"
 
 type Cliente = {
   id: string
@@ -16,13 +16,21 @@ type Compra = {
   clienteid: string
   valor: number
   criadoem: string
+  cliente?: string
+  pagamento?: string
 }
+
+/* =====================================================
+   DASHBOARD
+===================================================== */
 
 export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
+
   const [visao, setVisao] = useState<Visao>("geral")
   const [periodo, setPeriodo] = useState<Periodo>("mes")
+
   const [meta, setMeta] = useState(30000)
   const [editarMeta, setEditarMeta] = useState(false)
 
@@ -31,18 +39,74 @@ export default function Dashboard() {
   }, [])
 
   async function fetchData() {
-    const { data: clientesData } = await supabase
-      .from("clientes")
-      .select("id,nome,cpf,pontos")
+    const { data: clientesData, error: clientesError } =
+      await supabase
+        .from("clientes")
+        .select("id,nome,cpf,pontos")
 
-    const { data: comprasData } = await supabase
-      .from("compras")
-      .select("id,clienteid,valor,criadoem")
-      .order("criadoem", { ascending: false })
+    if (clientesError) {
+      console.log(
+        "Erro ao buscar clientes:",
+        clientesError
+      )
+    }
 
-    setClientes((clientesData || []) as Cliente[])
-    setCompras((comprasData || []) as Compra[])
+    const { data: comprasData, error: comprasError } =
+      await supabase
+        .from("compras")
+        .select("id,clienteid,valor,criadoem,cliente,pagamento")
+        .order("criadoem", { ascending: false })
+
+    if (comprasError) {
+      console.log(
+        "Erro ao buscar compras:",
+        comprasError
+      )
+    }
+
+    setClientes(
+      (clientesData || []) as Cliente[]
+    )
+
+    setCompras(
+      (comprasData || []) as Compra[]
+    )
   }
+
+  /* =====================================================
+     FUNÇÕES DE DATA
+  ===================================================== */
+
+  function inicioDoDia(data: Date) {
+    const nova = new Date(data)
+
+    nova.setHours(0, 0, 0, 0)
+
+    return nova
+  }
+
+  function inicioDoMes(data: Date) {
+    return new Date(
+      data.getFullYear(),
+      data.getMonth(),
+      1
+    )
+  }
+
+  function diferencaDias(
+    dataInicial: Date,
+    dataFinal: Date
+  ) {
+    return (
+      (inicioDoDia(dataFinal).getTime() -
+        inicioDoDia(dataInicial).getTime()) /
+      86400000
+    )
+  }
+
+  /* =====================================================
+     COMPRAS FILTRADAS
+  ===================================================== */
 
   const comprasFiltradas = useMemo(() => {
     const hoje = new Date()
@@ -50,108 +114,330 @@ export default function Dashboard() {
     return compras.filter(c => {
       const data = new Date(c.criadoem)
 
+      if (periodo === "hoje") {
+        return (
+          data.getDate() === hoje.getDate() &&
+          data.getMonth() === hoje.getMonth() &&
+          data.getFullYear() ===
+            hoje.getFullYear()
+        )
+      }
+
       if (periodo === "mes") {
         return (
           data.getMonth() === hoje.getMonth() &&
-          data.getFullYear() === hoje.getFullYear()
+          data.getFullYear() ===
+            hoje.getFullYear()
         )
       }
 
       if (periodo === "trimestre") {
-        const diff =
-          (hoje.getTime() - data.getTime()) / 86400000
+        const diff = diferencaDias(
+          data,
+          hoje
+        )
 
-        return diff <= 90
+        return diff >= 0 && diff <= 90
       }
 
       if (periodo === "ano") {
-        return data.getFullYear() === hoje.getFullYear()
+        return (
+          data.getFullYear() ===
+          hoje.getFullYear()
+        )
       }
 
       return true
     })
   }, [compras, periodo])
 
-  const faturamento = comprasFiltradas.reduce(
-    (a, b) => a + Number(b.valor),
-    0
-  )
+  /* =====================================================
+     INDICADORES PRINCIPAIS
+  ===================================================== */
 
-  const ticketMedio = comprasFiltradas.length
-    ? faturamento / comprasFiltradas.length
-    : 0
+  const faturamento =
+    comprasFiltradas.reduce(
+      (a, b) =>
+        a + Number(b.valor || 0),
+      0
+    )
+
+  const quantidadePedidos =
+    comprasFiltradas.length
+
+  const ticketMedio =
+    quantidadePedidos > 0
+      ? faturamento /
+        quantidadePedidos
+      : 0
 
   const clientesAtivos = new Set(
-    comprasFiltradas.map(c => c.clienteid)
+    comprasFiltradas.map(
+      c => c.clienteid
+    )
   ).size
+
+  const lucroEstimado =
+    faturamento * 0.45
 
   const progressoMeta =
     meta > 0
-      ? Math.min((faturamento / meta) * 100, 100)
+      ? Math.min(
+          (faturamento / meta) * 100,
+          100
+        )
       : 0
+
+  /* =====================================================
+     META DIÁRIA
+  ===================================================== */
+
+  const metaDiaria =
+    periodo === "hoje"
+      ? 1500
+      : meta
+
+  const progressoMetaPeriodo =
+    metaDiaria > 0
+      ? Math.min(
+          (faturamento /
+            metaDiaria) *
+            100,
+          100
+        )
+      : 0
+
+  /* =====================================================
+     TÍTULO DO PERÍODO
+  ===================================================== */
+
+  const periodoTitulo =
+    periodo === "hoje"
+      ? "Hoje"
+      : periodo === "mes"
+      ? "Este mês"
+      : periodo === "trimestre"
+      ? "Últimos 3 meses"
+      : periodo === "ano"
+      ? "Este ano"
+      : "Todo o período"
+
+  const periodoDescricao =
+    periodo === "hoje"
+      ? new Date().toLocaleDateString(
+          "pt-BR",
+          {
+            day: "2-digit",
+            month: "long",
+            year: "numeric"
+          }
+        )
+      : periodoTitulo
+
+  /* =====================================================
+     CLIENTES EM RISCO
+  ===================================================== */
 
   const clientesRisco = useMemo(() => {
     const hoje = new Date()
 
     return clientes
       .map(cliente => {
-        const ultima = compras.find(
-          c => c.clienteid === cliente.id
-        )
+        const comprasCliente =
+          compras.filter(
+            c =>
+              c.clienteid ===
+              cliente.id
+          )
+
+        const ultima =
+          comprasCliente.length > 0
+            ? comprasCliente.reduce(
+                (maisRecente, compra) =>
+                  new Date(
+                    compra.criadoem
+                  ) >
+                  new Date(
+                    maisRecente.criadoem
+                  )
+                    ? compra
+                    : maisRecente
+              )
+            : null
 
         if (!ultima) {
-          return { ...cliente, dias: 999 }
+          return {
+            ...cliente,
+            dias: 999
+          }
         }
 
         const dias = Math.floor(
-          (hoje.getTime() -
-            new Date(ultima.criadoem).getTime()) /
-            86400000
+          diferencaDias(
+            new Date(
+              ultima.criadoem
+            ),
+            hoje
+          )
         )
 
-        return { ...cliente, dias }
+        return {
+          ...cliente,
+          dias
+        }
       })
-      .sort((a, b) => b.dias - a.dias)
+      .sort(
+        (a, b) =>
+          b.dias - a.dias
+      )
   }, [clientes, compras])
 
-  const topClientes = [...clientes]
-    .sort((a, b) => b.pontos - a.pontos)
+  /* =====================================================
+     TOP CLIENTES
+  ===================================================== */
+
+  const topClientes = [
+    ...clientes
+  ]
+    .sort(
+      (a, b) =>
+        b.pontos - a.pontos
+    )
     .slice(0, 5)
 
-  const vendasPorMesMap: Record<string, number> = {}
+  /* =====================================================
+     VENDAS POR MÊS
+  ===================================================== */
+
+  const vendasPorMesMap: Record<
+    string,
+    number
+  > = {}
 
   compras.forEach(c => {
-    const d = new Date(c.criadoem)
+    const d = new Date(
+      c.criadoem
+    )
 
     const chave = `${String(
       d.getMonth() + 1
     ).padStart(2, "0")}/${d.getFullYear()}`
 
     vendasPorMesMap[chave] =
-      (vendasPorMesMap[chave] || 0) + Number(c.valor)
+      (vendasPorMesMap[chave] ||
+        0) +
+      Number(c.valor || 0)
   })
 
-  const melhorMes = Object.entries(
-    vendasPorMesMap
-  ).sort((a, b) => b[1] - a[1])[0]
+  const melhorMes =
+    Object.entries(
+      vendasPorMesMap
+    ).sort(
+      (a, b) =>
+        b[1] - a[1]
+    )[0]
 
-  const lucroEstimado = faturamento * 0.45
+  /* =====================================================
+     COMPARAÇÃO COM DIA ANTERIOR
+  ===================================================== */
+
+  const vendasOntem = useMemo(() => {
+    if (periodo !== "hoje") {
+      return 0
+    }
+
+    const hoje = new Date()
+
+    return compras
+      .filter(c => {
+        const data = new Date(
+          c.criadoem
+        )
+
+        const diff =
+          diferencaDias(
+            data,
+            hoje
+          )
+
+        return diff === 1
+      })
+      .reduce(
+        (a, b) =>
+          a +
+          Number(
+            b.valor || 0
+          ),
+        0
+      )
+  }, [compras, periodo])
+
+  const variacaoDia =
+    periodo === "hoje" &&
+    vendasOntem > 0
+      ? ((faturamento -
+          vendasOntem) /
+          vendasOntem) *
+        100
+      : null
+
+  /* =====================================================
+     VENDAS DO DIA
+  ===================================================== */
+
+  const vendasDoDia = useMemo(() => {
+    if (periodo !== "hoje") {
+      return []
+    }
+
+    return [...comprasFiltradas]
+      .sort(
+        (a, b) =>
+          new Date(
+            b.criadoem
+          ).getTime() -
+          new Date(
+            a.criadoem
+          ).getTime()
+      )
+  }, [
+    comprasFiltradas,
+    periodo
+  ])
+
+  /* =====================================================
+     CAMPANHAS
+  ===================================================== */
 
   function campanha(tipo: string) {
-    if (tipo === "vip")
-      alert("Campanha VIP enviada para melhores clientes")
+    if (tipo === "vip") {
+      alert(
+        "Campanha VIP enviada para melhores clientes"
+      )
+    }
 
-    if (tipo === "estoque")
-      alert("Campanha Queima de Estoque ativada")
+    if (tipo === "estoque") {
+      alert(
+        "Campanha Queima de Estoque ativada"
+      )
+    }
 
-    if (tipo === "pos")
-      alert("Campanha Pós-compra iniciada")
+    if (tipo === "pos") {
+      alert(
+        "Campanha Pós-compra iniciada"
+      )
+    }
 
-    if (tipo === "inativos")
+    if (tipo === "inativos") {
       alert(
         "Campanha de recuperação para inativos enviada"
       )
+    }
   }
+
+  /* =====================================================
+     CALENDÁRIO
+  ===================================================== */
 
   const calendario = [
     [
@@ -201,17 +487,53 @@ export default function Dashboard() {
     ]
   ]
 
+  /* =====================================================
+     FORMATAÇÃO
+  ===================================================== */
+
+  function moeda(valor: number) {
+    return valor.toLocaleString(
+      "pt-BR",
+      {
+        style: "currency",
+        currency: "BRL"
+      }
+    )
+  }
+
+  function hora(data: string) {
+    return new Date(
+      data
+    ).toLocaleTimeString(
+      "pt-BR",
+      {
+        hour: "2-digit",
+        minute: "2-digit"
+      }
+    )
+  }
+
+  /* =====================================================
+     RETURN
+  ===================================================== */
+
   return (
-    <div style={container} className="dashboard-container">
+    <div
+      style={container}
+      className="dashboard-container"
+    >
 
-      {/* =========================
-          HEADER
-      ========================= */}
+      {/* HEADER */}
 
-      <div style={header} className="dashboard-header">
+      <div
+        style={header}
+        className="dashboard-header"
+      >
 
         <div>
-          <h1 style={title}>Dashboard</h1>
+          <h1 style={title}>
+            Dashboard
+          </h1>
 
           <span style={sub}>
             Visão estratégica CamiDuda
@@ -223,22 +545,50 @@ export default function Dashboard() {
           <select
             value={periodo}
             onChange={e =>
-              setPeriodo(e.target.value as Periodo)
+              setPeriodo(
+                e.target
+                  .value as Periodo
+              )
             }
             style={select}
           >
-            <option value="mes">Mês</option>
-            <option value="trimestre">3 meses</option>
-            <option value="ano">Ano</option>
-            <option value="todos">Todos</option>
+            <option value="hoje">
+              Hoje
+            </option>
+
+            <option value="mes">
+              Este mês
+            </option>
+
+            <option value="trimestre">
+              Últimos 3 meses
+            </option>
+
+            <option value="ano">
+              Este ano
+            </option>
+
+            <option value="todos">
+              Todos
+            </option>
           </select>
 
         </div>
       </div>
 
-      {/* =========================
-          VISÃO
-      ========================= */}
+      {/* PERÍODO ATUAL */}
+
+      <div style={periodBadge}>
+        <span>
+          Período analisado
+        </span>
+
+        <strong>
+          {periodoDescricao}
+        </strong>
+      </div>
+
+      {/* VISÃO */}
 
       <div style={viewSwitch}>
 
@@ -248,7 +598,9 @@ export default function Dashboard() {
               ? activeTab
               : tab
           }
-          onClick={() => setVisao("geral")}
+          onClick={() =>
+            setVisao("geral")
+          }
         >
           Visão Lucro
         </button>
@@ -259,21 +611,23 @@ export default function Dashboard() {
               ? activeTab
               : tab
           }
-          onClick={() => setVisao("clientes")}
+          onClick={() =>
+            setVisao("clientes")
+          }
         >
           Visão Clientes
         </button>
 
       </div>
 
-      {/* =========================
+      {/* =================================================
           VISÃO GERAL
-      ========================= */}
+      ================================================= */}
 
       {visao === "geral" && (
         <>
 
-          {/* KPIs PRINCIPAIS */}
+          {/* KPIs */}
 
           <div
             style={dashGrid}
@@ -281,50 +635,144 @@ export default function Dashboard() {
           >
 
             <Dash
-              label="Faturamento"
-              value={`R$ ${faturamento.toFixed(2)}`}
+              label={
+                periodo === "hoje"
+                  ? "Faturamento de hoje"
+                  : `Faturamento — ${periodoTitulo}`
+              }
+              value={moeda(
+                faturamento
+              )}
             />
 
             <Dash
-              label="Vendas"
-              value={comprasFiltradas.length}
+              label={
+                periodo === "hoje"
+                  ? "Pedidos hoje"
+                  : `Pedidos — ${periodoTitulo}`
+              }
+              value={
+                quantidadePedidos
+              }
             />
 
             <Dash
               label="Ticket médio"
-              value={`R$ ${ticketMedio.toFixed(2)}`}
+              value={moeda(
+                ticketMedio
+              )}
             />
 
             <Dash
-              label="Clientes ativos"
-              value={clientesAtivos}
+              label={
+                periodo === "hoje"
+                  ? "Lucro estimado hoje"
+                  : "Lucro estimado"
+              }
+              value={moeda(
+                lucroEstimado
+              )}
             />
 
           </div>
 
-          {/* =========================
-              META
-          ========================= */}
+          {/* CLIENTES */}
+
+          <div
+            style={dashGrid}
+            className="dashboard-kpis"
+          >
+
+            <Dash
+              label={
+                periodo === "hoje"
+                  ? "Clientes atendidos"
+                  : "Clientes ativos"
+              }
+              value={
+                clientesAtivos
+              }
+            />
+
+            <Dash
+              label="Média por cliente"
+              value={moeda(
+                clientesAtivos
+                  ? faturamento /
+                      clientesAtivos
+                  : 0
+              )}
+            />
+
+            {periodo === "hoje" && (
+              <Dash
+                label="Vendas ontem"
+                value={moeda(
+                  vendasOntem
+                )}
+              />
+            )}
+
+            {periodo === "hoje" && (
+              <Dash
+                label="Variação vs. ontem"
+                value={
+                  variacaoDia !==
+                  null
+                    ? `${
+                        variacaoDia >=
+                        0
+                          ? "+"
+                          : ""
+                      }${variacaoDia.toFixed(
+                        1
+                      )}%`
+                    : "Sem comparação"
+                }
+              />
+            )}
+
+          </div>
+
+          {/* META */}
 
           <div
             style={metaCard}
             className="dashboard-meta"
           >
 
-            <div style={metaHeader}>
+            <div
+              style={metaHeader}
+            >
 
-              <strong>
-                Meta do período:{" "}
-                {meta.toLocaleString("pt-BR", {
-                  style: "currency",
-                  currency: "BRL"
-                })}
-              </strong>
+              <div>
+                <strong>
+                  {periodo ===
+                  "hoje"
+                    ? "Meta diária"
+                    : "Meta do período"}
+                </strong>
+
+                <span
+                  style={
+                    metaSubtitle
+                  }
+                >
+                  {moeda(
+                    periodo ===
+                      "hoje"
+                      ? metaDiaria
+                      : meta
+                  )}
+                </span>
+              </div>
 
               <button
                 style={dots}
                 onClick={() =>
-                  setEditarMeta(!editarMeta)
+                  setEditarMeta(
+                    !editarMeta
+                  )
                 }
                 aria-label={
                   editarMeta
@@ -332,7 +780,9 @@ export default function Dashboard() {
                     : "Editar meta"
                 }
               >
-                {editarMeta ? "×" : "+"}
+                {editarMeta
+                  ? "×"
+                  : "+"}
               </button>
 
             </div>
@@ -340,39 +790,331 @@ export default function Dashboard() {
             {editarMeta && (
               <input
                 type="number"
-                value={meta}
-                onChange={e =>
-                  setMeta(Number(e.target.value))
+                value={
+                  periodo ===
+                  "hoje"
+                    ? metaDiaria
+                    : meta
                 }
+                onChange={e => {
+                  const valor =
+                    Number(
+                      e.target.value
+                    )
+
+                  if (
+                    periodo ===
+                    "hoje"
+                  ) {
+                    return
+                  }
+
+                  setMeta(valor)
+                }}
                 style={input}
               />
             )}
 
             <div
-              title={`R$ ${faturamento.toFixed(
-                2
-              )} de R$ ${meta.toFixed(2)}`}
-              style={progressBg}
+              title={`${moeda(
+                faturamento
+              )} de ${moeda(
+                periodo ===
+                  "hoje"
+                  ? metaDiaria
+                  : meta
+              )}`}
+              style={
+                progressBg
+              }
             >
 
               <div
                 style={{
                   ...progressFill,
-                  width: `${progressoMeta}%`
+                  width: `${
+                    periodo ===
+                    "hoje"
+                      ? progressoMetaPeriodo
+                      : progressoMeta
+                  }%`
                 }}
               />
 
             </div>
 
-            <div style={progressText}>
-              {progressoMeta.toFixed(1)}% da meta
+            <div
+              style={
+                progressText
+              }
+            >
+              {(
+                periodo ===
+                "hoje"
+                  ? progressoMetaPeriodo
+                  : progressoMeta
+              ).toFixed(
+                1
+              )}
+              % da meta
             </div>
 
           </div>
 
-          {/* =========================
+          {/* =================================================
+              RESUMO DIÁRIO
+          ================================================= */}
+
+          {periodo === "hoje" && (
+            <div
+              style={
+                dailySection
+              }
+            >
+
+              <div
+                style={
+                  dailyHeader
+                }
+              >
+
+                <div>
+                  <h3
+                    style={
+                      dailyTitle
+                    }
+                  >
+                    Resumo de hoje
+                  </h3>
+
+                  <span
+                    style={
+                      dailySubtitle
+                    }
+                  >
+                    Acompanhe o desempenho
+                    da loja em tempo real
+                  </span>
+                </div>
+
+                <div
+                  style={
+                    dailyDate
+                  }
+                >
+                  {new Date().toLocaleDateString(
+                    "pt-BR",
+                    {
+                      weekday:
+                        "long",
+                      day: "2-digit",
+                      month:
+                        "long"
+                    }
+                  )}
+                </div>
+
+              </div>
+
+              <div
+                style={
+                  dailyGrid
+                }
+              >
+
+                <MiniDaily
+                  label="Faturamento"
+                  value={moeda(
+                    faturamento
+                  )}
+                />
+
+                <MiniDaily
+                  label="Pedidos"
+                  value={
+                    quantidadePedidos
+                  }
+                />
+
+                <MiniDaily
+                  label="Lucro estimado"
+                  value={moeda(
+                    lucroEstimado
+                  )}
+                />
+
+                <MiniDaily
+                  label="Ticket médio"
+                  value={moeda(
+                    ticketMedio
+                  )}
+                />
+
+              </div>
+
+            </div>
+          )}
+
+          {/* =================================================
+              VENDAS DE HOJE
+          ================================================= */}
+
+          {periodo === "hoje" && (
+            <div
+              style={
+                section
+              }
+              className="dashboard-section"
+            >
+
+              <div
+                style={
+                  sectionTop
+                }
+              >
+
+                <div>
+                  <h3
+                    style={
+                      sectionTitle
+                    }
+                  >
+                    Vendas de hoje
+                  </h3>
+
+                  <span
+                    style={
+                      sectionSubtitle
+                    }
+                  >
+                    {vendasDoDia.length}{" "}
+                    pedido
+                    {vendasDoDia.length !==
+                    1
+                      ? "s"
+                      : ""}{" "}
+                    registrado
+                    {vendasDoDia.length !==
+                    1
+                      ? "s"
+                      : ""}
+                  </span>
+                </div>
+
+                <strong
+                  style={
+                    sectionTotal
+                  }
+                >
+                  {moeda(
+                    faturamento
+                  )}
+                </strong>
+
+              </div>
+
+              {vendasDoDia.length ===
+              0 ? (
+                <div
+                  style={
+                    emptyState
+                  }
+                >
+                  <strong>
+                    Nenhuma venda hoje
+                  </strong>
+
+                  <span>
+                    As vendas realizadas
+                    aparecerão aqui.
+                  </span>
+                </div>
+              ) : (
+                <div
+                  style={
+                    dailySalesList
+                  }
+                >
+
+                  {vendasDoDia
+                    .slice(0, 10)
+                    .map(
+                      (
+                        compra,
+                        index
+                      ) => (
+                        <div
+                          key={
+                            compra.id
+                          }
+                          style={
+                            saleRow
+                          }
+                        >
+
+                          <div
+                            style={
+                              saleNumber
+                            }
+                          >
+                            {String(
+                              index +
+                                1
+                            ).padStart(
+                              2,
+                              "0"
+                            )}
+                          </div>
+
+                          <div
+                            style={
+                              saleInfo
+                            }
+                          >
+
+                            <strong>
+                              {compra.cliente ||
+                                "Cliente não identificado"}
+                            </strong>
+
+                            <span>
+                              {hora(
+                                compra.criadoem
+                              )}
+
+                              {compra.pagamento
+                                ? ` • ${compra.pagamento}`
+                                : ""}
+                            </span>
+
+                          </div>
+
+                          <strong
+                            style={
+                              saleValue
+                            }
+                          >
+                            {moeda(
+                              Number(
+                                compra.valor ||
+                                  0
+                              )
+                            )}
+                          </strong>
+
+                        </div>
+                      )
+                    )}
+
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* =================================================
               KPIs EXECUTIVOS
-          ========================= */}
+          ================================================= */}
 
           <div
             style={dashGrid}
@@ -381,7 +1123,9 @@ export default function Dashboard() {
 
             <Dash
               label="Lucro estimado"
-              value={`R$ ${lucroEstimado.toFixed(2)}`}
+              value={moeda(
+                lucroEstimado
+              )}
             />
 
             <Dash
@@ -397,118 +1141,156 @@ export default function Dashboard() {
               label="Valor melhor mês"
               value={
                 melhorMes
-                  ? `R$ ${Number(
-                      melhorMes[1]
-                    ).toFixed(2)}`
+                  ? moeda(
+                      Number(
+                        melhorMes[1]
+                      )
+                    )
                   : "-"
               }
             />
 
             <Dash
               label="Média por cliente"
-              value={`R$ ${
+              value={moeda(
                 clientesAtivos
-                  ? (
-                      faturamento /
+                  ? faturamento /
                       clientesAtivos
-                    ).toFixed(2)
-                  : "0.00"
-              }`}
+                  : 0
+              )}
             />
 
           </div>
 
-          {/* =========================
+          {/* =================================================
               GRÁFICOS
-          ========================= */}
+          ================================================= */}
 
           <div
             style={profitGrid}
             className="dashboard-graficos"
           >
 
-            {/* FATURAMENTO */}
+            <div
+              style={chartCard}
+            >
 
-            <div style={chartCard}>
-
-              <h3 style={chartTitle}>
+              <h3
+                style={
+                  chartTitle
+                }
+              >
                 Faturamento por mês
               </h3>
 
               {Object.entries(
                 vendasPorMesMap
               )
-                .sort((a, b) =>
-                  a[0].localeCompare(b[0])
+                .sort(
+                  (a, b) =>
+                    a[0].localeCompare(
+                      b[0]
+                    )
                 )
                 .slice(-6)
-                .map(([mes, total]) => {
+                .map(
+                  ([
+                    mes,
+                    total
+                  ]) => {
 
-                  const maiorValor =
-                    Math.max(
-                      ...Object.values(
-                        vendasPorMesMap
+                    const maiorValor =
+                      Math.max(
+                        ...Object.values(
+                          vendasPorMesMap
+                        )
                       )
-                    )
 
-                  const largura =
-                    maiorValor > 0
-                      ? (Number(total) /
-                          maiorValor) *
-                        100
-                      : 0
-
-                  return (
-                    <div
-                      key={mes}
-                      style={{
-                        marginBottom: 12
-                      }}
-                    >
-
-                      <div style={barLabel}>
-
-                        <span>
-                          {mes}
-                        </span>
-
-                        <strong>
-                          R${" "}
-                          {Number(
+                    const largura =
+                      maiorValor >
+                      0
+                        ? (Number(
                             total
-                          ).toFixed(0)}
-                        </strong>
+                          ) /
+                            maiorValor) *
+                          100
+                        : 0
 
-                      </div>
-
-                      <div style={barBg}>
+                    return (
+                      <div
+                        key={mes}
+                        style={{
+                          marginBottom:
+                            12
+                        }}
+                      >
 
                         <div
-                          style={{
-                            ...barFill,
-                            width: `${largura}%`
-                          }}
-                        />
+                          style={
+                            barLabel
+                          }
+                        >
+
+                          <span>
+                            {mes}
+                          </span>
+
+                          <strong>
+                            {moeda(
+                              Number(
+                                total
+                              )
+                            )}
+                          </strong>
+
+                        </div>
+
+                        <div
+                          style={
+                            barBg
+                          }
+                        >
+
+                          <div
+                            style={{
+                              ...barFill,
+                              width: `${largura}%`
+                            }}
+                          />
+
+                        </div>
 
                       </div>
-
-                    </div>
-                  )
-                })}
+                    )
+                  }
+                )}
 
             </div>
 
             {/* PERFORMANCE */}
 
-            <div style={chartCard}>
+            <div
+              style={
+                chartCard
+              }
+            >
 
-              <h3 style={chartTitle}>
+              <h3
+                style={
+                  chartTitle
+                }
+              >
                 Performance estratégica
               </h3>
 
               <MiniMetric
                 label="Conversão da meta"
-                value={`${progressoMeta.toFixed(
+                value={`${(
+                  periodo ===
+                  "hoje"
+                    ? progressoMetaPeriodo
+                    : progressoMeta
+                ).toFixed(
                   1
                 )}%`}
               />
@@ -518,8 +1300,11 @@ export default function Dashboard() {
                 value={`${(
                   (lucroEstimado /
                     faturamento) *
-                    100 || 0
-                ).toFixed(1)}%`}
+                    100 ||
+                  0
+                ).toFixed(
+                  1
+                )}%`}
               />
 
               <MiniMetric
@@ -527,8 +1312,11 @@ export default function Dashboard() {
                 value={`${(
                   (clientesAtivos /
                     clientes.length) *
-                    100 || 0
-                ).toFixed(1)}%`}
+                    100 ||
+                  0
+                ).toFixed(
+                  1
+                )}%`}
               />
 
               <MiniMetric
@@ -540,9 +1328,9 @@ export default function Dashboard() {
 
           </div>
 
-          {/* =========================
+          {/* =================================================
               INSIGHTS
-          ========================= */}
+          ================================================= */}
 
           <div
             style={section}
@@ -553,7 +1341,11 @@ export default function Dashboard() {
               Insights estratégicos
             </h3>
 
-            <div style={insightGrid}>
+            <div
+              style={
+                insightGrid
+              }
+            >
 
               <InsightCard
                 title="Melhor oportunidade"
@@ -567,7 +1359,8 @@ export default function Dashboard() {
               <InsightCard
                 title="Ação recomendada"
                 text={
-                  ticketMedio < 150
+                  ticketMedio <
+                  150
                     ? "Criar combos para elevar ticket médio"
                     : "Focar retenção premium"
                 }
@@ -576,7 +1369,8 @@ export default function Dashboard() {
               <InsightCard
                 title="Atenção"
                 text={
-                  progressoMeta < 60
+                  progressoMeta <
+                  60
                     ? "Meta abaixo do esperado"
                     : "Meta saudável"
                 }
@@ -594,15 +1388,20 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* =========================
+      {/* =================================================
           VISÃO CLIENTES
-      ========================= */}
+      ================================================= */}
 
-      {visao === "clientes" && (
+      {visao ===
+        "clientes" && (
         <>
 
+          {/* RISCO */}
+
           <div
-            style={riskGrid}
+            style={
+              riskGrid
+            }
             className="dashboard-risk-grid"
           >
 
@@ -612,15 +1411,22 @@ export default function Dashboard() {
 
                 <div
                   key={c.id}
-                  style={riskCard}
+                  style={
+                    riskCard
+                  }
                 >
 
                   <strong>
                     {c.nome}
                   </strong>
 
-                  <div style={muted}>
-                    {c.dias >= 999
+                  <div
+                    style={
+                      muted
+                    }
+                  >
+                    {c.dias >=
+                    999
                       ? "Nunca comprou"
                       : `${c.dias} dias sem comprar`}
                   </div>
@@ -633,74 +1439,104 @@ export default function Dashboard() {
 
           {/* TOP CLIENTES */}
 
-          <div style={section} className="dashboard-section">
+          <div
+            style={section}
+            className="dashboard-section"
+          >
 
             <h3>
               Top clientes por pontos
             </h3>
 
-            {topClientes.map(c => (
+            {topClientes.map(
+              c => (
 
-              <div
-                key={c.id}
-                style={listRow}
-              >
+                <div
+                  key={c.id}
+                  style={
+                    listRow
+                  }
+                >
 
-                <span>
-                  {c.nome}
-                </span>
+                  <span>
+                    {c.nome}
+                  </span>
 
-                <strong>
-                  {c.pontos} pts
-                </strong>
+                  <strong>
+                    {c.pontos} pts
+                  </strong>
 
-              </div>
+                </div>
 
-            ))}
+              )
+            )}
 
           </div>
 
           {/* CAMPANHAS */}
 
-          <div style={section} className="dashboard-section">
+          <div
+            style={section}
+            className="dashboard-section"
+          >
 
             <h3>
               Campanhas automáticas
             </h3>
 
-            <div style={campaignGrid}>
+            <div
+              style={
+                campaignGrid
+              }
+            >
 
               <button
-                style={actionBtn}
+                style={
+                  actionBtn
+                }
                 onClick={() =>
-                  campanha("vip")
+                  campanha(
+                    "vip"
+                  )
                 }
               >
                 Enviar promoção VIP
               </button>
 
               <button
-                style={actionBtn}
+                style={
+                  actionBtn
+                }
                 onClick={() =>
-                  campanha("estoque")
+                  campanha(
+                    "estoque"
+                  )
                 }
               >
                 Queima de estoque
               </button>
 
               <button
-                style={actionBtn}
+                style={
+                  actionBtn
+                }
                 onClick={() =>
-                  campanha("pos")
+                  campanha(
+                    "pos"
+                  )
                 }
               >
                 Pós-compra
               </button>
 
               <button
-                style={actionBtn}
+                style={
+                  actionBtn
+                }
                 onClick={() =>
-                  campanha("inativos")
+                  campanha(
+                    "inativos"
+                  )
                 }
               >
                 Recuperar inativos
@@ -712,22 +1548,32 @@ export default function Dashboard() {
 
           {/* CALENDÁRIO */}
 
-          <div style={section} className="dashboard-section">
+          <div
+            style={section}
+            className="dashboard-section"
+          >
 
             <h3>
               Calendário sazonal
             </h3>
 
             {calendario.map(
-              ([mes, data, acao]) => (
+              ([
+                mes,
+                data,
+                acao
+              ]) => (
 
                 <div
                   key={mes}
-                  style={listRow}
+                  style={
+                    listRow
+                  }
                 >
 
                   <span>
-                    {mes} • {data}
+                    {mes} •{" "}
+                    {data}
                   </span>
 
                   <strong>
@@ -749,7 +1595,7 @@ export default function Dashboard() {
 }
 
 /* =====================================================
-   COMPONENTES
+   COMPONENTE DASH
 ===================================================== */
 
 function Dash({
@@ -760,19 +1606,33 @@ function Dash({
   value: string | number
 }) {
   return (
-    <div style={dash}>
+    <div
+      style={dash}
+    >
 
-      <span style={dashLabel}>
+      <span
+        style={
+          dashLabel
+        }
+      >
         {label}
       </span>
 
-      <strong style={dashValue}>
+      <strong
+        style={
+          dashValue
+        }
+      >
         {value}
       </strong>
 
     </div>
   )
 }
+
+/* =====================================================
+   COMPONENTE MINI METRIC
+===================================================== */
 
 function MiniMetric({
   label,
@@ -782,19 +1642,73 @@ function MiniMetric({
   value: string
 }) {
   return (
-    <div style={miniMetric}>
+    <div
+      style={
+        miniMetric
+      }
+    >
 
-      <span style={miniLabel}>
+      <span
+        style={
+          miniLabel
+        }
+      >
         {label}
       </span>
 
-      <strong style={miniValue}>
+      <strong
+        style={
+          miniValue
+        }
+      >
         {value}
       </strong>
 
     </div>
   )
 }
+
+/* =====================================================
+   COMPONENTE DAILY
+===================================================== */
+
+function MiniDaily({
+  label,
+  value
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div
+      style={
+        miniDaily
+      }
+    >
+
+      <span
+        style={
+          miniDailyLabel
+        }
+      >
+        {label}
+      </span>
+
+      <strong
+        style={
+          miniDailyValue
+        }
+      >
+        {value}
+      </strong>
+
+    </div>
+  )
+}
+
+/* =====================================================
+   COMPONENTE INSIGHT
+===================================================== */
 
 function InsightCard({
   title,
@@ -804,13 +1718,25 @@ function InsightCard({
   text: string
 }) {
   return (
-    <div style={insightCard}>
+    <div
+      style={
+        insightCard
+      }
+    >
 
-      <span style={insightTitle}>
+      <span
+        style={
+          insightTitle
+        }
+      >
         {title}
       </span>
 
-      <strong style={insightText}>
+      <strong
+        style={
+          insightText
+        }
+      >
         {text}
       </strong>
 
@@ -819,34 +1745,40 @@ function InsightCard({
 }
 
 /* =====================================================
-   ESTILOS
+   ESTILOS GERAIS
 ===================================================== */
 
 const container = {
   padding: 40,
   background: "#f6f6f7",
   minHeight: "100vh",
-  fontFamily: "Inter",
+  fontFamily:
+    "Inter, sans-serif",
   width: "100%",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const
 }
 
 const header = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   alignItems: "center",
   gap: 20,
-  marginBottom: 24,
-  flexWrap: "wrap" as const
+  marginBottom: 18,
+  flexWrap:
+    "wrap" as const
 }
 
 const title = {
   fontSize: 34,
-  margin: 0
+  margin: 0,
+  fontWeight: 500
 }
 
 const sub = {
-  color: "#777"
+  color: "#777",
+  fontSize: 14
 }
 
 const topControls = {
@@ -855,31 +1787,66 @@ const topControls = {
 }
 
 const select = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #ddd",
+  padding: 11,
+  borderRadius: 12,
+  border:
+    "1px solid #ddd",
   background: "#fff",
-  maxWidth: "100%"
+  maxWidth: "100%",
+  cursor: "pointer"
+}
+
+/* =====================================================
+   PERÍODO
+===================================================== */
+
+const periodBadge = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent:
+    "space-between",
+  gap: 12,
+  padding:
+    "10px 14px",
+  marginBottom: 18,
+  background: "#fff",
+  border:
+    "1px solid #eee",
+  borderRadius: 12,
+  fontSize: 13,
+  color: "#777",
+  flexWrap:
+    "wrap" as const
 }
 
 const viewSwitch = {
   display: "flex",
   gap: 10,
   marginBottom: 20,
-  flexWrap: "wrap" as const
+  flexWrap:
+    "wrap" as const
 }
 
 const tab = {
-  padding: "10px 18px",
+  padding:
+    "10px 18px",
   border: "none",
   borderRadius: 12,
-  cursor: "pointer"
+  cursor: "pointer",
+  background: "#fff"
 }
 
 const activeTab = {
   ...tab,
-  background: "#f4e7a1"
+  background:
+    "#f4e7a1",
+  color: "#6e5815",
+  fontWeight: 600
 }
+
+/* =====================================================
+   KPIs
+===================================================== */
 
 const dashGrid = {
   display: "grid",
@@ -894,19 +1861,24 @@ const dash = {
   padding: 18,
   borderRadius: 16,
   minWidth: 0,
-  overflow: "hidden" as const
+  overflow:
+    "hidden" as const,
+  border:
+    "1px solid #eeeeee"
 }
 
 const dashLabel = {
   display: "block",
   color: "#777",
   fontSize: 13,
-  marginBottom: 5
+  marginBottom: 7
 }
 
 const dashValue = {
   fontSize: 24,
-  overflowWrap: "anywhere" as const
+  fontWeight: 600,
+  overflowWrap:
+    "anywhere" as const
 }
 
 /* =====================================================
@@ -919,14 +1891,25 @@ const metaCard = {
   borderRadius: 16,
   marginBottom: 20,
   width: "100%",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const,
+  border:
+    "1px solid #eee"
 }
 
 const metaHeader = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   alignItems: "center",
   gap: 12
+}
+
+const metaSubtitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#777",
+  fontSize: 13
 }
 
 const dots = {
@@ -941,7 +1924,8 @@ const dots = {
   color: "#9b7b2f",
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent:
+    "center",
   flexShrink: 0
 }
 
@@ -950,8 +1934,10 @@ const input = {
   padding: 10,
   width: "100%",
   borderRadius: 10,
-  border: "1px solid #ddd",
-  boxSizing: "border-box" as const
+  border:
+    "1px solid #ddd",
+  boxSizing:
+    "border-box" as const
 }
 
 const progressBg = {
@@ -959,7 +1945,8 @@ const progressBg = {
   height: 14,
   background: "#eee",
   borderRadius: 999,
-  overflow: "hidden" as const
+  overflow:
+    "hidden" as const
 }
 
 const progressFill = {
@@ -976,12 +1963,186 @@ const progressText = {
 }
 
 /* =====================================================
+   RESUMO DIÁRIO
+===================================================== */
+
+const dailySection = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  marginBottom: 20,
+  border:
+    "1px solid #eee"
+}
+
+const dailyHeader = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems:
+    "flex-start",
+  gap: 20,
+  marginBottom: 18,
+  flexWrap:
+    "wrap" as const
+}
+
+const dailyTitle = {
+  margin: 0,
+  fontSize: 19,
+  fontWeight: 600
+}
+
+const dailySubtitle = {
+  display: "block",
+  marginTop: 5,
+  color: "#888",
+  fontSize: 13
+}
+
+const dailyDate = {
+  color: "#a88320",
+  background:
+    "#fffbe6",
+  padding:
+    "8px 12px",
+  borderRadius: 10,
+  fontSize: 12,
+  textTransform:
+    "capitalize" as const
+}
+
+const dailyGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 10
+}
+
+const miniDaily = {
+  background:
+    "#fcfbf7",
+  border:
+    "1px solid #f1ead7",
+  borderRadius: 13,
+  padding: 15
+}
+
+const miniDailyLabel = {
+  display: "block",
+  color: "#777",
+  fontSize: 12,
+  marginBottom: 6
+}
+
+const miniDailyValue = {
+  fontSize: 20,
+  color: "#8d701e"
+}
+
+/* =====================================================
+   VENDAS DO DIA
+===================================================== */
+
+const sectionTop = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems:
+    "center",
+  gap: 15,
+  marginBottom: 15,
+  flexWrap:
+    "wrap" as const
+}
+
+const sectionTitle = {
+  margin: 0,
+  fontSize: 18
+}
+
+const sectionSubtitle = {
+  display: "block",
+  color: "#888",
+  fontSize: 12,
+  marginTop: 4
+}
+
+const sectionTotal = {
+  fontSize: 18,
+  color: "#9b7b2f"
+}
+
+const dailySalesList = {
+  borderTop:
+    "1px solid #eee"
+}
+
+const saleRow = {
+  display: "flex",
+  alignItems:
+    "center",
+  gap: 12,
+  padding:
+    "13px 0",
+  borderBottom:
+    "1px solid #f1f1f1"
+}
+
+const saleNumber = {
+  width: 32,
+  height: 32,
+  borderRadius: 10,
+  background:
+    "#f9f3dc",
+  display: "flex",
+  alignItems:
+    "center",
+  justifyContent:
+    "center",
+  color: "#9b7b2f",
+  fontSize: 11,
+  flexShrink: 0
+}
+
+const saleInfo = {
+  flex: 1,
+  minWidth: 0
+}
+
+const saleInfoStrong = {
+  display: "block"
+}
+
+const saleValue = {
+  fontSize: 15,
+  whiteSpace:
+    "nowrap" as const
+}
+
+const emptyState = {
+  padding: 35,
+  display: "flex",
+  flexDirection:
+    "column" as const,
+  alignItems:
+    "center",
+  justifyContent:
+    "center",
+  gap: 6,
+  color: "#777",
+  textAlign:
+    "center" as const
+}
+
+/* =====================================================
    GRÁFICOS
 ===================================================== */
 
 const profitGrid = {
   display: "grid",
-  gridTemplateColumns: "1fr",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(280px, 1fr))",
   gap: 16,
   marginBottom: 20,
   width: "100%"
@@ -992,17 +2153,22 @@ const chartCard = {
   padding: 20,
   borderRadius: 16,
   minWidth: 0,
-  overflow: "hidden" as const
+  overflow:
+    "hidden" as const,
+  border:
+    "1px solid #eee"
 }
 
 const chartTitle = {
   fontSize: 18,
+  marginTop: 0,
   marginBottom: 16
 }
 
 const barLabel = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   gap: 10,
   marginBottom: 6,
   fontSize: 13
@@ -1012,7 +2178,8 @@ const barBg = {
   height: 10,
   background: "#f1f1f1",
   borderRadius: 999,
-  overflow: "hidden" as const
+  overflow:
+    "hidden" as const
 }
 
 const barFill = {
@@ -1023,8 +2190,10 @@ const barFill = {
 }
 
 const miniMetric = {
-  padding: "12px 0",
-  borderBottom: "1px solid #f1f1f1"
+  padding:
+    "12px 0",
+  borderBottom:
+    "1px solid #f1f1f1"
 }
 
 const miniLabel = {
@@ -1049,10 +2218,12 @@ const insightGrid = {
 }
 
 const insightCard = {
-  background: "#fcfbf7",
+  background:
+    "#fcfbf7",
   padding: 16,
   borderRadius: 14,
-  border: "1px solid #f1ead7",
+  border:
+    "1px solid #f1ead7",
   minWidth: 0
 }
 
@@ -1065,11 +2236,12 @@ const insightTitle = {
 
 const insightText = {
   fontSize: 14,
-  overflowWrap: "anywhere" as const
+  overflowWrap:
+    "anywhere" as const
 }
 
 /* =====================================================
-   CLIENTES
+   SEÇÕES
 ===================================================== */
 
 const section = {
@@ -1078,8 +2250,15 @@ const section = {
   borderRadius: 16,
   marginBottom: 20,
   width: "100%",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const,
+  border:
+    "1px solid #eee"
 }
+
+/* =====================================================
+   CLIENTES
+===================================================== */
 
 const campaignGrid = {
   display: "grid",
@@ -1092,7 +2271,8 @@ const actionBtn = {
   padding: 14,
   border: "none",
   borderRadius: 12,
-  background: "#f9f3dc",
+  background:
+    "#f9f3dc",
   cursor: "pointer",
   minHeight: 50
 }
@@ -1109,17 +2289,24 @@ const riskCard = {
   background: "#fff",
   padding: 16,
   borderRadius: 14,
-  minWidth: 0
+  minWidth: 0,
+  border:
+    "1px solid #eee"
 }
 
 const listRow = {
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  justifyContent:
+    "space-between",
+  alignItems:
+    "center",
   gap: 15,
-  padding: "10px 0",
-  borderBottom: "1px solid #f1f1f1",
-  flexWrap: "wrap" as const
+  padding:
+    "10px 0",
+  borderBottom:
+    "1px solid #f1f1f1",
+  flexWrap:
+    "wrap" as const
 }
 
 const muted = {
