@@ -16,7 +16,7 @@ type Compra = {
   valor: number
   pagamento: string
   parcelas: number
-  pontosGerados: number
+  pontosgerados: number
   criadoem: string
   cupomusado: number
 }
@@ -28,21 +28,23 @@ type Props = {
   } | null
 }
 
+/*
+ * REGRA DO PROGRAMA DE FIDELIDADE
+ *
+ * 10 pontos = R$ 60,00 em cupom
+ *
+ * A geração dos pontos continua sendo:
+ * R$ 150,00 em compras = 1 ponto
+ */
 const VALOR_CUPOM = 60
 const PONTOS_POR_CUPOM = 10
-const PONTOS_POR_REAIS = 60
+const VALOR_PARA_GERAR_PONTO = 150
 
-function formatarMoeda(valor: number) {
-  return valor.toLocaleString("pt-BR", {
+function moeda(valor: number) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL"
   })
-}
-
-function formatarData(data: string) {
-  if (!data) return "-"
-
-  return new Date(data).toLocaleDateString("pt-BR")
 }
 
 export default function Compras({
@@ -53,29 +55,51 @@ export default function Compras({
 
   const [modal, setModal] = useState(false)
   const [modalInativos, setModalInativos] = useState(false)
+  const [modalReceita, setModalReceita] = useState(false)
 
   const [clienteSel, setClienteSel] =
     useState<Cliente | null>(null)
 
-  const [buscaCliente, setBuscaCliente] = useState("")
-  const [buscaVenda, setBuscaVenda] = useState("")
-  const [filtroMes, setFiltroMes] = useState("todos")
+  const [buscaCliente, setBuscaCliente] =
+    useState("")
+
+  const [buscaVenda, setBuscaVenda] =
+    useState("")
+
+  const [filtroMes, setFiltroMes] =
+    useState("todos")
+
   const [filtroPagamento, setFiltroPagamento] =
     useState("todos")
 
   const [valor, setValor] = useState(0)
-  const [pagamento, setPagamento] = useState("Pix")
-  const [parcelas, setParcelas] = useState(1)
+
+  const [pagamento, setPagamento] =
+    useState("Pix")
+
+  const [parcelas, setParcelas] =
+    useState(1)
+
+  const [usarCupom, setUsarCupom] =
+    useState(false)
 
   const [quantidadeCupons, setQuantidadeCupons] =
     useState(0)
 
-  const [tipoCadastro, setTipoCadastro] =
-    useState<"venda" | "receita">("venda")
+  const [valorReceita, setValorReceita] =
+    useState(0)
 
-  /* =========================
-     FETCH CLIENTES
-  ========================= */
+  const [descricaoReceita, setDescricaoReceita] =
+    useState("")
+
+  const [excluindo, setExcluindo] =
+    useState<string | null>(null)
+
+  /*
+   * =========================
+   * FETCH CLIENTES
+   * =========================
+   */
 
   async function fetchClientes() {
     const { data, error } = await supabase
@@ -100,9 +124,11 @@ export default function Compras({
     }
   }
 
-  /* =========================
-     FETCH COMPRAS
-  ========================= */
+  /*
+   * =========================
+   * FETCH COMPRAS
+   * =========================
+   */
 
   async function fetchCompras() {
     const { data, error } = await supabase
@@ -113,7 +139,7 @@ export default function Compras({
       })
 
     if (error) {
-      alert("Erro ao carregar vendas: " + error.message)
+      alert("Erro ao carregar compras: " + error.message)
       return
     }
 
@@ -121,32 +147,51 @@ export default function Compras({
       setCompras(
         data.map((c: any) => ({
           id: String(c.id),
-          clienteid: c.clienteid
-            ? String(c.clienteid)
-            : null,
+
+          clienteid:
+            c.clienteid === null ||
+            c.clienteid === undefined
+              ? null
+              : String(c.clienteid),
+
           cliente: c.cliente || "",
+
           cpf: c.cpf || "",
+
           valor: Number(c.valor || 0),
+
           pagamento: c.pagamento || "",
+
           parcelas: Number(c.parcelas || 1),
-          pontosgerados: Number(
-            c.pontosgerados || 0
-          ),
+
+          pontosgerados:
+            Number(c.pontosgerados || 0),
+
           criadoem: c.criadoem || "",
-          cupomusado: Number(c.cupomusado || 0)
+
+          cupomusado:
+            Number(c.cupomusado || 0)
         }))
       )
     }
   }
+
+  /*
+   * =========================
+   * CARREGAMENTO INICIAL
+   * =========================
+   */
 
   useEffect(() => {
     fetchClientes()
     fetchCompras()
   }, [])
 
-  /* =========================
-     CLIENTE VINDO DE OUTRA PÁGINA
-  ========================= */
+  /*
+   * =========================
+   * CLIENTE VINDO DA PÁGINA
+   * =========================
+   */
 
   useEffect(() => {
     if (
@@ -160,30 +205,35 @@ export default function Compras({
       )
 
       if (cliente) {
-        setTipoCadastro("venda")
         setClienteSel(cliente)
         setModal(true)
       }
     }
-  }, [compraSelecionada, clientes])
+  }, [
+    compraSelecionada,
+    clientes
+  ])
 
-  /* =========================
-     CLIENTES FILTRADOS
-  ========================= */
+  /*
+   * =========================
+   * CLIENTES FILTRADOS
+   * =========================
+   */
 
-  const clientesFiltrados = clientes.filter(
-    c =>
+  const clientesFiltrados =
+    clientes.filter(c =>
       c.nome
         .toLowerCase()
         .includes(
           buscaCliente.toLowerCase()
-        ) ||
-      c.cpf.includes(buscaCliente)
-  )
+        )
+    )
 
-  /* =========================
-     CUPONS
-  ========================= */
+  /*
+   * =========================
+   * CUPONS
+   * =========================
+   */
 
   const cuponsDisponiveis = clienteSel
     ? Math.floor(
@@ -192,16 +242,14 @@ export default function Compras({
       )
     : 0
 
-  const quantidadeCuponsValida =
-    Math.min(
-      quantidadeCupons,
-      cuponsDisponiveis
-    )
+  const saldoCupom =
+    cuponsDisponiveis *
+    VALOR_CUPOM
 
   const valorCupom =
-    tipoCadastro === "venda"
+    usarCupom
       ? Math.min(
-          quantidadeCuponsValida *
+          quantidadeCupons *
             VALOR_CUPOM,
           valor
         )
@@ -209,367 +257,558 @@ export default function Compras({
 
   const valorRestante =
     Math.max(
-      0,
-      valor - valorCupom
+      valor - valorCupom,
+      0
     )
 
-  /* =========================
-     PONTOS GERADOS
-     
-     A cada R$ 60 = 1 cupom = 10 pontos
-  ========================= */
-
+  /*
+   * R$ 150,00 = 1 ponto
+   */
   const pontosGerados =
-    tipoCadastro === "venda"
-      ? Math.floor(
-          valor / PONTOS_POR_REAIS
-        )
+    Math.floor(
+      valor /
+        VALOR_PARA_GERAR_PONTO
+    )
+
+  const pontosUsados =
+    usarCupom
+      ? quantidadeCupons *
+        PONTOS_POR_CUPOM
       : 0
 
-  /* =========================
-     ABRIR NOVO CADASTRO
-  ========================= */
-
-  function abrirNovaCompra() {
-    setTipoCadastro("venda")
-    setClienteSel(null)
-    setBuscaCliente("")
-    setValor(0)
-    setPagamento("Pix")
-    setParcelas(1)
-    setQuantidadeCupons(0)
-    setModal(true)
-  }
-
-  function abrirNovaReceita() {
-    setTipoCadastro("receita")
-    setClienteSel(null)
-    setBuscaCliente("")
-    setValor(0)
-    setPagamento("Receita")
-    setParcelas(1)
-    setQuantidadeCupons(0)
-    setModal(true)
-  }
-
-  /* =========================
-     FECHAR MODAL
-  ========================= */
-
-  function fecharModal() {
-    setModal(false)
-    setClienteSel(null)
-    setBuscaCliente("")
-    setValor(0)
-    setPagamento("Pix")
-    setParcelas(1)
-    setQuantidadeCupons(0)
-    setTipoCadastro("venda")
-  }
-
-  /* =========================
-     REGISTRAR VENDA / RECEITA
-  ========================= */
+  /*
+   * =========================
+   * REGISTRAR COMPRA
+   * =========================
+   */
 
   async function registrarCompra() {
+    if (!clienteSel) {
+      alert("Selecione um cliente.")
+      return
+    }
+
     if (valor <= 0) {
       alert("Digite um valor válido.")
       return
     }
 
     if (
-      tipoCadastro === "venda" &&
-      !clienteSel
-    ) {
-      alert("Selecione um cliente.")
-      return
-    }
-
-    if (
-      tipoCadastro === "venda" &&
-      quantidadeCuponsValida >
-        cuponsDisponiveis
+      quantidadeCupons >
+      cuponsDisponiveis
     ) {
       alert(
-        "A quantidade de cupons selecionada é maior que a disponível."
+        "O cliente não possui cupons suficientes."
       )
       return
     }
 
-    let pagamentoFinal = pagamento
-
     if (
-      tipoCadastro === "venda" &&
-      valorCupom > 0
+      usarCupom &&
+      quantidadeCupons <= 0
     ) {
-      if (valorRestante > 0) {
-        pagamentoFinal =
-          `${pagamento} + Cupom`
-      } else {
-        pagamentoFinal = "Cupom"
-      }
+      alert(
+        "Selecione a quantidade de cupons."
+      )
+      return
     }
 
-    /* =========================
-       INSERIR VENDA / RECEITA
-    ========================= */
+    const pagamentoFinal =
+      valorCupom > 0
+        ? valorRestante > 0
+          ? `${pagamento} + Cupom`
+          : "Cupom"
+        : pagamento
 
-    const { data: cadastroCriado, error } =
-      await supabase
-        .from("compras")
-        .insert([
-          {
-            clienteid:
-              tipoCadastro === "venda"
-                ? clienteSel?.id
-                : null,
+    const novosPontos =
+      clienteSel.pontos -
+      pontosUsados +
+      pontosGerados
 
-            cliente:
-              tipoCadastro === "venda"
-                ? clienteSel?.nome
-                : "Receita sem venda",
+    if (novosPontos < 0) {
+      alert(
+        "Os pontos do cliente não podem ficar negativos."
+      )
+      return
+    }
 
-            cpf:
-              tipoCadastro === "venda"
-                ? clienteSel?.cpf
-                : "",
+    /*
+     * =========================
+     * CRIA A COMPRA
+     * =========================
+     */
 
-            valor,
+    const {
+      data: compraCriada,
+      error
+    } = await supabase
+      .from("compras")
+      .insert([
+        {
+          clienteid:
+            clienteSel.id,
 
-            pagamento:
-              tipoCadastro === "receita"
-                ? "Receita"
-                : pagamentoFinal,
+          cliente:
+            clienteSel.nome,
 
-            parcelas:
-              tipoCadastro === "venda"
-                ? parcelas
-                : 1,
+          cpf:
+            clienteSel.cpf,
 
-            pontosgerados,
+          valor,
 
-            cupomusado:
-              tipoCadastro === "venda"
-                ? valorCupom
-                : 0,
+          pagamento:
+            pagamentoFinal,
 
-            criadoem:
-              new Date().toISOString()
-          }
-        ])
-        .select()
-        .single()
+          parcelas,
+
+          pontosgerados:
+            pontosGerados,
+
+          cupomusado:
+            valorCupom,
+
+          criadoem:
+            new Date().toISOString()
+        }
+      ])
+      .select()
+      .single()
 
     if (error) {
       alert(
-        "Erro ao registrar: " +
+        "Erro ao registrar compra: " +
           error.message
       )
       return
     }
 
-    /* =========================
-       ATUALIZAR PONTOS DO CLIENTE
-    ========================= */
+    /*
+     * =========================
+     * ATUALIZA PONTOS
+     * =========================
+     */
 
-    if (
-      tipoCadastro === "venda" &&
-      clienteSel
-    ) {
-      const pontosUsados =
-        quantidadeCuponsValida *
-        PONTOS_POR_CUPOM
-
-      const novosPontos = Math.max(
-        0,
-        clienteSel.pontos -
-          pontosUsados +
-          pontosGerados
+    const {
+      error: erroCliente
+    } = await supabase
+      .from("clientes")
+      .update({
+        pontos:
+          novosPontos
+      })
+      .eq(
+        "id",
+        clienteSel.id
       )
 
-      const {
-        error: erroCliente
-      } = await supabase
-        .from("clientes")
-        .update({
-          pontos: novosPontos
-        })
+    if (erroCliente) {
+      /*
+       * Se a compra foi criada,
+       * mas os pontos falharam,
+       * tentamos remover a compra.
+       */
+      await supabase
+        .from("compras")
+        .delete()
         .eq(
           "id",
+          compraCriada.id
+        )
+
+      alert(
+        "Erro ao atualizar os pontos do cliente: " +
+          erroCliente.message
+      )
+
+      return
+    }
+
+    /*
+     * =========================
+     * REGISTRAR CUPONS UTILIZADOS
+     * =========================
+     */
+
+    if (quantidadeCupons > 0) {
+      const {
+        count: cuponsAnteriores,
+        error: countError
+      } = await supabase
+        .from("trocas")
+        .select("*", {
+          count: "exact",
+          head: true
+        })
+        .eq(
+          "clienteid",
           clienteSel.id
         )
 
-      if (erroCliente) {
+      if (countError) {
         alert(
-          "A venda foi registrada, mas houve erro ao atualizar os pontos: " +
-            erroCliente.message
+          "Compra salva, mas não foi possível registrar os cupons: " +
+            countError.message
         )
-        return
-      }
+      } else {
+        const trocas =
+          Array.from(
+            {
+              length:
+                quantidadeCupons
+            },
+            (_, i) => ({
+              clienteid:
+                clienteSel.id,
 
-      /* =========================
-         REGISTRAR CUPONS UTILIZADOS
-      ========================= */
+              cliente:
+                clienteSel.nome,
 
-      if (
-        quantidadeCuponsValida > 0
-      ) {
+              cpf:
+                clienteSel.cpf,
+
+              compraid:
+                compraCriada.id,
+
+              cupomnumero:
+                (cuponsAnteriores || 0) +
+                i +
+                1,
+
+              valorcupom:
+                VALOR_CUPOM,
+
+              tipo:
+                "Cupom Fidelidade",
+
+              status:
+                "Concluído",
+
+              criadoem:
+                new Date().toISOString()
+            })
+          )
+
         const {
-          count: cuponsAnteriores,
-          error: countError
+          error: erroTrocas
         } = await supabase
           .from("trocas")
-          .select("*", {
-            count: "exact",
-            head: true
-          })
-          .eq(
-            "clienteid",
-            clienteSel.id
-          )
+          .insert(trocas)
 
-        if (countError) {
+        if (erroTrocas) {
           alert(
-            "A venda foi salva, mas não foi possível registrar os cupons: " +
-              countError.message
+            "Compra salva, mas ocorreu um erro ao registrar os cupons: " +
+              erroTrocas.message
           )
-        } else {
-          const trocas =
-            Array.from(
-              {
-                length:
-                  quantidadeCuponsValida
-              },
-              (_, i) => ({
-                clienteid:
-                  clienteSel.id,
-
-                cliente:
-                  clienteSel.nome,
-
-                cpf:
-                  clienteSel.cpf,
-
-                compraid:
-                  cadastroCriado.id,
-
-                cupomnumero:
-                  (cuponsAnteriores ||
-                    0) +
-                  i +
-                  1,
-
-                valorcupom:
-                  VALOR_CUPOM,
-
-                tipo:
-                  "Cupom Fidelidade",
-
-                status:
-                  "Concluído",
-
-                criadoem:
-                  new Date().toISOString()
-              })
-            )
-
-          const {
-            error: erroTrocas
-          } = await supabase
-            .from("trocas")
-            .insert(trocas)
-
-          if (erroTrocas) {
-            alert(
-              "A venda foi salva, mas houve erro ao registrar os cupons: " +
-                erroTrocas.message
-            )
-          }
         }
       }
     }
 
     alert(
-      tipoCadastro === "receita"
-        ? "Receita registrada com sucesso!"
-        : "Venda registrada com sucesso!"
+      "Compra registrada com sucesso!"
     )
 
-    fecharModal()
+    fecharModalCompra()
 
     await fetchClientes()
     await fetchCompras()
   }
 
-  /* =========================
-     EXCLUIR VENDA / RECEITA
-  ========================= */
+  /*
+   * =========================
+   * REGISTRAR RECEITA SEM VENDA
+   * =========================
+   */
+
+  async function registrarReceita() {
+    if (valorReceita <= 0) {
+      alert(
+        "Digite um valor válido para a receita."
+      )
+      return
+    }
+
+    if (
+      descricaoReceita.trim() === ""
+    ) {
+      alert(
+        "Digite uma descrição para a receita."
+      )
+      return
+    }
+
+    /*
+     * Como a tabela atual utiliza
+     * o campo "cliente" para exibição,
+     * a descrição é armazenada nele.
+     *
+     * A receita:
+     * - não possui cliente
+     * - não gera pontos
+     * - não utiliza cupom
+     */
+
+    const {
+      error
+    } = await supabase
+      .from("compras")
+      .insert([
+        {
+          clienteid:
+            null,
+
+          cliente:
+            descricaoReceita.trim(),
+
+          cpf:
+            "",
+
+          valor:
+            valorReceita,
+
+          pagamento:
+            "Receita",
+
+          parcelas:
+            1,
+
+          pontosgerados:
+            0,
+
+          cupomusado:
+            0,
+
+          criadoem:
+            new Date().toISOString()
+        }
+      ])
+
+    if (error) {
+      alert(
+        "Erro ao cadastrar receita: " +
+          error.message
+      )
+      return
+    }
+
+    alert(
+      "Receita cadastrada com sucesso!"
+    )
+
+    setModalReceita(false)
+
+    setValorReceita(0)
+
+    setDescricaoReceita("")
+
+    await fetchCompras()
+  }
+
+  /*
+   * =========================
+   * FECHAR MODAL COMPRA
+   * =========================
+   */
+
+  function fecharModalCompra() {
+    setModal(false)
+
+    setClienteSel(null)
+
+    setValor(0)
+
+    setPagamento("Pix")
+
+    setParcelas(1)
+
+    setUsarCupom(false)
+
+    setQuantidadeCupons(0)
+
+    setBuscaCliente("")
+  }
+
+  /*
+   * =========================
+   * EXCLUIR COMPRA / RECEITA
+   * =========================
+   */
 
   async function excluirCompra(
     compra: Compra
   ) {
-    const confirmar = window.confirm(
-      `Tem certeza que deseja excluir este registro?\n\n` +
-        `${compra.cliente || "Receita sem venda"}\n` +
-        `${formatarMoeda(compra.valor)}\n` +
-        `${formatarData(compra.criadoem)}\n\n` +
-        `Essa ação não poderá ser desfeita.`
-    )
+    const ehReceita =
+      compra.pagamento ===
+      "Receita"
 
-    if (!confirmar) return
-
-    /* =========================
-       DEVOLVER PONTOS AO CLIENTE
-    ========================= */
-
-    if (compra.clienteid) {
-      const cliente = clientes.find(
-        c =>
-          c.id ===
-          compra.clienteid
+    const confirmacao =
+      window.confirm(
+        ehReceita
+          ? `Tem certeza que deseja excluir esta receita?\n\nDescrição: ${
+              compra.cliente ||
+              "Sem descrição"
+            }\nValor: ${moeda(
+              compra.valor
+            )}\nData: ${new Date(
+              compra.criadoem
+            ).toLocaleDateString(
+              "pt-BR"
+            )}\n\nEssa ação não poderá ser desfeita.`
+          : `Tem certeza que deseja excluir esta venda?\n\nCliente: ${
+              compra.cliente ||
+              "Sem cliente"
+            }\nValor: ${moeda(
+              compra.valor
+            )}\nData: ${new Date(
+              compra.criadoem
+            ).toLocaleDateString(
+              "pt-BR"
+            )}\n\nOs pontos gerados serão estornados e os cupons utilizados serão devolvidos.\n\nEssa ação não poderá ser desfeita.`
       )
 
-      if (cliente) {
-        const pontosDevolvidos =
-          Math.floor(
-            compra.cupomusado /
-              VALOR_CUPOM
-          ) *
-          PONTOS_POR_CUPOM
+    if (!confirmacao) {
+      return
+    }
 
-        const novosPontos =
-          Math.max(
-            0,
-            cliente.pontos -
-              compra.pontosgerados +
-              pontosDevolvidos
-          )
+    setExcluindo(compra.id)
 
-        const {
-          error: erroPontos
-        } = await supabase
-          .from("clientes")
-          .update({
-            pontos: novosPontos
-          })
-          .eq(
-            "id",
-            cliente.id
-          )
+    /*
+     * =========================
+     * RECEITA
+     * =========================
+     *
+     * Receita não possui pontos
+     * nem cupons para estornar.
+     */
 
-        if (erroPontos) {
-          alert(
-            "Não foi possível atualizar os pontos do cliente: " +
-              erroPontos.message
+    if (ehReceita) {
+      const {
+        error
+      } = await supabase
+        .from("compras")
+        .delete()
+        .eq(
+          "id",
+          compra.id
+        )
+
+      if (error) {
+        alert(
+          "Erro ao excluir receita: " +
+            error.message
+        )
+
+        setExcluindo(null)
+
+        return
+      }
+
+      alert(
+        "Receita excluída com sucesso!"
+      )
+
+      setExcluindo(null)
+
+      await fetchCompras()
+
+      return
+    }
+
+    /*
+     * =========================
+     * ENCONTRAR CLIENTE
+     * =========================
+     */
+
+    let clienteAtual =
+      compra.clienteid
+        ? clientes.find(
+            c =>
+              c.id ===
+              compra.clienteid
           )
-          return
+        : null
+
+    /*
+     * Se o cliente não estiver
+     * carregado no estado, buscamos
+     * diretamente no Supabase.
+     */
+
+    if (
+      compra.clienteid &&
+      !clienteAtual
+    ) {
+      const {
+        data
+      } = await supabase
+        .from("clientes")
+        .select(
+          "id,nome,cpf,pontos"
+        )
+        .eq(
+          "id",
+          compra.clienteid
+        )
+        .single()
+
+      if (data) {
+        clienteAtual = {
+          id: String(data.id),
+          nome: data.nome || "",
+          cpf: data.cpf || "",
+          pontos:
+            Number(
+              data.pontos || 0
+            )
         }
       }
     }
 
-    /* =========================
-       EXCLUIR TROCAS/CUPONS
-    ========================= */
+    /*
+     * =========================
+     * CALCULAR ESTORNO
+     * =========================
+     */
+
+    let novosPontos =
+      clienteAtual
+        ? clienteAtual.pontos
+        : 0
+
+    if (clienteAtual) {
+      const cuponsUsados =
+        compra.cupomusado > 0
+          ? Math.ceil(
+              compra.cupomusado /
+                VALOR_CUPOM
+            )
+          : 0
+
+      const pontosADevolver =
+        cuponsUsados *
+        PONTOS_POR_CUPOM
+
+      novosPontos =
+        clienteAtual.pontos -
+        compra.pontosgerados +
+        pontosADevolver
+
+      if (novosPontos < 0) {
+        alert(
+          "Não foi possível excluir a venda porque os pontos atuais do cliente não permitem desfazer essa operação."
+        )
+
+        setExcluindo(null)
+
+        return
+      }
+    }
+
+    /*
+     * =========================
+     * EXCLUIR CUPONS RELACIONADOS
+     * =========================
+     */
 
     const {
       error: erroTrocas
@@ -581,17 +820,34 @@ export default function Compras({
         compra.id
       )
 
-    if (erroTrocas) {
+    /*
+     * Se a tabela de trocas não
+     * existir, continuamos.
+     *
+     * Outros erros são informados.
+     */
+
+    if (
+      erroTrocas &&
+      !erroTrocas.message
+        .toLowerCase()
+        .includes("relation")
+    ) {
       alert(
-        "Não foi possível excluir os cupons vinculados: " +
+        "Erro ao excluir os cupons relacionados: " +
           erroTrocas.message
       )
+
+      setExcluindo(null)
+
       return
     }
 
-    /* =========================
-       EXCLUIR VENDA
-    ========================= */
+    /*
+     * =========================
+     * EXCLUIR VENDA
+     * =========================
+     */
 
     const {
       error: erroCompra
@@ -605,23 +861,65 @@ export default function Compras({
 
     if (erroCompra) {
       alert(
-        "Erro ao excluir registro: " +
+        "Erro ao excluir venda: " +
           erroCompra.message
       )
+
+      setExcluindo(null)
+
       return
     }
 
+    /*
+     * =========================
+     * ESTORNAR PONTOS
+     * =========================
+     */
+
+    if (clienteAtual) {
+      const {
+        error: erroPontos
+      } = await supabase
+        .from("clientes")
+        .update({
+          pontos:
+            novosPontos
+        })
+        .eq(
+          "id",
+          clienteAtual.id
+        )
+
+      if (erroPontos) {
+        alert(
+          "A venda foi excluída, mas ocorreu um erro ao estornar os pontos: " +
+            erroPontos.message
+        )
+
+        setExcluindo(null)
+
+        await fetchClientes()
+        await fetchCompras()
+
+        return
+      }
+    }
+
     alert(
-      "Registro excluído com sucesso!"
+      "Venda excluída com sucesso!"
     )
+
+    setExcluindo(null)
 
     await fetchClientes()
     await fetchCompras()
   }
 
-  /* =========================
-     FILTROS
-  ========================= */
+  /*
+   * =========================
+   * FILTROS
+   * =========================
+   */
 
   const comprasFiltradas =
     useMemo(() => {
@@ -630,6 +928,7 @@ export default function Compras({
           const busca =
             buscaVenda
               .toLowerCase()
+              .trim()
 
           const nomeMatch =
             compra.cliente
@@ -647,7 +946,10 @@ export default function Compras({
           const mesCompra =
             String(
               data.getMonth() + 1
-            ).padStart(2, "0")
+            ).padStart(
+              2,
+              "0"
+            )
 
           const mesMatch =
             filtroMes ===
@@ -677,9 +979,11 @@ export default function Compras({
       filtroPagamento
     ])
 
-  /* =========================
-     FATURAMENTO POR MÊS
-  ========================= */
+  /*
+   * =========================
+   * FATURAMENTO POR MÊS
+   * =========================
+   */
 
   const vendasPorMes =
     useMemo(() => {
@@ -698,12 +1002,16 @@ export default function Compras({
           const mes =
             String(
               data.getMonth() + 1
-            ).padStart(2, "0")
+            ).padStart(
+              2,
+              "0"
+            )
 
           if (
             filtroMes !==
               "todos" &&
-            mes !== filtroMes
+            mes !==
+              filtroMes
           ) {
             return
           }
@@ -719,19 +1027,22 @@ export default function Compras({
 
       return Object.entries(
         mapa
-      ).sort((a, b) =>
-        b[0].localeCompare(
-          a[0]
-        )
+      ).sort(
+        (a, b) =>
+          b[0].localeCompare(
+            a[0]
+          )
       )
     }, [
       compras,
       filtroMes
     ])
 
-  /* =========================
-     CLIENTES INATIVOS
-  ========================= */
+  /*
+   * =========================
+   * CLIENTES INATIVOS
+   * =========================
+   */
 
   const hoje = new Date()
 
@@ -757,7 +1068,9 @@ export default function Compras({
       const ultima =
         comprasCliente[0]
 
-      if (!ultima) return true
+      if (!ultima) {
+        return true
+      }
 
       const dias =
         (hoje.getTime() -
@@ -789,36 +1102,62 @@ export default function Compras({
       )[0]
   }
 
-  /* =========================
-     RENDER
-  ========================= */
+  /*
+   * =========================
+   * RENDER
+   * =========================
+   */
 
   return (
     <div style={container}>
+      <style>
+        {`
+          @media (max-width: 900px) {
+            .compras-filtros {
+              grid-template-columns: 1fr !important;
+            }
+
+            .compra-card {
+              grid-template-columns: 1fr 1fr !important;
+            }
+          }
+
+          @media (max-width: 600px) {
+            .compras-container {
+              padding: 18px !important;
+            }
+
+            .compra-card {
+              grid-template-columns: 1fr !important;
+            }
+
+            .header-buttons {
+              width: 100%;
+            }
+
+            .header-buttons button {
+              flex: 1;
+            }
+          }
+        `}
+      </style>
 
       {/* =========================
           CLIENTES INATIVOS
       ========================= */}
 
-      {clientesInativos.length >
-        0 && (
-        <div
-          style={notifBar}
-        >
+      {clientesInativos.length > 0 && (
+        <div style={notifBar}>
           <span>
             🔔{" "}
-            {
-              clientesInativos.length
-            }{" "}
+            {clientesInativos.length}{" "}
             clientes inativos
           </span>
 
           <button
             style={notifBtn}
             onClick={() =>
-              setModalInativos(
-                true
-              )
+              setModalInativos(true)
             }
           >
             Ver
@@ -831,18 +1170,18 @@ export default function Compras({
       ========================= */}
 
       <div style={header}>
-
         <h1 style={title}>
           Compras
         </h1>
 
         <div
+          className="header-buttons"
           style={headerButtons}
         >
           <button
             style={btnSecondary}
-            onClick={
-              abrirNovaReceita
+            onClick={() =>
+              setModalReceita(true)
             }
           >
             Nova receita
@@ -850,14 +1189,13 @@ export default function Compras({
 
           <button
             style={btnSmall}
-            onClick={
-              abrirNovaCompra
+            onClick={() =>
+              setModal(true)
             }
           >
             Nova compra
           </button>
         </div>
-
       </div>
 
       {/* =========================
@@ -865,10 +1203,10 @@ export default function Compras({
       ========================= */}
 
       <div style={dashGrid}>
-
         <Dash
+          className="dash-faturamento"
           label="Faturamento"
-          value={formatarMoeda(
+          value={moeda(
             comprasFiltradas.reduce(
               (total, compra) =>
                 total +
@@ -881,11 +1219,7 @@ export default function Compras({
         <Dash
           label="Vendas"
           value={
-            comprasFiltradas.filter(
-              compra =>
-                compra.pagamento !==
-                "Receita"
-            ).length
+            comprasFiltradas.length
           }
         />
 
@@ -900,12 +1234,11 @@ export default function Compras({
                 )
                 .map(
                   c =>
-                    c.cpf
+                    c.clienteid
                 )
             ).size
           }
         />
-
       </div>
 
       {/* =========================
@@ -913,22 +1246,18 @@ export default function Compras({
       ========================= */}
 
       <div style={section}>
-
-        <h3
-          style={sectionTitle}
-        >
+        <h3 style={sectionTitle}>
           Faturamento por mês
         </h3>
 
         <div style={mesGrid}>
-
           {vendasPorMes.length ===
             0 && (
             <div
               style={emptyText}
             >
-              Nenhum registro
-              encontrado.
+              Nenhuma venda
+              encontrada.
             </div>
           )}
 
@@ -945,24 +1274,24 @@ export default function Compras({
                 <div
                   style={mesValor}
                 >
-                  {formatarMoeda(
-                    total
+                  {moeda(
+                    Number(total)
                   )}
                 </div>
               </div>
             )
           )}
-
         </div>
-
       </div>
 
       {/* =========================
           FILTROS
       ========================= */}
 
-      <div style={filtrosBar}>
-
+      <div
+        className="compras-filtros"
+        style={filtrosBar}
+      >
         <input
           placeholder="Buscar por cliente ou CPF"
           value={buscaVenda}
@@ -1067,7 +1396,7 @@ export default function Compras({
             Cupom
           </option>
 
-          <option value="Fiado">
+          <option value="Em aberto">
             Em aberto (Fiado)
           </option>
 
@@ -1075,7 +1404,6 @@ export default function Compras({
             Receita
           </option>
         </select>
-
       </div>
 
       {/* =========================
@@ -1083,24 +1411,20 @@ export default function Compras({
       ========================= */}
 
       <div style={section}>
-
-        <h3
-          style={sectionTitle}
-        >
+        <h3 style={sectionTitle}>
           Histórico de vendas
         </h3>
 
         <div
           style={listaCompras}
         >
-
           {comprasFiltradas.length ===
             0 && (
             <div
               style={emptyText}
             >
-              Nenhum registro
-              encontrado.
+              Nenhuma venda
+              encontrada.
             </div>
           )}
 
@@ -1108,10 +1432,10 @@ export default function Compras({
             compra => (
               <div
                 key={compra.id}
+                className="compra-card"
                 style={compraCard}
               >
-
-                {/* CLIENTE */}
+                {/* CLIENTE / RECEITA */}
 
                 <div
                   style={
@@ -1119,36 +1443,50 @@ export default function Compras({
                   }
                 >
                   <strong>
-                    {compra.cliente ||
-                      "Receita sem venda"}
+                    {compra.pagamento ===
+                    "Receita"
+                      ? "Receita"
+                      : compra.cliente ||
+                        "Sem cliente"}
                   </strong>
 
-                  {compra.cpf && (
+                  {compra.pagamento ===
+                    "Receita" ? (
                     <div
                       style={muted}
                     >
-                      {compra.cpf}
+                      {
+                        compra.cliente
+                      }
                     </div>
+                  ) : (
+                    compra.cpf && (
+                      <div
+                        style={muted}
+                      >
+                        {
+                          compra.cpf
+                        }
+                      </div>
+                    )
                   )}
 
                   {compra.pagamento ===
                     "Receita" && (
-                    <div
+                    <span
                       style={
-                        receitaTag
+                        receitaBadge
                       }
                     >
                       Receita
-                    </div>
+                    </span>
                   )}
                 </div>
 
                 {/* VALOR */}
 
                 <div
-                  style={
-                    compraInfo
-                  }
+                  style={compraInfo}
                 >
                   <span
                     style={
@@ -1159,7 +1497,7 @@ export default function Compras({
                   </span>
 
                   <strong>
-                    {formatarMoeda(
+                    {moeda(
                       compra.valor
                     )}
                   </strong>
@@ -1167,8 +1505,10 @@ export default function Compras({
                   <div
                     style={muted}
                   >
-                    {formatarData(
+                    {new Date(
                       compra.criadoem
+                    ).toLocaleDateString(
+                      "pt-BR"
                     )}
                   </div>
                 </div>
@@ -1176,9 +1516,7 @@ export default function Compras({
                 {/* PAGAMENTO */}
 
                 <div
-                  style={
-                    compraInfo
-                  }
+                  style={compraInfo}
                 >
                   <span
                     style={
@@ -1190,7 +1528,7 @@ export default function Compras({
 
                   <div>
                     {compra.pagamento ===
-                    "Fiado"
+                    "Em aberto"
                       ? "Em aberto (Fiado)"
                       : compra.pagamento}
                   </div>
@@ -1208,9 +1546,7 @@ export default function Compras({
                 {/* PONTOS */}
 
                 <div
-                  style={
-                    compraInfo
-                  }
+                  style={compraInfo}
                 >
                   <span
                     style={
@@ -1220,82 +1556,82 @@ export default function Compras({
                     Fidelidade
                   </span>
 
-                  {compra.pontosgerados >
-                    0 && (
-                    <div
-                      style={pontos}
-                    >
-                      +
-                      {
-                        compra.pontosgerados
-                      }{" "}
-                      pts
-                    </div>
-                  )}
-
-                  {compra.cupomusado >
-                    0 && (
+                  {compra.pagamento ===
+                  "Receita" ? (
                     <div
                       style={muted}
                     >
-                      Cupom:{" "}
-                      {formatarMoeda(
-                        compra.cupomusado
-                      )}
+                      Sem pontos
                     </div>
-                  )}
-
-                  {compra.pontosgerados ===
-                    0 &&
-                    compra.cupomusado ===
-                      0 && (
+                  ) : (
+                    <>
                       <div
-                        style={muted}
+                        style={pontos}
                       >
-                        -
+                        {compra.pontosgerados >
+                        0
+                          ? `+${compra.pontosgerados} pts`
+                          : "Sem pontos"}
                       </div>
-                    )}
+
+                      {compra.cupomusado >
+                        0 && (
+                        <div
+                          style={muted}
+                        >
+                          Cupom:{" "}
+                          {moeda(
+                            compra.cupomusado
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 {/* EXCLUIR */}
 
                 <div
                   style={
-                    excluirContainer
+                    deleteContainer
                   }
                 >
                   <button
+                    type="button"
                     style={
-                      btnExcluir
+                      deleteBtn
+                    }
+                    disabled={
+                      excluindo ===
+                      compra.id
                     }
                     onClick={() =>
                       excluirCompra(
                         compra
                       )
                     }
-                    title="Excluir registro"
                   >
-                    Excluir
+                    {excluindo ===
+                    compra.id
+                      ? "Excluindo..."
+                      : "Excluir"}
                   </button>
                 </div>
-
               </div>
             )
           )}
-
         </div>
-
       </div>
 
       {/* =========================
-          MODAL NOVA COMPRA / RECEITA
+          MODAL NOVA COMPRA
       ========================= */}
 
       {modal && (
         <div
           style={overlay}
           onClick={
-            fecharModal
+            fecharModalCompra
           }
         >
           <div
@@ -1304,7 +1640,6 @@ export default function Compras({
               e.stopPropagation()
             }
           >
-
             <div
               style={
                 modalHeader
@@ -1315,276 +1650,308 @@ export default function Compras({
                   margin: 0
                 }}
               >
-                {tipoCadastro ===
-                "receita"
-                  ? "Nova receita"
-                  : "Nova compra"}
+                Nova compra
               </h2>
 
               <button
-                style={
-                  fecharBtn
-                }
+                style={closeBtn}
                 onClick={
-                  fecharModal
+                  fecharModalCompra
                 }
               >
                 ×
               </button>
             </div>
 
-            {/* TIPO */}
+            {/* BUSCAR CLIENTE */}
+
+            <input
+              placeholder="Buscar cliente"
+              value={
+                buscaCliente
+              }
+              onChange={e =>
+                setBuscaCliente(
+                  e.target.value
+                )
+              }
+              style={input}
+            />
 
             <div
               style={
-                tipoToggle
+                clienteGrid
               }
             >
-              <button
-                style={
-                  tipoCadastro ===
-                  "venda"
-                    ? tipoAtivo
-                    : tipoInativo
-                }
-                onClick={() =>
-                  setTipoCadastro(
-                    "venda"
-                  )
-                }
-              >
-                Venda
-              </button>
+              {clientesFiltrados.map(
+                c => (
+                  <div
+                    key={c.id}
+                    style={{
+                      ...clienteCard,
+                      border:
+                        clienteSel?.id ===
+                        c.id
+                          ? "2px solid #d4af37"
+                          : "1px solid #eee"
+                    }}
+                    onClick={() =>
+                      setClienteSel(
+                        c
+                      )
+                    }
+                  >
+                    <strong>
+                      {c.nome}
+                    </strong>
 
-              <button
-                style={
-                  tipoCadastro ===
-                  "receita"
-                    ? tipoAtivo
-                    : tipoInativo
-                }
-                onClick={() =>
-                  setTipoCadastro(
-                    "receita"
-                  )
-                }
-              >
-                Receita sem venda
-              </button>
+                    <div
+                      style={
+                        muted
+                      }
+                    >
+                      {c.pontos}{" "}
+                      pontos
+                    </div>
+                  </div>
+                )
+              )}
+
+              {clientesFiltrados.length ===
+                0 && (
+                <div
+                  style={
+                    emptyText
+                  }
+                >
+                  Nenhum cliente
+                  encontrado.
+                </div>
+              )}
             </div>
 
-            {/* CLIENTE */}
+            {/* CLIENTE SELECIONADO */}
 
-            {tipoCadastro ===
-              "venda" && (
+            {clienteSel && (
               <>
-                <input
-                  placeholder="Buscar cliente por nome ou CPF"
-                  value={
-                    buscaCliente
+                <div
+                  style={
+                    clienteSelecionado
                   }
-                  onChange={e =>
-                    setBuscaCliente(
-                      e.target.value
-                    )
-                  }
-                  style={input}
-                />
+                >
+                  <strong>
+                    {
+                      clienteSel.nome
+                    }
+                  </strong>
+
+                  <span
+                    style={
+                      clientePontos
+                    }
+                  >
+                    {
+                      clienteSel.pontos
+                    }{" "}
+                    pontos
+                  </span>
+                </div>
+
+                {/* CUPONS */}
 
                 <div
                   style={
-                    clienteGrid
+                    cupomBox
                   }
                 >
-                  {clientesFiltrados.map(
-                    c => (
-                      <div
-                        key={c.id}
-                        style={{
-                          ...clienteCard,
-                          border:
-                            clienteSel?.id ===
-                            c.id
-                              ? "2px solid #d4af37"
-                              : "1px solid #eee"
-                        }}
-                        onClick={() =>
-                          setClienteSel(
-                            c
-                          )
+                  <div>
+                    <strong>
+                      Programa de
+                      fidelidade
+                    </strong>
+
+                    <div
+                      style={
+                        muted
+                      }
+                    >
+                      {
+                        cuponsDisponiveis
+                      }{" "}
+                      cupons disponíveis
+                      {" • "}
+                      crédito de{" "}
+                      {moeda(
+                        saldoCupom
+                      )}
+                    </div>
+
+                    <div
+                      style={
+                        cupomRegra
+                      }
+                    >
+                      10 pontos =
+                      R$ 60,00
+                    </div>
+                  </div>
+
+                  {cuponsDisponiveis >
+                    0 && (
+                    <label
+                      style={
+                        cupomLabel
+                      }
+                    >
+                      <span>
+                        Usar cupom
+                      </span>
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          usarCupom
                         }
-                      >
-                        <strong>
-                          {c.nome}
-                        </strong>
+                        onChange={e => {
+                          const ativo =
+                            e.target
+                              .checked
 
-                        <div
-                          style={
-                            muted
-                          }
-                        >
-                          {c.cpf}
-                        </div>
+                          setUsarCupom(
+                            ativo
+                          )
 
-                        <div
-                          style={
-                            pontosCliente
+                          if (!ativo) {
+                            setQuantidadeCupons(
+                              0
+                            )
+                          } else if (
+                            quantidadeCupons ===
+                            0
+                          ) {
+                            setQuantidadeCupons(
+                              1
+                            )
                           }
-                        >
-                          {
-                            c.pontos
-                          }{" "}
-                          pontos
-                        </div>
-                      </div>
-                    )
+                        }}
+                      />
+                    </label>
                   )}
                 </div>
 
-                {clienteSel && (
-                  <div
-                    style={
-                      cupomBox
-                    }
-                  >
-                    <div>
-                      <strong>
-                        Programa de
-                        fidelidade
-                      </strong>
+                {/* QUANTIDADE DE CUPONS */}
 
-                      <div
+                {usarCupom &&
+                  cuponsDisponiveis >
+                    0 && (
+                    <div
+                      style={
+                        cupomQuantidadeBox
+                      }
+                    >
+                      <label
                         style={
-                          muted
+                          fieldLabel
                         }
                       >
-                        Cupons disponíveis:{" "}
-                        {
-                          cuponsDisponiveis
-                        }
-                      </div>
+                        Quantidade de
+                        cupons
+                      </label>
 
-                      <div
-                        style={
-                          muted
+                      <select
+                        style={input}
+                        value={
+                          quantidadeCupons
+                        }
+                        onChange={e =>
+                          setQuantidadeCupons(
+                            Number(
+                              e.target
+                                .value
+                            )
+                          )
                         }
                       >
-                        Cada cupom vale{" "}
-                        {formatarMoeda(
-                          VALOR_CUPOM
-                        )}
-                      </div>
-                    </div>
+                        {Array.from(
+                          {
+                            length:
+                              cuponsDisponiveis
+                          },
+                          (
+                            _,
+                            index
+                          ) => {
+                            const quantidade =
+                              index +
+                              1
 
-                    {cuponsDisponiveis >
-                      0 && (
-                      <div>
-                        <label
-                          style={
-                            cupomLabel
-                          }
-                        >
-                          Quantidade de
-                          cupons
-                        </label>
-
-                        <select
-                          style={
-                            input
-                          }
-                          value={
-                            quantidadeCupons
-                          }
-                          onChange={e =>
-                            setQuantidadeCupons(
-                              Number(
-                                e
-                                  .target
-                                  .value
-                              )
+                            return (
+                              <option
+                                key={
+                                  quantidade
+                                }
+                                value={
+                                  quantidade
+                                }
+                              >
+                                {
+                                  quantidade
+                                }{" "}
+                                {quantidade ===
+                                1
+                                  ? "cupom"
+                                  : "cupons"}{" "}
+                                —{" "}
+                                {moeda(
+                                  quantidade *
+                                    VALOR_CUPOM
+                                )}
+                              </option>
                             )
                           }
-                        >
-                          <option value={0}>
-                            Não usar cupom
-                          </option>
+                        )}
+                      </select>
+                    </div>
+                  )}
 
-                          {Array.from(
-                            {
-                              length:
-                                cuponsDisponiveis
-                            },
-                            (
-                              _,
-                              index
-                            ) => {
-                              const qtd =
-                                index +
-                                1
+                {/* VALOR */}
 
-                              return (
-                                <option
-                                  key={
-                                    qtd
-                                  }
-                                  value={
-                                    qtd
-                                  }
-                                >
-                                  {qtd}{" "}
-                                  {qtd ===
-                                  1
-                                    ? "cupom"
-                                    : "cupons"}{" "}
-                                  -{" "}
-                                  {formatarMoeda(
-                                    Math.min(
-                                      qtd *
-                                        VALOR_CUPOM,
-                                      valor ||
-                                        qtd *
-                                          VALOR_CUPOM
-                                    )
-                                  )}
-                                </option>
-                              )
-                            }
-                          )}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+                <label
+                  style={
+                    fieldLabel
+                  }
+                >
+                  Valor da compra
+                </label>
 
-            {/* VALOR */}
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="R$ 0,00"
+                  style={input}
+                  value={
+                    valor || ""
+                  }
+                  onChange={e =>
+                    setValor(
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  }
+                />
 
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Valor"
-              style={input}
-              value={
-                valor === 0
-                  ? ""
-                  : valor
-              }
-              onChange={e =>
-                setValor(
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
+                {/* PAGAMENTO */}
 
-            {/* PAGAMENTO */}
+                <label
+                  style={
+                    fieldLabel
+                  }
+                >
+                  Forma de pagamento
+                </label>
 
-            {tipoCadastro ===
-              "venda" && (
-              <>
                 <select
                   style={input}
                   value={
@@ -1608,94 +1975,100 @@ export default function Compras({
                     Cartão
                   </option>
 
-                  <option value="Fiado">
+                  <option value="Em aberto">
                     Em aberto (Fiado)
                   </option>
                 </select>
 
+                {/* PARCELAS */}
+
                 {pagamento ===
                   "Cartão" && (
-                  <select
-                    style={input}
-                    value={
-                      parcelas
-                    }
-                    onChange={e =>
-                      setParcelas(
-                        Number(
-                          e
-                            .target
-                            .value
+                  <>
+                    <label
+                      style={
+                        fieldLabel
+                      }
+                    >
+                      Parcelas
+                    </label>
+
+                    <select
+                      style={input}
+                      value={
+                        parcelas
+                      }
+                      onChange={e =>
+                        setParcelas(
+                          Number(
+                            e.target
+                              .value
+                          )
                         )
-                      )
-                    }
-                  >
-                    <option value={1}>
-                      1x
-                    </option>
+                      }
+                    >
+                      <option
+                        value={1}
+                      >
+                        1x
+                      </option>
 
-                    <option value={2}>
-                      2x
-                    </option>
+                      <option
+                        value={2}
+                      >
+                        2x
+                      </option>
 
-                    <option value={3}>
-                      3x
-                    </option>
+                      <option
+                        value={3}
+                      >
+                        3x
+                      </option>
 
-                    <option value={4}>
-                      4x
-                    </option>
+                      <option
+                        value={4}
+                      >
+                        4x
+                      </option>
 
-                    <option value={5}>
-                      5x
-                    </option>
-                  </select>
+                      <option
+                        value={5}
+                      >
+                        5x
+                      </option>
+                    </select>
+                  </>
                 )}
-              </>
-            )}
 
-            {/* RESUMO */}
+                {/* RESUMO */}
 
-            <div
-              style={
-                resumo
-              }
-            >
-              {tipoCadastro ===
-                "venda" && (
-                <>
+                <div
+                  style={
+                    resumo
+                  }
+                >
                   <div>
                     Valor da compra:{" "}
                     <strong>
-                      {formatarMoeda(
+                      {moeda(
                         valor
                       )}
                     </strong>
                   </div>
 
                   <div>
-                    Cupons utilizados:{" "}
+                    Cupom usado:{" "}
                     <strong>
-                      {
-                        quantidadeCuponsValida
-                      }
-                    </strong>
-                  </div>
-
-                  <div>
-                    Desconto dos
-                    cupons:{" "}
-                    <strong>
-                      {formatarMoeda(
+                      {moeda(
                         valorCupom
                       )}
                     </strong>
                   </div>
 
                   <div>
-                    Valor final:{" "}
+                    Valor a pagar:{" "}
                     <strong>
-                      {formatarMoeda(
+                      {moeda(
                         valorRestante
                       )}
                     </strong>
@@ -1706,42 +2079,176 @@ export default function Compras({
                     <strong>
                       {
                         pontosGerados
-                      }{" "}
-                      pontos
+                      }
                     </strong>
                   </div>
-                </>
-              )}
 
-              {tipoCadastro ===
-                "receita" && (
-                <div>
-                  Valor da receita:{" "}
-                  <strong>
-                    {formatarMoeda(
-                      valor
-                    )}
-                  </strong>
+                  {usarCupom && (
+                    <div>
+                      Pontos utilizados:{" "}
+                      <strong>
+                        {
+                          pontosUsados
+                        }
+                      </strong>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <button
+                  style={
+                    btnPrimary
+                  }
+                  onClick={
+                    registrarCompra
+                  }
+                >
+                  Finalizar compra
+                </button>
+              </>
+            )}
+
+            {!clienteSel && (
+              <div
+                style={
+                  escolhaCliente
+                }
+              >
+                Selecione um cliente
+                para continuar.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          MODAL RECEITA
+      ========================= */}
+
+      {modalReceita && (
+        <div
+          style={overlay}
+          onClick={() =>
+            setModalReceita(
+              false
+            )
+          }
+        >
+          <div
+            style={modalCard}
+            onClick={e =>
+              e.stopPropagation()
+            }
+          >
+            <div
+              style={
+                modalHeader
+              }
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0
+                  }}
+                >
+                  Nova receita
+                </h2>
+
+                <div
+                  style={
+                    muted
+                  }
+                >
+                  Cadastre uma receita
+                  sem vincular a uma
+                  venda ou cliente.
+                </div>
+              </div>
+
+              <button
+                style={closeBtn}
+                onClick={() =>
+                  setModalReceita(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
             </div>
 
-            {/* BOTÃO */}
+            <label
+              style={
+                fieldLabel
+              }
+            >
+              Descrição
+            </label>
+
+            <input
+              type="text"
+              placeholder="Ex.: receita extra"
+              value={
+                descricaoReceita
+              }
+              onChange={e =>
+                setDescricaoReceita(
+                  e.target.value
+                )
+              }
+              style={input}
+            />
+
+            <label
+              style={
+                fieldLabel
+              }
+            >
+              Valor da receita
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="R$ 0,00"
+              value={
+                valorReceita || ""
+              }
+              onChange={e =>
+                setValorReceita(
+                  Number(
+                    e.target.value
+                  )
+                )
+              }
+              style={input}
+            />
+
+            <div
+              style={
+                resumo
+              }
+            >
+              Receita:{" "}
+              <strong>
+                {moeda(
+                  valorReceita
+                )}
+              </strong>
+            </div>
 
             <button
               style={
                 btnPrimary
               }
               onClick={
-                registrarCompra
+                registrarReceita
               }
             >
-              {tipoCadastro ===
-              "receita"
-                ? "Registrar receita"
-                : "Finalizar compra"}
+              Cadastrar receita
             </button>
-
           </div>
         </div>
       )}
@@ -1779,9 +2286,7 @@ export default function Compras({
               </h3>
 
               <button
-                style={
-                  fecharBtn
-                }
+                style={closeBtn}
                 onClick={() =>
                   setModalInativos(
                     false
@@ -1794,7 +2299,7 @@ export default function Compras({
 
             {clientesInativos.map(
               c => {
-                const ultima =
+                const ult =
                   getUltimaCompra(
                     c.id
                   )
@@ -1816,9 +2321,11 @@ export default function Compras({
                       }
                     >
                       Última compra:{" "}
-                      {ultima
-                        ? formatarData(
-                            ultima.criadoem
+                      {ult
+                        ? new Date(
+                            ult.criadoem
+                          ).toLocaleDateString(
+                            "pt-BR"
                           )
                         : "Nunca"}
                     </div>
@@ -1833,19 +2340,26 @@ export default function Compras({
   )
 }
 
-/* =========================
-   COMPONENTE DASH
-========================= */
+/*
+ * =========================
+ * COMPONENTE DASH
+ * =========================
+ */
 
 function Dash({
   label,
-  value
+  value,
+  className = ""
 }: {
   label: string
   value: string | number
+  className?: string
 }) {
   return (
-    <div style={dash}>
+    <div
+      className={className}
+      style={dash}
+    >
       <div
         style={dashLabel}
       >
@@ -1861,9 +2375,11 @@ function Dash({
   )
 }
 
-/* =========================
-   ESTILOS
-========================= */
+/*
+ * =========================
+ * ESTILOS
+ * =========================
+ */
 
 const container = {
   width: "100%",
@@ -1871,9 +2387,11 @@ const container = {
   minHeight: "100%",
   padding: 40,
   background: "#f6f6f7",
-  fontFamily: "Inter, Arial, sans-serif",
-  overflowX: "hidden" as const,
-  boxSizing: "border-box" as const
+  fontFamily: "Inter",
+  overflowX:
+    "hidden" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const section = {
@@ -1883,8 +2401,10 @@ const section = {
   padding: 20,
   borderRadius: 16,
   marginBottom: 20,
-  overflow: "hidden",
-  boxSizing: "border-box" as const
+  overflow:
+    "hidden" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const sectionTitle = {
@@ -1896,21 +2416,26 @@ const sectionTitle = {
 const notifBar = {
   width: "100%",
   background: "#fff6d6",
-  padding: "12px 16px",
+  padding:
+    "12px 16px",
   borderRadius: 12,
   marginBottom: 16,
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   alignItems: "center",
   gap: 10,
   fontSize: 13,
-  flexWrap: "wrap" as const,
-  boxSizing: "border-box" as const
+  flexWrap:
+    "wrap" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const notifBtn = {
   border: "none",
-  background: "transparent",
+  background:
+    "transparent",
   color: "#b8962e",
   cursor: "pointer",
   fontWeight: 600
@@ -1918,17 +2443,20 @@ const notifBtn = {
 
 const header = {
   display: "flex",
-  justifyContent: "space-between",
+  justifyContent:
+    "space-between",
   alignItems: "center",
   gap: 16,
   marginBottom: 20,
-  flexWrap: "wrap" as const
+  flexWrap:
+    "wrap" as const
 }
 
 const headerButtons = {
   display: "flex",
   gap: 10,
-  flexWrap: "wrap" as const
+  flexWrap:
+    "wrap" as const
 }
 
 const title = {
@@ -1938,25 +2466,30 @@ const title = {
 }
 
 const btnSmall = {
-  padding: "11px 18px",
+  padding:
+    "11px 18px",
   borderRadius: 10,
   border: "none",
   background:
     "linear-gradient(90deg,#d4af37,#f6e27a)",
   cursor: "pointer",
   fontWeight: 600,
-  whiteSpace: "nowrap" as const
+  whiteSpace:
+    "nowrap" as const
 }
 
 const btnSecondary = {
-  padding: "11px 18px",
+  padding:
+    "11px 18px",
   borderRadius: 10,
-  border: "1px solid #d4af37",
+  border:
+    "1px solid #eadfbf",
   background: "#fff",
-  color: "#8c7221",
+  color: "#80691f",
   cursor: "pointer",
   fontWeight: 600,
-  whiteSpace: "nowrap" as const
+  whiteSpace:
+    "nowrap" as const
 }
 
 const dashGrid = {
@@ -1973,7 +2506,12 @@ const dash = {
   padding: 18,
   borderRadius: 14,
   minWidth: 0,
-  overflow: "hidden"
+  overflow:
+    "hidden" as const,
+  border:
+    "1px solid #eeeeee",
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,0.025)"
 }
 
 const dashLabel = {
@@ -2002,8 +2540,8 @@ const mesCard = {
   padding: 14,
   borderRadius: 12,
   minWidth: 0,
-  overflow: "hidden",
-  textAlign: "center" as const
+  overflow:
+    "hidden" as const
 }
 
 const mesValor = {
@@ -2035,11 +2573,13 @@ const inputFiltro = {
   maxWidth: "100%",
   padding: 12,
   borderRadius: 10,
-  border: "1px solid #ddd",
+  border:
+    "1px solid #ddd",
   background: "#fff",
   fontSize: 14,
   outline: "none",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const
 }
 
 const selectFiltro = {
@@ -2048,11 +2588,13 @@ const selectFiltro = {
   maxWidth: "100%",
   padding: 12,
   borderRadius: 10,
-  border: "1px solid #ddd",
+  border:
+    "1px solid #ddd",
   background: "#fff",
   fontSize: 14,
   outline: "none",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const
 }
 
 const listaCompras = {
@@ -2067,15 +2609,18 @@ const listaCompras = {
 const compraCard = {
   display: "grid",
   gridTemplateColumns:
-    "minmax(160px,2fr) minmax(120px,1fr) minmax(120px,1fr) minmax(110px,1fr) auto",
-  gap: 16,
+    "minmax(160px,2fr) minmax(120px,1fr) minmax(110px,1fr) minmax(110px,1fr) auto",
+  gap: 18,
   padding: 16,
   borderRadius: 12,
   background: "#f9f9f9",
   alignItems: "center",
   minWidth: 0,
   width: "100%",
-  boxSizing: "border-box" as const
+  overflow:
+    "hidden" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const compraCliente = {
@@ -2104,44 +2649,55 @@ const pontos = {
   color: "#b08d3c"
 }
 
-const receitaTag = {
+const receitaBadge = {
   display: "inline-block",
-  marginTop: 5,
-  padding: "3px 7px",
+  marginTop: 6,
+  padding:
+    "3px 7px",
   borderRadius: 6,
   background: "#eee",
-  color: "#666",
+  color: "#777",
   fontSize: 10,
   fontWeight: 600
 }
 
-const excluirContainer = {
+const deleteContainer = {
   display: "flex",
-  justifyContent: "flex-end"
+  justifyContent:
+    "flex-end",
+  alignItems: "center"
 }
 
-const btnExcluir = {
-  padding: "8px 10px",
+const deleteBtn = {
+  padding:
+    "8px 11px",
   borderRadius: 8,
-  border: "1px solid #e0b4b4",
-  background: "#fff",
-  color: "#b44",
+  border:
+    "1px solid #efcaca",
+  background: "#fff5f5",
+  color: "#c45a5a",
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 600,
-  whiteSpace: "nowrap" as const
+  whiteSpace:
+    "nowrap" as const
 }
 
 const overlay = {
   position: "fixed" as const,
   inset: 0,
-  background: "rgba(0,0,0,0.4)",
+  background:
+    "rgba(0,0,0,0.4)",
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent:
+    "center",
   padding: 16,
   zIndex: 2000,
-  overflowY: "auto" as const
+  overflowY:
+    "auto" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const modalCard = {
@@ -2149,65 +2705,48 @@ const modalCard = {
   padding: 20,
   borderRadius: 16,
   width: "100%",
-  maxWidth: 500,
+  maxWidth: 480,
   maxHeight: "90vh",
-  overflowY: "auto" as const,
-  overflowX: "hidden" as const,
-  boxSizing: "border-box" as const
+  overflowY:
+    "auto" as const,
+  overflowX:
+    "hidden" as const,
+  boxSizing:
+    "border-box" as const
 }
 
 const modalHeader = {
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  justifyContent:
+    "space-between",
+  alignItems:
+    "flex-start",
+  gap: 15,
   marginBottom: 10
 }
 
-const fecharBtn = {
+const closeBtn = {
+  width: 34,
+  height: 34,
   border: "none",
-  background: "transparent",
-  fontSize: 28,
-  color: "#777",
+  background: "#f5f5f5",
+  borderRadius: "50%",
   cursor: "pointer",
-  lineHeight: 1
-}
-
-const tipoToggle = {
-  display: "grid",
-  gridTemplateColumns:
-    "1fr 1fr",
-  gap: 8,
-  marginBottom: 10
-}
-
-const tipoAtivo = {
-  padding: 10,
-  borderRadius: 9,
-  border: "1px solid #d4af37",
-  background: "#faf5df",
-  color: "#8c7221",
-  cursor: "pointer",
-  fontWeight: 600
-}
-
-const tipoInativo = {
-  padding: 10,
-  borderRadius: 9,
-  border: "1px solid #ddd",
-  background: "#fff",
-  color: "#777",
-  cursor: "pointer",
-  fontWeight: 500
+  fontSize: 22,
+  lineHeight: 1,
+  color: "#666",
+  flexShrink: 0
 }
 
 const clienteGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(140px,1fr))",
+    "repeat(auto-fit,minmax(130px,1fr))",
   gap: 8,
   marginTop: 10,
-  maxHeight: 220,
-  overflowY: "auto" as const
+  maxHeight: 190,
+  overflowY:
+    "auto" as const
 }
 
 const clienteCard = {
@@ -2219,45 +2758,82 @@ const clienteCard = {
     "break-word" as const
 }
 
-const pontosCliente = {
-  marginTop: 4,
-  fontSize: 11,
-  color: "#b08d3c",
+const clienteSelecionado = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 10,
+  padding: 12,
+  marginTop: 12,
+  borderRadius: 10,
+  background: "#faf8f1",
+  flexWrap:
+    "wrap" as const
+}
+
+const clientePontos = {
+  color: "#9b7b2f",
+  fontSize: 12,
   fontWeight: 600
 }
 
 const cupomBox = {
-  marginTop: 10,
-  padding: 12,
-  borderRadius: 10,
-  background: "#faf8f1",
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
   gap: 12,
-  flexWrap: "wrap" as const
+  marginTop: 12,
+  padding: 13,
+  borderRadius: 12,
+  background: "#faf8f1",
+  border:
+    "1px solid #eee6c9",
+  flexWrap:
+    "wrap" as const
+}
+
+const cupomRegra = {
+  marginTop: 5,
+  color: "#9b7b2f",
+  fontSize: 11,
+  fontWeight: 600
+}
+
+const cupomQuantidadeBox = {
+  marginTop: 10
 }
 
 const cupomLabel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  cursor: "pointer"
+}
+
+const fieldLabel = {
   display: "block",
+  marginTop: 12,
+  marginBottom: 4,
+  color: "#555",
   fontSize: 12,
-  fontWeight: 600,
-  marginBottom: 4
+  fontWeight: 600
 }
 
 const resumo = {
-  marginTop: 10,
-  padding: 12,
+  marginTop: 12,
+  padding: 13,
   background: "#faf8f1",
   borderRadius: 10,
   lineHeight: 1.8,
-  fontSize: 14
+  fontSize: 13
 }
 
 const btnPrimary = {
   width: "100%",
-  marginTop: 10,
-  padding: 12,
+  marginTop: 12,
+  padding: 13,
   borderRadius: 10,
   border: "none",
   background:
@@ -2266,20 +2842,35 @@ const btnPrimary = {
   fontWeight: 600
 }
 
+const escolhaCliente = {
+  marginTop: 15,
+  padding: 15,
+  background: "#fafafa",
+  borderRadius: 10,
+  color: "#888",
+  textAlign:
+    "center" as const,
+  fontSize: 13
+}
+
 const inativoRow = {
   padding: 12,
-  borderBottom: "1px solid #eee"
+  borderBottom:
+    "1px solid #eee"
 }
 
 const input = {
   width: "100%",
   minWidth: 0,
   padding: 10,
-  marginTop: 10,
+  marginTop: 6,
   borderRadius: 10,
-  border: "1px solid #ddd",
+  border:
+    "1px solid #ddd",
   background: "#fff",
-  boxSizing: "border-box" as const
+  boxSizing:
+    "border-box" as const,
+  outline: "none"
 }
 
 const muted = {
