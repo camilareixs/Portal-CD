@@ -1,3 +1,4 @@
+```tsx
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -47,6 +48,8 @@ export default function Compras({ compraSelecionada }: Props) {
   const [parcelas, setParcelas] = useState(1)
 
   const [usarCupom, setUsarCupom] = useState(false)
+
+  const [excluindo, setExcluindo] = useState<string | null>(null)
 
   /* =========================
      FETCH CLIENTES
@@ -288,6 +291,167 @@ export default function Compras({ compraSelecionada }: Props) {
   }
 
   /* =========================
+     EXCLUIR COMPRA
+  ========================= */
+
+  async function excluirCompra(compra: Compra) {
+    if (excluindo) return
+
+    const confirmar = window.confirm(
+      `Tem certeza que deseja excluir esta venda?\n\n` +
+        `Cliente: ${compra.cliente}\n` +
+        `Valor: R$ ${compra.valor.toFixed(2)}\n\n` +
+        `Os pontos gerados serão estornados e os pontos utilizados em cupom serão devolvidos.`
+    )
+
+    if (!confirmar) return
+
+    setExcluindo(compra.id)
+
+    try {
+      /*
+       * Busca o saldo atual do cliente diretamente
+       * no banco.
+       */
+      const { data: clienteAtual, error: clienteError } =
+        await supabase
+          .from("clientes")
+          .select("id,pontos")
+          .eq("id", compra.clienteid)
+          .single()
+
+      if (clienteError) {
+        alert(
+          "Não foi possível encontrar o cliente: " +
+            clienteError.message
+        )
+        return
+      }
+
+      /*
+       * Cada R$150 utilizados em cupom
+       * correspondem a 10 pontos.
+       */
+      const pontosUsados =
+        compra.cupomusado > 0
+          ? Math.ceil(compra.cupomusado / 150) * 10
+          : 0
+
+      /*
+       * Estorno:
+       *
+       * saldo atual
+       * - pontos gerados pela compra
+       * + pontos usados no cupom
+       */
+      const novosPontos = Math.max(
+        0,
+        Number(clienteAtual.pontos || 0) -
+          Number(compra.pontosgerados || 0) +
+          pontosUsados
+      )
+
+      /*
+       * Atualiza os pontos.
+       */
+      const { error: updateError } = await supabase
+        .from("clientes")
+        .update({
+          pontos: novosPontos
+        })
+        .eq("id", compra.clienteid)
+
+      if (updateError) {
+        alert(
+          "Erro ao estornar os pontos: " +
+            updateError.message
+        )
+        return
+      }
+
+      /*
+       * Exclui os cupons/trocas vinculados
+       * somente a esta compra.
+       */
+      const { error: trocasError } = await supabase
+        .from("trocas")
+        .delete()
+        .eq("compraid", compra.id)
+
+      if (trocasError) {
+        /*
+         * Se as trocas não puderem ser excluídas,
+         * restaura os pontos.
+         */
+        await supabase
+          .from("clientes")
+          .update({
+            pontos: Number(clienteAtual.pontos || 0)
+          })
+          .eq("id", compra.clienteid)
+
+        alert(
+          "Não foi possível excluir os cupons vinculados à venda: " +
+            trocasError.message
+        )
+
+        return
+      }
+
+      /*
+       * Exclui a compra.
+       */
+      const { error: compraError } = await supabase
+        .from("compras")
+        .delete()
+        .eq("id", compra.id)
+
+      if (compraError) {
+        /*
+         * Restaura os pontos caso a compra
+         * não tenha sido excluída.
+         */
+        await supabase
+          .from("clientes")
+          .update({
+            pontos: Number(clienteAtual.pontos || 0)
+          })
+          .eq("id", compra.clienteid)
+
+        alert(
+          "Erro ao excluir a venda: " +
+            compraError.message
+        )
+
+        return
+      }
+
+      /*
+       * Atualiza a interface sem precisar
+       * recarregar a página.
+       */
+      setCompras(prev =>
+        prev.filter(c => c.id !== compra.id)
+      )
+
+      setClientes(prev =>
+        prev.map(c =>
+          c.id === compra.clienteid
+            ? {
+                ...c,
+                pontos: novosPontos
+              }
+            : c
+        )
+      )
+
+      alert("Venda excluída com sucesso!")
+    } finally {
+      setExcluindo(null)
+    }
+  }
+
+  /* =========================
      FILTROS
   ========================= */
 
@@ -391,7 +555,12 @@ export default function Compras({ compraSelecionada }: Props) {
   ========================= */
 
   return (
-    <div style={container}>
+    <div
+      style={container}
+      className="compras-container"
+    >
+
+      <style>{responsiveStyle}</style>
 
       {/* =========================
           CLIENTES INATIVOS
@@ -511,7 +680,10 @@ export default function Compras({ compraSelecionada }: Props) {
           FILTROS
       ========================= */}
 
-      <div style={filtrosBar}>
+      <div
+        style={filtrosBar}
+        className="compras-filtros"
+      >
 
         <input
           placeholder="Buscar por cliente ou CPF"
@@ -645,6 +817,7 @@ export default function Compras({ compraSelecionada }: Props) {
               <div
                 key={compra.id}
                 style={compraCard}
+                className="compras-card"
               >
 
                 {/* CLIENTE */}
@@ -719,6 +892,33 @@ export default function Compras({ compraSelecionada }: Props) {
                   </div>
 
                 </div>
+
+                {/* EXCLUIR */}
+
+                <button
+                  type="button"
+                  style={{
+                    ...btnExcluir,
+                    opacity:
+                      excluindo === compra.id
+                        ? 0.6
+                        : 1,
+                    cursor:
+                      excluindo === compra.id
+                        ? "not-allowed"
+                        : "pointer"
+                  }}
+                  disabled={
+                    excluindo === compra.id
+                  }
+                  onClick={() =>
+                    excluirCompra(compra)
+                  }
+                >
+                  {excluindo === compra.id
+                    ? "Excluindo..."
+                    : "Excluir"}
+                </button>
 
               </div>
 
@@ -1022,7 +1222,11 @@ function Dash({
   label,
   value,
   className = ""
-}: any) {
+}: {
+  label: string
+  value: string | number
+  className?: string
+}) {
   return (
     <div
       className={className}
@@ -1202,7 +1406,8 @@ const inputFiltro = {
   border: "1px solid #ddd",
   background: "#fff",
   fontSize: 14,
-  outline: "none"
+  outline: "none",
+  boxSizing: "border-box" as const
 }
 
 const selectFiltro = {
@@ -1214,7 +1419,8 @@ const selectFiltro = {
   border: "1px solid #ddd",
   background: "#fff",
   fontSize: 14,
-  outline: "none"
+  outline: "none",
+  boxSizing: "border-box" as const
 }
 
 /* =========================
@@ -1232,7 +1438,7 @@ const listaCompras = {
 const compraCard = {
   display: "grid",
   gridTemplateColumns:
-    "minmax(180px,2fr) minmax(120px,1fr) minmax(110px,1fr) minmax(110px,1fr)",
+    "minmax(160px,2fr) minmax(110px,1fr) minmax(110px,1fr) minmax(110px,1fr) auto",
   gap: 18,
   padding: 16,
   borderRadius: 12,
@@ -1240,7 +1446,8 @@ const compraCard = {
   alignItems: "center",
   minWidth: 0,
   width: "100%",
-  overflow: "hidden"
+  overflow: "hidden",
+  boxSizing: "border-box" as const
 }
 
 const compraCliente = {
@@ -1268,6 +1475,22 @@ const pontos = {
 }
 
 /* =========================
+   BOTÃO EXCLUIR
+========================= */
+
+const btnExcluir = {
+  padding: "9px 13px",
+  borderRadius: 9,
+  border: "1px solid #e5b8b8",
+  background: "#fff5f5",
+  color: "#b42323",
+  fontWeight: 600,
+  fontSize: 12,
+  whiteSpace: "nowrap" as const,
+  transition: "0.2s"
+}
+
+/* =========================
    MODAL
 ========================= */
 
@@ -1291,7 +1514,8 @@ const modalCard = {
   maxWidth: 420,
   maxHeight: "90vh",
   overflowY: "auto" as const,
-  overflowX: "hidden" as const
+  overflowX: "hidden" as const,
+  boxSizing: "border-box" as const
 }
 
 const clienteGrid = {
@@ -1358,7 +1582,8 @@ const input = {
   marginTop: 10,
   borderRadius: 10,
   border: "1px solid #ddd",
-  background: "#fff"
+  background: "#fff",
+  boxSizing: "border-box" as const
 }
 
 const muted = {
@@ -1366,3 +1591,40 @@ const muted = {
   color: "#888",
   marginTop: 3
 }
+
+/* =========================
+   RESPONSIVIDADE
+========================= */
+
+const responsiveStyle = `
+  @media (max-width: 1000px) {
+    .compras-card {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .compras-container {
+      padding: 20px !important;
+    }
+
+    .compras-filtros {
+      grid-template-columns: 1fr !important;
+    }
+
+    .compras-card {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  @media (max-width: 500px) {
+    .compras-container {
+      padding: 14px !important;
+    }
+
+    .compras-card {
+      gap: 12px !important;
+    }
+  }
+`
+```
