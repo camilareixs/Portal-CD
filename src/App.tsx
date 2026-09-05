@@ -11,6 +11,8 @@ export type Page =
   | "clientes"
   | "compra"
   | "troca"
+  | "produtos"
+  | "financeiro"
 
 export type CompraSelecionada = {
   clienteid: string
@@ -72,6 +74,20 @@ function App() {
       case "troca":
         return <Troca />
 
+      case "produtos":
+        return (
+          <div>
+            <h1>Produtos e Estoque</h1>
+          </div>
+        )
+
+      case "financeiro":
+        return (
+          <div>
+            <h1>Financeiro</h1>
+          </div>
+        )
+
       default:
         return <Dashboard />
     }
@@ -93,3 +109,4 @@ function App() {
 }
 
 export default App
+
