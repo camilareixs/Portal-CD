@@ -285,11 +285,7 @@ export default function Produtos() {
 
   const [varianteEditando, setVarianteEditando] =
     useState<Variante | null>(null)
-
-  const [varianteEstoque, setVarianteEstoque] =
-    useState<Variante | null>(null)
-
-  const [salvando, setSalvando] = useState(false)
+const [salvando, setSalvando] = useState(false)
 
   const [novaOpcaoTipo, setNovaOpcaoTipo] =
     useState<TipoOpcao>(null)
@@ -887,7 +883,7 @@ export default function Produtos() {
       if (excluirProdutoError) throw excluirProdutoError
 
       window.alert("Produto excluído com sucesso.")
-      setProdutoSelecionado(null)
+      setProdutoSelecionado("")
       await atualizarDados()
     } catch (error: any) {
       console.error("Erro ao excluir produto:", error)
