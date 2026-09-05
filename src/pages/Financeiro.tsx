@@ -46,7 +46,7 @@ export default function Financeiro() {
   const [busca, setBusca] = useState("")
   const [statusFiltro, setStatusFiltro] = useState("")
   const [categoriaFiltro, setCategoriaFiltro] = useState("")
-  const [periodoFiltro, setPeriodoFiltro] = useState("todos")
+  //const [periodoFiltro, setPeriodoFiltro] = useState("todos")
 
   // Modais e Formulários
   const [novaReceitaModal, setNovaReceitaModal] = useState(false)
