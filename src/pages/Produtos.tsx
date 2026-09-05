@@ -4495,35 +4495,8 @@ const iconActionButton = {
   justifyContent: "center"
 }
 
-const iconDangerButton = {
-  ...dangerButton,
-  width: 38,
-  height: 38,
-  padding: 0,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center"
-}
 
-const iconSmallButton = {
-  ...secondarySmall,
-  width: 36,
-  height: 36,
-  padding: 0,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center"
-}
 
-const iconDangerSmall = {
-  ...dangerSmall,
-  width: 36,
-  height: 36,
-  padding: 0,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center"
-}
 
 
 const mobileVariantTitle = {
