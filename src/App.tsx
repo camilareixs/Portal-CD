@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react"
 import Layout from "./components/Layout"
 import Dashboard from "./pages/Dashboard"
@@ -6,6 +5,7 @@ import Clientes from "./pages/Clientes"
 import Compras from "./pages/Compras"
 import Troca from "./pages/Troca"
 import Produtos from "./pages/Produtos"
+import Financeiro from "./pages/Financeiro"
 import LoginCamiduda from "./pages/LoginCamiduda"
 
 export type Page =
@@ -103,4 +103,3 @@ function App() {
 }
 
 export default App
-
