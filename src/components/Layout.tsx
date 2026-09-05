@@ -23,6 +23,7 @@ export default function Layout({ children, setPage }: Props) {
   useEffect(() => {
     function handleResize() {
       const mobile = window.innerWidth <= 768
+
       setIsMobile(mobile)
 
       if (mobile) {
@@ -56,7 +57,6 @@ export default function Layout({ children, setPage }: Props) {
       {/* HEADER MOBILE */}
       {isMobile && (
         <header style={mobileHeader}>
-
           <button
             onClick={() => setMenuOpen(prev => !prev)}
             style={menuButton}
@@ -92,7 +92,6 @@ export default function Layout({ children, setPage }: Props) {
           <div style={mobileLogo}>
             Cami&Duda
           </div>
-
         </header>
       )}
 
@@ -135,12 +134,13 @@ export default function Layout({ children, setPage }: Props) {
             : {
                 width: menuOpen ? 260 : 76,
                 minWidth: menuOpen ? 260 : 76,
-                transition: "width 0.3s ease, min-width 0.3s ease"
+                transition:
+                  "width 0.3s ease, min-width 0.3s ease"
               })
         }
       >
 
-        {/* CABEÇALHO DO MENU */}
+        {/* CABEÇALHO DA SIDEBAR */}
         <div
           style={{
             ...sidebarHeader,
@@ -150,6 +150,7 @@ export default function Layout({ children, setPage }: Props) {
           }}
         >
 
+          {/* LOGO */}
           {menuOpen && (
             <div style={logo}>
               Cami&Duda
@@ -160,10 +161,7 @@ export default function Layout({ children, setPage }: Props) {
           {!isMobile && (
             <button
               onClick={() => setMenuOpen(prev => !prev)}
-              style={{
-                ...desktopMenuButton,
-                ...(menuOpen ? desktopCloseButton : {})
-              }}
+              style={desktopMenuButton}
               aria-label={
                 menuOpen
                   ? "Recolher menu"
@@ -175,19 +173,21 @@ export default function Layout({ children, setPage }: Props) {
                   ×
                 </span>
               ) : (
-                <>
+                <span style={desktopHamburger}>
                   <span style={smallHamburgerLine} />
                   <span style={smallHamburgerLine} />
                   <span style={smallHamburgerLine} />
-                </>
+                </span>
               )}
             </button>
           )}
 
         </div>
 
+        {/* DIVISOR */}
         <div style={divider} />
 
+        {/* MENU */}
         <NavItem
           label="Dashboard"
           active={active === "dashboard"}
@@ -253,6 +253,11 @@ export default function Layout({ children, setPage }: Props) {
   )
 }
 
+
+/* ================================
+   ITEM DO MENU
+================================ */
+
 function NavItem({
   label,
   active,
@@ -306,14 +311,15 @@ function NavItem({
           : "none"
       }}
     >
-
       {collapsed ? (
         <span
           style={{
             ...collapsedIcon,
+
             background: active
               ? "#f1e5bd"
               : "#f4f2ed",
+
             color: active
               ? "#8b6f3d"
               : "#77736b"
@@ -324,15 +330,14 @@ function NavItem({
       ) : (
         label
       )}
-
     </button>
   )
 }
 
 
-/* =========================
+/* ================================
    LAYOUT
-========================= */
+================================ */
 
 const layout = {
   display: "flex",
@@ -343,9 +348,9 @@ const layout = {
 }
 
 
-/* =========================
+/* ================================
    SIDEBAR
-========================= */
+================================ */
 
 const sidebar = {
   minHeight: "100vh",
@@ -359,6 +364,11 @@ const sidebar = {
   overflowX: "hidden" as const
 }
 
+
+/* ================================
+   CABEÇALHO SIDEBAR
+================================ */
+
 const sidebarHeader = {
   height: 52,
   paddingLeft: 24,
@@ -367,6 +377,11 @@ const sidebarHeader = {
   alignItems: "center",
   boxSizing: "border-box" as const
 }
+
+
+/* ================================
+   LOGO
+================================ */
 
 const logo = {
   fontFamily: "Playfair Display, serif",
@@ -377,6 +392,11 @@ const logo = {
   whiteSpace: "nowrap" as const
 }
 
+
+/* ================================
+   DIVISOR
+================================ */
+
 const divider = {
   height: 1,
   background:
@@ -385,9 +405,9 @@ const divider = {
 }
 
 
-/* =========================
-   MENU BUTTON DESKTOP
-========================= */
+/* ================================
+   BOTÃO DESKTOP
+================================ */
 
 const desktopMenuButton = {
   width: 30,
@@ -403,23 +423,46 @@ const desktopMenuButton = {
   flexShrink: 0
 }
 
-const desktopCloseButton = {
-  marginRight: -2
-}
+
+/* ================================
+   X DISCRETO
+================================ */
 
 const discreteX = {
-  fontSize: 22,
+  fontSize: 21,
   lineHeight: 1,
   fontWeight: 300,
   color: "#8b6f3d",
-  opacity: 0.65,
-  transform: "translateY(-1px)"
+  opacity: 0.55,
+  transform: "translateY(-1px)",
+  display: "block"
 }
 
 
-/* =========================
+/* ================================
+   HAMBURGER DESKTOP
+================================ */
+
+const desktopHamburger = {
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 3
+}
+
+const smallHamburgerLine = {
+  display: "block",
+  width: 16,
+  height: 1.5,
+  background: "#8b6f3d",
+  borderRadius: 5
+}
+
+
+/* ================================
    MENU
-========================= */
+================================ */
 
 const navBtn = {
   padding: "15px 30px",
@@ -435,6 +478,11 @@ const navBtn = {
   boxSizing: "border-box" as const
 }
 
+
+/* ================================
+   MENU RECOLHIDO
+================================ */
+
 const collapsedIcon = {
   width: 34,
   height: 34,
@@ -448,9 +496,9 @@ const collapsedIcon = {
 }
 
 
-/* =========================
+/* ================================
    CONTEÚDO
-========================= */
+================================ */
 
 const content = {
   flex: 1,
@@ -462,9 +510,9 @@ const content = {
 }
 
 
-/* =========================
-   MOBILE HEADER
-========================= */
+/* ================================
+   HEADER MOBILE
+================================ */
 
 const mobileHeader = {
   position: "fixed" as const,
@@ -481,6 +529,11 @@ const mobileHeader = {
   boxShadow: "0 2px 12px rgba(216,191,122,0.08)"
 }
 
+
+/* ================================
+   LOGO MOBILE
+================================ */
+
 const mobileLogo = {
   fontFamily: "Playfair Display, serif",
   fontSize: 24,
@@ -492,9 +545,9 @@ const mobileLogo = {
 }
 
 
-/* =========================
-   MOBILE HAMBURGER
-========================= */
+/* ================================
+   HAMBURGER MOBILE
+================================ */
 
 const menuButton = {
   width: 44,
@@ -521,23 +574,9 @@ const hamburgerLine = {
 }
 
 
-/* =========================
-   HAMBURGER RECOLHIDO DESKTOP
-========================= */
-
-const smallHamburgerLine = {
-  display: "block",
-  width: 16,
-  height: 1.5,
-  background: "#8b6f3d",
-  borderRadius: 5,
-  margin: "2px 0"
-}
-
-
-/* =========================
-   OVERLAY
-========================= */
+/* ================================
+   OVERLAY MOBILE
+================================ */
 
 const overlay = {
   position: "fixed" as const,
