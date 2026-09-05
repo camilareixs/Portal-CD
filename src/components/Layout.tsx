@@ -156,7 +156,7 @@ export default function Layout({ children, setPage }: Props) {
         />
 
         <NavItem
-          label="Produtos e Estoque"
+          label="Estoque"
           active={active === "produtos"}
           onClick={() => nav("produtos")}
         />

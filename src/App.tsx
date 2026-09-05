@@ -1,9 +1,11 @@
+
 import { useEffect, useState } from "react"
 import Layout from "./components/Layout"
 import Dashboard from "./pages/Dashboard"
 import Clientes from "./pages/Clientes"
 import Compras from "./pages/Compras"
 import Troca from "./pages/Troca"
+import Produtos from "./pages/Produtos"
 import LoginCamiduda from "./pages/LoginCamiduda"
 
 export type Page =
@@ -75,11 +77,7 @@ function App() {
         return <Troca />
 
       case "produtos":
-        return (
-          <div>
-            <h1>Produtos e Estoque</h1>
-          </div>
-        )
+        return <Produtos />
 
       case "financeiro":
         return (
