@@ -1,7 +1,13 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 
-type Page = "dashboard" | "clientes" | "compra" | "troca"
+type Page =
+  | "dashboard"
+  | "clientes"
+  | "compra"
+  | "troca"
+  | "produtos"
+  | "financeiro"
 
 type Props = {
   children: ReactNode
@@ -147,6 +153,18 @@ export default function Layout({ children, setPage }: Props) {
           label="Troca de Pontos"
           active={active === "troca"}
           onClick={() => nav("troca")}
+        />
+
+        <NavItem
+          label="Produtos e Estoque"
+          active={active === "produtos"}
+          onClick={() => nav("produtos")}
+        />
+
+        <NavItem
+          label="Financeiro"
+          active={active === "financeiro"}
+          onClick={() => nav("financeiro")}
         />
       </aside>
 
