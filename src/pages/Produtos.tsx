@@ -459,9 +459,60 @@ const [salvando, setSalvando] = useState(false)
     )
   }
 
-  async function atualizarDados() {
-    await carregarDados()
+  async function carregarDados() {
+  const [
+    produtosResponse,
+    variantesResponse,
+    movimentacoesResponse
+  ] = await Promise.all([
+    supabase
+      .from("produtos")
+      .select("*")
+      .order("nome", {
+        ascending: true
+      }),
+
+    supabase
+      .from("produtoVariantes")
+      .select("*")
+      .order("criadoem", {
+        ascending: false
+      }),
+
+    supabase
+      .from("estoqueMovimentacoes")
+      .select("*")
+      .order("criadoem", {
+        ascending: false
+      })
+  ])
+
+  if (produtosResponse.error) {
+    console.error(produtosResponse.error)
+    alert("Erro ao carregar produtos.")
+    return
   }
+
+  if (variantesResponse.error) {
+    console.error(variantesResponse.error)
+    alert("Erro ao carregar variantes.")
+    return
+  }
+
+  if (movimentacoesResponse.error) {
+    console.error(movimentacoesResponse.error)
+    alert("Erro ao carregar movimentações.")
+    return
+  }
+
+  setProdutos(produtosResponse.data ?? [])
+  setVariantes(variantesResponse.data ?? [])
+  setMovimentacoes(movimentacoesResponse.data ?? [])
+}
+
+useEffect(() => {
+  carregarDados()
+}, [])
 
   useEffect(() => {
     carregarDados()
