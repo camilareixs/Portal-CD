@@ -1,237 +1,263 @@
-import React, { useEffect, useMemo, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../lib/supabase"
 
-// ==========================================
-// TIPOS E CONSTANTES
-// ==========================================
-export type TipoReceita = "VENDA" | "PAGAMENTO_FIADO" | "OUTRA_RECEITA" | "OUTROS"
-export type StatusFinanceiro = "RECEBIDA" | "PAGO" | "PENDENTE" | "CANCELADA"
+// --- TIPOS DE DADOS ---
 
-export interface Receita {
+type Receita = {
   id: string
   descricao: string
-  tipo: TipoReceita
-  competencia: string
-  recebimento: string | null
   valor: number
-  status: StatusFinanceiro
-  compraId?: string | null
-  criadoem?: string
-}
-
-export interface Despesa {
-  id: string
-  descricao: string
   categoria: string
-  competencia: string
-  pagamento: string | null
-  valor: number
-  recorrente: boolean
-  status: "PAGO" | "PENDENTE"
-  criadoem?: string
+  tipo: "VENDA" | "OUTRO"
+  status: "RECEBIDA" | "PENDENTE"
+  data: string
+  vendaId?: string
 }
 
-export interface CompraFiado {
+type Despesa = {
+  id: string
+  descricao: string
+  valor: number
+  categoria: string
+  status: "PAGO" | "PENDENTE"
+  data: string
+}
+
+type CompraFiado = {
   id: string
   clienteId: string
   clienteNome: string
-  clienteCpf: string
-  dataVenda: string
-  valorOriginal: number
+  valorTotal: number
   valorRecebido: number
   valorPendente: number
+  data: string
 }
 
-export const CATEGORIAS_DESPESAS = [
-  "Aluguel",
-  "Marketing",
-  "Embalagens",
-  "Transporte",
-  "Taxas",
-  "Fornecedores",
-  "Operacional",
-  "Outros"
-] as const
-
-// ==========================================
-// FUNÇÕES AUXILIARES DE FORMATAÇÃO
-// ==========================================
-function moeda(valor: number) {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-
-function dataBR(data: string | null) {
-  if (!data) return "-"
-  const [ano, mes, dia] = data.split("T")[0].split("-")
-  if (!ano || !mes || !dia) return data
-  return `${dia}/${mes}/${ano}`
-}
-
-// ==========================================
-// COMPONENTE PRINCIPAL: FINANCEIRO
-// ==========================================
 export default function Financeiro() {
-  const [abaAtiva, setAbaAtiva] = useState<"resumo" | "receitas" | "despesas" | "areceber">("resumo")
-  const [mesFiltro, setMesFiltro] = useState<string>(() => {
-    const hoje = new Date()
-    return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`
-  })
-
-  const [carregando, setCarregando] = useState(false)
+  // --- ESTADOS DA APLICAÇÃO ---
   const [receitas, setReceitas] = useState<Receita[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [comprasFiado, setComprasFiado] = useState<CompraFiado[]>([])
   const [custoProdutosVendidos, setCustoProdutosVendidos] = useState<number>(0)
   const [vendasTotaisCount, setVendasTotaisCount] = useState<number>(0)
 
-  // ESTADOS DOS MODAIS
-  const [modalReceita, setModalReceita] = useState(false)
-  const [modalDespesa, setModalDespesa] = useState(false)
-  const [modalFiado, setModalFiado] = useState<CompraFiado | null>(null)
+  // Filtros
+  const [abaAtiva, setAbaAtiva] = useState<"resumo" | "receitas" | "despesas" | "fiado">("resumo")
+  const [busca, setBusca] = useState("")
+  const [statusFiltro, setStatusFiltro] = useState("")
+  const [categoriaFiltro, setCategoriaFiltro] = useState("")
+  const [periodoFiltro, setPeriodoFiltro] = useState("todos")
 
-  // FORMULÁRIOS
-  const [formReceita, setFormReceita] = useState({
-    descricao: "",
-    tipo: "OUTRA_RECEITA" as TipoReceita,
-    competencia: new Date().toISOString().split("T")[0],
-    recebimento: new Date().toISOString().split("T")[0],
-    valor: "",
-    status: "RECEBIDA" as "RECEBIDA" | "PENDENTE"
+  // Modais e Formulários
+  const [novaReceitaModal, setNovaReceitaModal] = useState(false)
+  const [novaDespesaModal, setNovaDespesaModal] = useState(false)
+  const [receberFiadoModal, setReceberFiadoModal] = useState<CompraFiado | null>(null)
+  const [valorAbater, setValorAbater] = useState("")
+
+  const [formReceita, setFormReceita] = useState<Partial<Receita>>({
+    tipo: "OUTRO",
+    status: "RECEBIDA",
+    data: new Date().toISOString().split("T")[0]
   })
 
-  const [formDespesa, setFormDespesa] = useState({
-    descricao: "",
-    categoria: CATEGORIAS_DESPESAS[0] as string,
-    competencia: new Date().toISOString().split("T")[0],
-    pagamento: new Date().toISOString().split("T")[0],
-    valor: "",
-    recorrente: false,
-    status: "PAGO" as "PAGO" | "PENDENTE"
+  const [formDespesa, setFormDespesa] = useState<Partial<Despesa>>({
+    status: "PAGO",
+    data: new Date().toISOString().split("T")[0]
   })
 
-  const [formFiado, setFormFiado] = useState({
-    valorRecebido: "",
-    data: new Date().toISOString().split("T")[0],
-    observacao: ""
-  })
+  // --- CARREGAMENTO DE DADOS ---
 
-  // CARREGAMENTO DOS DADOS COM SUPABASE
-  const carregarDados = async () => {
-    setCarregando(true)
+  async function fetchFinanceiro() {
+    // 1. Buscar Receitas
+    const { data: dataReceitas, error: errReceitas } = await supabase
+      .from("receitas")
+      .select("*")
+      .order("data", { ascending: false })
 
-    const [anoStr, mesStr] = mesFiltro.split("-")
-    const ano = parseInt(anoStr, 10)
-    const mes = parseInt(mesStr, 10)
+    if (!errReceitas && dataReceitas) {
+      setReceitas(
+        dataReceitas.map((r: any) => ({
+          id: String(r.id),
+          descricao: r.descricao || "Receita sem nome",
+          valor: Number(r.valor || 0),
+          categoria: r.categoria || "Geral",
+          tipo: r.tipo || "OUTRO",
+          status: r.status || "RECEBIDA",
+          data: r.data || r.criadoem || "",
+          vendaId: r.vendaid ? String(r.vendaid) : undefined
+        }))
+      )
+    }
 
-    const dataInicio = new Date(ano, mes - 1, 1).toISOString().split("T")[0]
-    const dataFim = new Date(ano, mes, 0).toISOString().split("T")[0]
+    // 2. Buscar Despesas
+    const { data: dataDespesas, error: errDespesas } = await supabase
+      .from("despesas")
+      .select("*")
+      .order("data", { ascending: false })
 
-    try {
-      // 1. Carregar Receitas
-      const { data: dataRec } = await supabase
-        .from("receitas")
-        .select("*")
-        .neq("status", "CANCELADA")
-        .gte("competencia", dataInicio)
-        .lte("competencia", dataFim)
+    if (!errDespesas && dataDespesas) {
+      setDespesas(
+        dataDespesas.map((d: any) => ({
+          id: String(d.id),
+          descricao: d.descricao || "Despesa sem nome",
+          valor: Number(d.valor || 0),
+          categoria: d.categoria || "Operacional",
+          status: d.status || "PAGO",
+          data: d.data || d.criadoem || ""
+        }))
+      )
+    }
 
-      setReceitas(dataRec || [])
+    // 3. Buscar Compras Fiado / Contas a Receber
+    const { data: dataFiado, error: errFiado } = await supabase
+      .from("compras")
+      .select("*")
+      .gt("valor_pendente", 0)
+      .order("criadoem", { ascending: false })
 
-      // 2. Carregar Despesas
-      const { data: dataDesp } = await supabase
-        .from("despesas")
-        .select("*")
-        .gte("competencia", dataInicio)
-        .lte("competencia", dataFim)
+    if (!errFiado && dataFiado) {
+      setComprasFiado(
+        dataFiado.map((f: any) => ({
+          id: String(f.id),
+          clienteId: String(f.clienteid),
+          clienteNome: f.cliente || "Cliente",
+          valorTotal: Number(f.valor || 0),
+          valorRecebido: Number(f.valor_recebido || 0),
+          valorPendente: Number(f.valor_pendente || f.valor || 0),
+          data: f.criadoem || ""
+        }))
+      )
+    }
 
-      setDespesas(dataDesp || [])
+    // 4. Buscar Custo dos Produtos Vendidos (CMV) das compras/vendas
+    const { data: dataVendas } = await supabase.from("compras").select("custo_total, valor")
 
-      // 3. Carregar Compras para cálculo de CMV e Fiado em aberto
-      const { data: dataCompras } = await supabase
-        .from("compras")
-        .select(`
-          id,
-          valorTotal,
-          formaPagamento,
-          status,
-          criadoem,
-          cliente:clientes(id, nome, cpf),
-          vendaItens(quantidade, custoUnitario)
-        `)
-        .neq("status", "CANCELADA")
-        .gte("criadoem", `${dataInicio}T00:00:00`)
-        .lte("criadoem", `${dataFim}T23:59:59`)
-
-      let cmvTotal = 0
-      let qtdVendas = 0
-      const fiadoList: CompraFiado[] = []
-
-      if (dataCompras) {
-        qtdVendas = dataCompras.length
-        const compraIds = dataCompras.map(c => c.id)
-
-        // Busca pagamentos de fiado anteriores para vincular abatimentos
-        const { data: pagamentosFiado } = await supabase
-          .from("receitas")
-          .select("compraId, valor")
-          .eq("tipo", "PAGAMENTO_FIADO")
-          .neq("status", "CANCELADA")
-          .in("compraId", compraIds.length > 0 ? compraIds : ["none"])
-
-        const recMap = new Map<string, number>()
-        pagamentosFiado?.forEach(p => {
-          if (p.compraId) {
-            recMap.set(p.compraId, (recMap.get(p.compraId) || 0) + Number(p.valor))
-          }
-        })
-
-        dataCompras.forEach(c => {
-          // Soma Custo dos Produtos Vendidos (CMV) via vendaItens
-          if (c.vendaItens && Array.isArray(c.vendaItens)) {
-            c.vendaItens.forEach((item: any) => {
-              cmvTotal += (Number(item.quantidade) || 0) * (Number(item.custoUnitario) || 0)
-            })
-          }
-
-          // Filtra compras Fiado em aberto
-          const eFiado = c.formaPagamento === "Em aberto (Fiado)" || c.formaPagamento === "FIADO"
-          if (eFiado) {
-            const vOrig = Number(c.valorTotal) || 0
-            const vRec = recMap.get(c.id) || 0
-            const vPend = Math.max(0, vOrig - vRec)
-
-            if (vPend > 0) {
-              const cliObj = Array.isArray(c.cliente) ? c.cliente[0] : c.cliente
-              fiadoList.push({
-                id: c.id,
-                clienteId: cliObj?.id || "",
-                clienteNome: cliObj?.nome || "Cliente não informado",
-                clienteCpf: cliObj?.cpf || "-",
-                dataVenda: c.criadoem,
-                valorOriginal: vOrig,
-                valorRecebido: vRec,
-                valorPendente: vPend
-              })
-            }
-          }
-        })
-      }
-
+    if (dataVendas) {
+      setVendasTotaisCount(dataVendas.length)
+      const cmvTotal = dataVendas.reduce((acc, v: any) => acc + Number(v.custo_total || 0), 0)
       setCustoProdutosVendidos(cmvTotal)
-      setVendasTotaisCount(qtdVendas)
-      setComprasFiado(fiadoList)
-    } catch (err) {
-      console.error("Erro ao carregar módulo financeiro:", err)
-    } finally {
-      setCarregando(false)
     }
   }
 
   useEffect(() => {
-    carregarDados()
-  }, [mesFiltro])
+    fetchFinanceiro()
+  }, [])
 
-  // CÁLCULOS E MÉTRICAS CONSOLIDADAS
+  // --- AÇÕES DO BANCO DE DADOS ---
+
+  async function criarReceita() {
+    if (!formReceita.descricao?.trim() || !formReceita.valor) {
+      alert("Preencha a descrição e o valor da receita")
+      return
+    }
+
+    const { error } = await supabase.from("receitas").insert([
+      {
+        descricao: formReceita.descricao,
+        valor: Number(formReceita.valor),
+        categoria: formReceita.categoria || "Geral",
+        tipo: formReceita.tipo || "OUTRO",
+        status: formReceita.status || "RECEBIDA",
+        data: formReceita.data || new Date().toISOString()
+      }
+    ])
+
+    if (error) {
+      alert("Erro ao criar receita: " + error.message)
+      return
+    }
+
+    alert("Receita lançada com sucesso!")
+    setNovaReceitaModal(false)
+    setFormReceita({ tipo: "OUTRO", status: "RECEBIDA", data: new Date().toISOString().split("T")[0] })
+    fetchFinanceiro()
+  }
+
+  async function criarDespesa() {
+    if (!formDespesa.descricao?.trim() || !formDespesa.valor) {
+      alert("Preencha a descrição e o valor da despesa")
+      return
+    }
+
+    const { error } = await supabase.from("despesas").insert([
+      {
+        descricao: formDespesa.descricao,
+        valor: Number(formDespesa.valor),
+        categoria: formDespesa.categoria || "Operacional",
+        status: formDespesa.status || "PAGO",
+        data: formDespesa.data || new Date().toISOString()
+      }
+    ])
+
+    if (error) {
+      alert("Erro ao criar despesa: " + error.message)
+      return
+    }
+
+    alert("Despesa lançada com sucesso!")
+    setNovaDespesaModal(false)
+    setFormDespesa({ status: "PAGO", data: new Date().toISOString().split("T")[0] })
+    fetchFinanceiro()
+  }
+
+  async function abaterFiado() {
+    if (!receberFiadoModal || !valorAbater) return
+
+    const valorNum = Number(valorAbater)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      alert("Informe um valor válido!")
+      return
+    }
+
+    const novoRecebido = receberFiadoModal.valorRecebido + valorNum
+    const novoPendente = Math.max(0, receberFiadoModal.valorPendente - valorNum)
+
+    const { error } = await supabase
+      .from("compras")
+      .update({
+        valor_recebido: novoRecebido,
+        valor_pendente: novoPendente
+      })
+      .eq("id", receberFiadoModal.id)
+
+    if (error) {
+      alert("Erro ao abater valor: " + error.message)
+      return
+    }
+
+    // Registrar como receita de pagamento de fiado
+    await supabase.from("receitas").insert([
+      {
+        descricao: `Recebimento Fiado - ${receberFiadoModal.clienteNome}`,
+        valor: valorNum,
+        categoria: "Fiado",
+        tipo: "OUTRO",
+        status: "RECEBIDA",
+        data: new Date().toISOString()
+      }
+    ])
+
+    alert("Pagamento abatido com sucesso!")
+    setReceberFiadoModal(null)
+    setValorAbater("")
+    fetchFinanceiro()
+  }
+
+  async function excluirRegistro(tabela: "receitas" | "despesas", id: string) {
+    if (!window.confirm("Deseja realmente excluir este registro financeiro?")) return
+
+    const { error } = await supabase.from(tabela).delete().eq("id", id)
+
+    if (error) {
+      alert("Erro ao excluir: " + error.message)
+      return
+    }
+
+    fetchFinanceiro()
+  }
+
+  // --- CÁLCULOS E MÉTRICAS CONSOLIDADAS ---
+
   const resumoMetrics = useMemo(() => {
     const totalReceitas = receitas
       .filter(r => r.status === "RECEBIDA")
@@ -239,7 +265,7 @@ export default function Financeiro() {
 
     const totalDespesas = despesas
       .filter(d => d.status === "PAGO")
-      .reduce((acc, d) => acc + Number(d.valor), 0)
+      .reduce((acc, r) => acc + Number(r.valor), 0)
 
     const totalAReceber = comprasFiado.reduce((acc, f) => acc + f.valorPendente, 0)
     const totalRecebidoFiado = comprasFiado.reduce((acc, f) => acc + f.valorRecebido, 0)
@@ -248,7 +274,13 @@ export default function Financeiro() {
       .filter(r => r.tipo === "VENDA" && r.status === "RECEBIDA")
       .reduce((acc, r) => acc + Number(r.valor), 0)
 
+    // Lucro Bruto = Faturamento de Vendas - Custo das Mercadorias (CMV)
     const lucroBruto = faturamentoVendas - custoProdutosVendidos
+
+    // Lucro Líquido Real = Lucro Bruto - Despesas Operacionais
+    const lucroLiquido = lucroBruto - totalDespesas
+
+    // Resultado de Caixa
     const resultadoLiquido = totalReceitas - totalDespesas
     const clientesComFiado = new Set(comprasFiado.map(f => f.clienteId)).size
 
@@ -257,6 +289,7 @@ export default function Financeiro() {
       totalDespesas,
       resultadoLiquido,
       lucroBruto,
+      lucroLiquido,
       totalAReceber,
       totalRecebidoFiado,
       faturamentoVendas,
@@ -267,604 +300,661 @@ export default function Financeiro() {
     }
   }, [receitas, despesas, comprasFiado, custoProdutosVendidos, vendasTotaisCount])
 
-  // AÇÕES
-  const handleSalvarReceita = async () => {
-    if (!formReceita.descricao || !formReceita.valor) return alert("Preencha a descrição e o valor.")
-    setCarregando(true)
-
-    const { error } = await supabase.from("receitas").insert({
-      descricao: formReceita.descricao,
-      tipo: formReceita.tipo,
-      competencia: formReceita.competencia,
-      recebimento: formReceita.status === "RECEBIDA" ? formReceita.recebimento : null,
-      valor: parseFloat(formReceita.valor.replace(".", "").replace(",", ".")),
-      status: formReceita.status
-    })
-
-    if (error) {
-      alert("Erro ao salvar receita: " + error.message)
-    } else {
-      setModalReceita(false)
-      setFormReceita({
-        descricao: "",
-        tipo: "OUTRA_RECEITA",
-        competencia: new Date().toISOString().split("T")[0],
-        recebimento: new Date().toISOString().split("T")[0],
-        valor: "",
-        status: "RECEBIDA"
-      })
-      carregarDados()
-    }
-    setCarregando(false)
+  // Formatação de moeda e datas
+  function moeda(valor: number) {
+    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
   }
 
-  const handleSalvarDespesa = async () => {
-    if (!formDespesa.descricao || !formDespesa.valor) return alert("Preencha a descrição e o valor.")
-    setCarregando(true)
-
-    const { error } = await supabase.from("despesas").insert({
-      descricao: formDespesa.descricao,
-      categoria: formDespesa.categoria,
-      competencia: formDespesa.competencia,
-      pagamento: formDespesa.status === "PAGO" ? formDespesa.pagamento : null,
-      valor: parseFloat(formDespesa.valor.replace(".", "").replace(",", ".")),
-      recorrente: formDespesa.recorrente,
-      status: formDespesa.status
-    })
-
-    if (error) {
-      alert("Erro ao salvar despesa: " + error.message)
-    } else {
-      setModalDespesa(false)
-      setFormDespesa({
-        descricao: "",
-        categoria: CATEGORIAS_DESPESAS[0],
-        competencia: new Date().toISOString().split("T")[0],
-        pagamento: new Date().toISOString().split("T")[0],
-        valor: "",
-        recorrente: false,
-        status: "PAGO"
-      })
-      carregarDados()
-    }
-    setCarregando(false)
+  function formatarData(dataStr: string) {
+    if (!dataStr) return "-"
+    const d = new Date(dataStr)
+    return isNaN(d.getTime()) ? dataStr : d.toLocaleDateString("pt-BR")
   }
 
-  const handleRegistrarPagamentoFiado = async () => {
-    if (!modalFiado) return
-    const valorNum = parseFloat(formFiado.valorRecebido.replace(".", "").replace(",", "."))
-    if (isNaN(valorNum) || valorNum <= 0) return alert("Informe um valor válido.")
-    if (valorNum > modalFiado.valorPendente) {
-      return alert(`O valor informado excede o saldo pendente de ${moeda(modalFiado.valorPendente)}`)
-    }
+  // Filtros aplicados
+  const categoriasUnicas = Array.from(
+    new Set(
+      abaAtiva === "receitas"
+        ? receitas.map(r => r.categoria)
+        : despesas.map(d => d.categoria)
+    )
+  ).sort()
 
-    setCarregando(true)
+  const receitasFiltradas = receitas
+    .filter(r => r.descricao.toLowerCase().includes(busca.toLowerCase()))
+    .filter(r => !statusFiltro || r.status === statusFiltro)
+    .filter(r => !categoriaFiltro || r.categoria === categoriaFiltro)
 
-    const { error } = await supabase.from("receitas").insert({
-      descricao: `Pagamento Fiado - ${modalFiado.clienteNome}${formFiado.observacao ? ` (${formFiado.observacao})` : ""}`,
-      tipo: "PAGAMENTO_FIADO",
-      competencia: formFiado.data,
-      recebimento: formFiado.data,
-      valor: valorNum,
-      status: "RECEBIDA",
-      compraId: modalFiado.id
-    })
+  const despesasFiltradas = despesas
+    .filter(d => d.descricao.toLowerCase().includes(busca.toLowerCase()))
+    .filter(d => !statusFiltro || d.status === statusFiltro)
+    .filter(d => !categoriaFiltro || d.categoria === categoriaFiltro)
 
-    if (error) {
-      alert("Erro ao registrar pagamento: " + error.message)
-    } else {
-      setModalFiado(null)
-      setFormFiado({ valorRecebido: "", data: new Date().toISOString().split("T")[0], observacao: "" })
-      carregarDados()
-    }
-    setCarregando(false)
+  const fiadoFiltrado = comprasFiado.filter(f =>
+    f.clienteNome.toLowerCase().includes(busca.toLowerCase())
+  )
+
+  function fecharModais() {
+    setNovaReceitaModal(false)
+    setNovaDespesaModal(false)
+    setReceberFiadoModal(null)
+    setValorAbater("")
   }
 
   return (
-    <div style={styles.container}>
-      {/* HEADER DE TÍTULO */}
-      <div style={styles.headerTitleContainer}>
-        <h1 style={styles.title}>Financeiro</h1>
-        <div style={styles.filterBar}>
-          <label style={styles.labelFilter}>
-            Período:
-            <input
-              type="month"
-              value={mesFiltro}
-              onChange={e => setMesFiltro(e.target.value)}
-              style={styles.inputMonth}
-            />
-          </label>
-          <button onClick={carregarDados} style={styles.btnRefresh} title="Atualizar Dados">
-            ↻ Atualizar
+    <div style={container}>
+      {/* MESMA ESTILIZAÇÃO E RESPONSIVIDADE DO COMPONENTE CLIENTES */}
+      <style>{`
+        .financeiro-filtros {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 25px;
+          flex-wrap: wrap;
+        }
+
+        .financeiro-busca {
+          flex: 2;
+          min-width: 220px;
+        }
+
+        .financeiro-select {
+          flex: 1;
+          min-width: 140px;
+        }
+
+        .financeiro-abas {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 25px;
+          border-bottom: 2px solid #eae6db;
+          padding-bottom: 10px;
+          overflow-x: auto;
+        }
+
+        .financeiro-aba-btn {
+          background: transparent;
+          border: none;
+          padding: 8px 16px;
+          font-size: 15px;
+          font-weight: 600;
+          color: #777;
+          cursor: pointer;
+          border-radius: 8px;
+          transition: all 0.2s ease;
+        }
+
+        .financeiro-aba-btn.ativa {
+          background: #111;
+          color: #fff;
+        }
+
+        .financeiro-grid-cards {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-bottom: 25px;
+        }
+
+        .financeiro-grid-secundario {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
+          margin-top: 20px;
+        }
+
+        .financeiro-tabela-wrapper {
+          background: #fff;
+          border-radius: 16px;
+          border: 1px solid #eae6db;
+          overflow-x: auto;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .financeiro-tabela {
+          width: 100%;
+          border-collapse: collapse;
+          text-align: left;
+          font-size: 14px;
+        }
+
+        .financeiro-tabela th {
+          background: #fcfbf7;
+          padding: 14px;
+          font-weight: 600;
+          color: #555;
+          border-bottom: 1px solid #eae6db;
+        }
+
+        .financeiro-tabela td {
+          padding: 14px;
+          border-bottom: 1px solid #f3f0e6;
+          color: #333;
+        }
+
+        .financeiro-tabela tr:last-child td {
+          border-bottom: none;
+        }
+
+        .badge {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .badge-sucesso { background: #dcfce7; color: #15803d; }
+        .badge-alerta { background: #fef3c7; color: #b45309; }
+        .badge-perigo { background: #fee2e2; color: #b91c1c; }
+
+        @media (max-width: 600px) {
+          .financeiro-header {
+            margin-bottom: 18px !important;
+          }
+
+          .financeiro-header-title {
+            font-size: 28px !important;
+          }
+
+          .financeiro-filtros {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px !important;
+            margin-bottom: 22px !important;
+          }
+
+          .financeiro-busca {
+            grid-column: 1 / -1;
+          }
+
+          .financeiro-grid-cards {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px !important;
+          }
+
+          .financeiro-modal {
+            width: 100% !important;
+            max-width: 410px !important;
+            padding: 18px !important;
+            border-radius: 20px !important;
+          }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <div className="financeiro-header" style={header}>
+        <h1 className="financeiro-header-title" style={title}>
+          Financeiro
+        </h1>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            style={primaryBtn}
+            onClick={() => {
+              setFormReceita({
+                tipo: "OUTRO",
+                status: "RECEBIDA",
+                data: new Date().toISOString().split("T")[0]
+              })
+              setNovaReceitaModal(true)
+            }}
+          >
+            + Receita
+          </button>
+
+          <button
+            style={{ ...primaryBtn, background: "#b91c1c" }}
+            onClick={() => {
+              setFormDespesa({
+                status: "PAGO",
+                data: new Date().toISOString().split("T")[0]
+              })
+              setNovaDespesaModal(true)
+            }}
+          >
+            + Despesa
           </button>
         </div>
       </div>
 
-      {/* NAVEGAÇÃO DE ABAS */}
-      <div style={styles.tabsContainer}>
-        {[
-          { key: "resumo", label: "Resumo" },
-          { key: "receitas", label: "Receitas" },
-          { key: "despesas", label: "Despesas" },
-          { key: "areceber", label: "A Receber" }
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setAbaAtiva(tab.key as any)}
-            style={{
-              ...styles.tabButton,
-              ...(abaAtiva === tab.key ? styles.tabButtonActive : {})
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* ABAS DE NAVEGAÇÃO */}
+      <div className="financeiro-abas">
+        <button
+          className={`financeiro-aba-btn ${abaAtiva === "resumo" ? "ativa" : ""}`}
+          onClick={() => setAbaAtiva("resumo")}
+        >
+          Resumo & DRE
+        </button>
+        <button
+          className={`financeiro-aba-btn ${abaAtiva === "receitas" ? "ativa" : ""}`}
+          onClick={() => { setAbaAtiva("receitas"); setStatusFiltro(""); setCategoriaFiltro(""); }}
+        >
+          Receitas ({receitas.length})
+        </button>
+        <button
+          className={`financeiro-aba-btn ${abaAtiva === "despesas" ? "ativa" : ""}`}
+          onClick={() => { setAbaAtiva("despesas"); setStatusFiltro(""); setCategoriaFiltro(""); }}
+        >
+          Despesas ({despesas.length})
+        </button>
+        <button
+          className={`financeiro-aba-btn ${abaAtiva === "fiado" ? "ativa" : ""}`}
+          onClick={() => setAbaAtiva("fiado")}
+        >
+          Contas a Receber ({comprasFiado.length})
+        </button>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL */}
-      {carregando ? (
-        <div style={styles.loadingState}>Carregando informações financeiras...</div>
-      ) : (
-        <>
-          {/* ABA 1: RESUMO */}
-          {abaAtiva === "resumo" && (
-            <div>
-              <div style={styles.gridCards}>
-                <div style={styles.card}>
-                  <span style={styles.cardLabel}>Faturamento (Vendas)</span>
-                  <strong style={styles.cardValue}>{moeda(resumoMetrics.faturamentoVendas)}</strong>
-                  <span style={styles.cardSub}>Total em vendas realizadas</span>
-                </div>
-
-                <div style={styles.card}>
-                  <span style={styles.cardLabel}>Receitas Efetivas</span>
-                  <strong style={{ ...styles.cardValue, color: "#15803d" }}>
-                    {moeda(resumoMetrics.totalReceitas)}
-                  </strong>
-                  <span style={styles.cardSub}>{resumoMetrics.qtdReceitas} lançamentos efetuados</span>
-                </div>
-
-                <div style={styles.card}>
-                  <span style={styles.cardLabel}>Despesas Totais</span>
-                  <strong style={{ ...styles.cardValue, color: "#b91c1c" }}>
-                    {moeda(resumoMetrics.totalDespesas)}
-                  </strong>
-                  <span style={styles.cardSub}>{resumoMetrics.qtdDespesas} despesas pagas</span>
-                </div>
-
-                <div style={{ ...styles.card, borderColor: "#d97706" }}>
-                  <span style={styles.cardLabel}>A Receber (Fiado)</span>
-                  <strong style={{ ...styles.cardValue, color: "#b45309" }}>
-                    {moeda(resumoMetrics.totalAReceber)}
-                  </strong>
-                  <span style={styles.cardSub}>{resumoMetrics.clientesComFiado} clientes pendentes</span>
-                </div>
-              </div>
-
-              {/* DRE SIMPLIFICADO */}
-              <div style={styles.sectionCard}>
-                <h3 style={styles.sectionTitle}>Demonstrativo do Resultado (Resultado do Período)</h3>
-                <div style={styles.dreRow}>
-                  <span>Faturamento de Vendas</span>
-                  <strong>{moeda(resumoMetrics.faturamentoVendas)}</strong>
-                </div>
-                <div style={{ ...styles.dreRow, color: "#b91c1c" }}>
-                  <span>(-) Custo dos Produtos Vendidos (CMV)</span>
-                  <strong>- {moeda(custoProdutosVendidos)}</strong>
-                </div>
-                <div style={{ ...styles.dreRow, borderTop: "1px solid #e5e7eb", fontWeight: "bold" }}>
-                  <span>(=) Lucro Bruto</span>
-                  <span style={{ color: resumoMetrics.lucroBruto >= 0 ? "#15803d" : "#b91c1c" }}>
-                    {moeda(resumoMetrics.lucroBruto)}
-                  </span>
-                </div>
-                <div style={{ ...styles.dreRow, color: "#b91c1c" }}>
-                  <span>(-) Despesas Operacionais</span>
-                  <strong>- {moeda(resumoMetrics.totalDespesas)}</strong>
-                </div>
-                <div style={{ ...styles.dreRow, borderTop: "2px solid #111827", fontWeight: "bold", fontSize: 16 }}>
-                  <span>(=) Resultado Líquido Final</span>
-                  <span style={{ color: resumoMetrics.resultadoLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
-                    {moeda(resumoMetrics.resultadoLiquido)}
-                  </span>
-                </div>
-              </div>
-
-              {/* MÉTRICAS COMPLEMENTARES */}
-              <div style={styles.gridCardsSecundarios}>
-                <div style={styles.cardSm}>
-                  <span style={styles.cardLabel}>Qtd. Vendas</span>
-                  <strong>{resumoMetrics.qtdVendas}</strong>
-                </div>
-                <div style={styles.cardSm}>
-                  <span style={styles.cardLabel}>Qtd. Receitas</span>
-                  <strong>{resumoMetrics.qtdReceitas}</strong>
-                </div>
-                <div style={styles.cardSm}>
-                  <span style={styles.cardLabel}>Qtd. Despesas</span>
-                  <strong>{resumoMetrics.qtdDespesas}</strong>
-                </div>
-                <div style={styles.cardSm}>
-                  <span style={styles.cardLabel}>Recebido de Fiado</span>
-                  <strong>{moeda(resumoMetrics.totalRecebidoFiado)}</strong>
-                </div>
-              </div>
+      {/* ABA 1: RESUMO & DRE */}
+      {abaAtiva === "resumo" && (
+        <div>
+          <div className="financeiro-grid-cards">
+            <div style={card}>
+              <span style={mutedSmall}>Faturamento (Vendas)</span>
+              <strong style={cardValue}>{moeda(resumoMetrics.faturamentoVendas)}</strong>
+              <span style={mutedExtraSmall}>Total de vendas confirmadas</span>
             </div>
-          )}
 
-          {/* ABA 2: RECEITAS */}
-          {abaAtiva === "receitas" && (
-            <div>
-              <div style={styles.actionRow}>
-                <h3 style={styles.sectionTitle}>Lançamentos de Receita</h3>
-                <button onClick={() => setModalReceita(true)} style={styles.btnPrimary}>
-                  + Nova receita
-                </button>
-              </div>
+            <div style={card}>
+              <span style={mutedSmall}>Lucro Bruto</span>
+              <strong style={{ ...cardValue, color: resumoMetrics.lucroBruto >= 0 ? "#15803d" : "#b91c1c" }}>
+                {moeda(resumoMetrics.lucroBruto)}
+              </strong>
+              <span style={mutedExtraSmall}>Faturamento (-) CMV ({moeda(custoProdutosVendidos)})</span>
+            </div>
 
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Descrição</th>
-                      <th style={styles.th}>Tipo</th>
-                      <th style={styles.th}>Competência</th>
-                      <th style={styles.th}>Recebimento</th>
-                      <th style={styles.th}>Valor</th>
-                      <th style={styles.th}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receitas.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={styles.tdEmpty}>Nenhuma receita registrada no período.</td>
+            <div style={{ ...card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+              <span style={{ ...mutedSmall, color: "#166534" }}>Lucro Líquido Real</span>
+              <strong style={{ ...cardValue, color: resumoMetrics.lucroLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
+                {moeda(resumoMetrics.lucroLiquido)}
+              </strong>
+              <span style={mutedExtraSmall}>Lucro Bruto (-) Despesas Operacionais</span>
+            </div>
+
+            <div style={{ ...card, borderColor: "#fde68a" }}>
+              <span style={mutedSmall}>A Receber (Fiado)</span>
+              <strong style={{ ...cardValue, color: "#b45309" }}>
+                {moeda(resumoMetrics.totalAReceber)}
+              </strong>
+              <span style={mutedExtraSmall}>{resumoMetrics.clientesComFiado} cliente(s) pendente(s)</span>
+            </div>
+          </div>
+
+          {/* DRE SIMPLIFICADO */}
+          <div style={sectionBox}>
+            <h3 style={sectionBoxTitle}>Demonstrativo do Resultado do Exercício (DRE)</h3>
+
+            <div style={dreRow}>
+              <span>(+) Faturamento Bruto de Vendas</span>
+              <strong>{moeda(resumoMetrics.faturamentoVendas)}</strong>
+            </div>
+
+            <div style={{ ...dreRow, color: "#b91c1c" }}>
+              <span>(-) Custo das Mercadorias Vendidas (CMV)</span>
+              <strong>- {moeda(custoProdutosVendidos)}</strong>
+            </div>
+
+            <div style={{ ...dreRow, borderTop: "1px solid #eee6d2", fontWeight: "bold" }}>
+              <span>(=) Lucro Bruto</span>
+              <span style={{ color: resumoMetrics.lucroBruto >= 0 ? "#15803d" : "#b91c1c" }}>
+                {moeda(resumoMetrics.lucroBruto)}
+              </span>
+            </div>
+
+            <div style={{ ...dreRow, color: "#b91c1c" }}>
+              <span>(-) Despesas Operacionais</span>
+              <strong>- {moeda(resumoMetrics.totalDespesas)}</strong>
+            </div>
+
+            <div style={{ ...dreRow, borderTop: "2px solid #111", fontWeight: "bold", fontSize: 16, marginTop: 8 }}>
+              <span>(=) Lucro Líquido Final</span>
+              <span style={{ color: resumoMetrics.lucroLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
+                {moeda(resumoMetrics.lucroLiquido)}
+              </span>
+            </div>
+          </div>
+
+          {/* MÉTRICAS SECUNDÁRIAS DE CAIXA */}
+          <div className="financeiro-grid-secundario">
+            <div style={cardSmall}>
+              <span style={mutedSmall}>Receitas Totais Entradas</span>
+              <strong>{moeda(resumoMetrics.totalReceitas)}</strong>
+            </div>
+            <div style={cardSmall}>
+              <span style={mutedSmall}>Despesas Totais Saídas</span>
+              <strong>{moeda(resumoMetrics.totalDespesas)}</strong>
+            </div>
+            <div style={cardSmall}>
+              <span style={mutedSmall}>Resultado de Caixa</span>
+              <strong style={{ color: resumoMetrics.resultadoLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
+                {moeda(resumoMetrics.resultadoLiquido)}
+              </strong>
+            </div>
+            <div style={cardSmall}>
+              <span style={mutedSmall}>Total de Vendas</span>
+              <strong>{resumoMetrics.qtdVendas} realizada(s)</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 2 E 3: LISTAGEM COM FILTROS DE RECEITAS E DESPESAS */}
+      {(abaAtiva === "receitas" || abaAtiva === "despesas") && (
+        <div>
+          <div className="financeiro-filtros">
+            <input
+              className="financeiro-busca"
+              placeholder={`Buscar em ${abaAtiva}...`}
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={input}
+            />
+
+            <select
+              className="financeiro-select"
+              value={statusFiltro}
+              onChange={e => setStatusFiltro(e.target.value)}
+              style={select}
+            >
+              <option value="">Status (Todos)</option>
+              <option value={abaAtiva === "receitas" ? "RECEBIDA" : "PAGO"}>
+                {abaAtiva === "receitas" ? "Recebidas" : "Pagas"}
+              </option>
+              <option value="PENDENTE">Pendentes</option>
+            </select>
+
+            <select
+              className="financeiro-select"
+              value={categoriaFiltro}
+              onChange={e => setCategoriaFiltro(e.target.value)}
+              style={select}
+            >
+              <option value="">Categorias (Todas)</option>
+              {categoriasUnicas.map(cat => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="financeiro-tabela-wrapper">
+            <table className="financeiro-tabela">
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th>Data</th>
+                  <th>Categoria</th>
+                  <th>Status</th>
+                  <th>Valor</th>
+                  <th style={{ textAlign: "right" }}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {abaAtiva === "receitas" ? (
+                  receitasFiltradas.length > 0 ? (
+                    receitasFiltradas.map(r => (
+                      <tr key={r.id}>
+                        <td>
+                          <strong>{r.descricao}</strong>
+                          {r.tipo === "VENDA" && <span style={tagVenda}>Venda</span>}
+                        </td>
+                        <td>{formatarData(r.data)}</td>
+                        <td>{r.categoria}</td>
+                        <td>
+                          <span className={`badge ${r.status === "RECEBIDA" ? "badge-sucesso" : "badge-alerta"}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td style={{ color: "#15803d", fontWeight: "600" }}>{moeda(r.valor)}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            style={btnExcluirTabela}
+                            onClick={() => excluirRegistro("receitas", r.id)}
+                          >
+                            Excluir
+                          </button>
+                        </td>
                       </tr>
-                    ) : (
-                      receitas.map(r => (
-                        <tr key={r.id} style={styles.tr}>
-                          <td style={styles.td}><strong>{r.descricao}</strong></td>
-                          <td style={styles.td}>{r.tipo.replace("_", " ")}</td>
-                          <td style={styles.td}>{dataBR(r.competencia)}</td>
-                          <td style={styles.td}>{dataBR(r.recebimento)}</td>
-                          <td style={{ ...styles.td, color: "#15803d", fontWeight: "bold" }}>
-                            {moeda(Number(r.valor))}
-                          </td>
-                          <td style={styles.td}>
-                            <span style={styles.badgeSuccess}>{r.status}</span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ABA 3: DESPESAS */}
-          {abaAtiva === "despesas" && (
-            <div>
-              <div style={styles.actionRow}>
-                <h3 style={styles.sectionTitle}>Lançamentos de Despesa</h3>
-                <button onClick={() => setModalDespesa(true)} style={styles.btnPrimary}>
-                  + Nova despesa
-                </button>
-              </div>
-
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
+                    ))
+                  ) : (
                     <tr>
-                      <th style={styles.th}>Descrição</th>
-                      <th style={styles.th}>Categoria</th>
-                      <th style={styles.th}>Competência</th>
-                      <th style={styles.th}>Pagamento</th>
-                      <th style={styles.th}>Valor</th>
-                      <th style={styles.th}>Recorrente</th>
-                      <th style={styles.th}>Status</th>
+                      <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
+                        Nenhuma receita encontrada.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {despesas.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={styles.tdEmpty}>Nenhuma despesa registrada no período.</td>
+                  )
+                ) : (
+                  despesasFiltradas.length > 0 ? (
+                    despesasFiltradas.map(d => (
+                      <tr key={d.id}>
+                        <td><strong>{d.descricao}</strong></td>
+                        <td>{formatarData(d.data)}</td>
+                        <td>{d.categoria}</td>
+                        <td>
+                          <span className={`badge ${d.status === "PAGO" ? "badge-sucesso" : "badge-alerta"}`}>
+                            {d.status}
+                          </span>
+                        </td>
+                        <td style={{ color: "#b91c1c", fontWeight: "600" }}>{moeda(d.valor)}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            style={btnExcluirTabela}
+                            onClick={() => excluirRegistro("despesas", d.id)}
+                          >
+                            Excluir
+                          </button>
+                        </td>
                       </tr>
-                    ) : (
-                      despesas.map(d => (
-                        <tr key={d.id} style={styles.tr}>
-                          <td style={styles.td}><strong>{d.descricao}</strong></td>
-                          <td style={styles.td}>{d.categoria}</td>
-                          <td style={styles.td}>{dataBR(d.competencia)}</td>
-                          <td style={styles.td}>{dataBR(d.pagamento)}</td>
-                          <td style={{ ...styles.td, color: "#b91c1c", fontWeight: "bold" }}>
-                            {moeda(Number(d.valor))}
-                          </td>
-                          <td style={styles.td}>{d.recorrente ? "Sim" : "Não"}</td>
-                          <td style={styles.td}>
-                            <span style={d.status === "PAGO" ? styles.badgeSuccess : styles.badgeWarning}>
-                              {d.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ABA 4: A RECEBER */}
-          {abaAtiva === "areceber" && (
-            <div>
-              <div style={styles.actionRow}>
-                <h3 style={styles.sectionTitle}>Contas a Receber (Vendas no Fiado)</h3>
-              </div>
-
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
-                  <thead>
+                    ))
+                  ) : (
                     <tr>
-                      <th style={styles.th}>Cliente</th>
-                      <th style={styles.th}>CPF</th>
-                      <th style={styles.th}>Data da Venda</th>
-                      <th style={styles.th}>Valor Original</th>
-                      <th style={styles.th}>Valor Recebido</th>
-                      <th style={styles.th}>Valor Pendente</th>
-                      <th style={styles.th}>Ações</th>
+                      <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
+                        Nenhuma despesa encontrada.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {comprasFiado.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={styles.tdEmpty}>Nenhum fiado em aberto para este período.</td>
-                      </tr>
-                    ) : (
-                      comprasFiado.map(f => (
-                        <tr key={f.id} style={styles.tr}>
-                          <td style={styles.td}><strong>{f.clienteNome}</strong></td>
-                          <td style={styles.td}>{f.clienteCpf}</td>
-                          <td style={styles.td}>{dataBR(f.dataVenda)}</td>
-                          <td style={styles.td}>{moeda(f.valorOriginal)}</td>
-                          <td style={{ ...styles.td, color: "#15803d" }}>{moeda(f.valorRecebido)}</td>
-                          <td style={{ ...styles.td, color: "#b91c1c", fontWeight: "bold" }}>
-                            {moeda(f.valorPendente)}
-                          </td>
-                          <td style={styles.td}>
-                            <button
-                              onClick={() => {
-                                setModalFiado(f)
-                                setFormFiado({
-                                  valorRecebido: f.valorPendente.toFixed(2),
-                                  data: new Date().toISOString().split("T")[0],
-                                  observacao: ""
-                                })
-                              }}
-                              style={styles.btnSecondary}
-                            >
-                              Registrar pagamento
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 4: FIADO / CONTAS A RECEBER */}
+      {abaAtiva === "fiado" && (
+        <div>
+          <div className="financeiro-filtros">
+            <input
+              className="financeiro-busca"
+              placeholder="Buscar cliente do fiado..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={input}
+            />
+          </div>
+
+          <div className="financeiro-tabela-wrapper">
+            <table className="financeiro-tabela">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Data Compra</th>
+                  <th>Valor Total</th>
+                  <th>Já Pago</th>
+                  <th>Pendente</th>
+                  <th style={{ textAlign: "right" }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fiadoFiltrado.length > 0 ? (
+                  fiadoFiltrado.map(f => (
+                    <tr key={f.id}>
+                      <td><strong>{f.clienteNome}</strong></td>
+                      <td>{formatarData(f.data)}</td>
+                      <td>{moeda(f.valorTotal)}</td>
+                      <td style={{ color: "#15803d" }}>{moeda(f.valorRecebido)}</td>
+                      <td style={{ color: "#b45309", fontWeight: "bold" }}>{moeda(f.valorPendente)}</td>
+                      <td style={{ textAlign: "right" }}>
+                        <button
+                          style={primaryBtnSm}
+                          onClick={() => setReceberFiadoModal(f)}
+                        >
+                          Abater / Receber
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
+                      Nenhum valor pendente no fiado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* MODAL: NOVA RECEITA */}
-      {modalReceita && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <h3 style={styles.modalTitle}>+ Nova Receita</h3>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Tipo</label>
-              <select
-                value={formReceita.tipo}
-                onChange={e => setFormReceita({ ...formReceita, tipo: e.target.value as TipoReceita })}
-                style={styles.input}
-              >
-                <option value="OUTRA_RECEITA">Outra receita</option>
-                <option value="VENDA">Venda</option>
-                <option value="PAGAMENTO_FIADO">Pagamento de fiado</option>
-                <option value="OUTROS">Outros</option>
-              </select>
+      {novaReceitaModal && (
+        <div style={overlay} onClick={fecharModais}>
+          <div style={modal} onClick={e => e.stopPropagation()}>
+            <div style={modalHeader}>
+              <h2 style={modalTitle}>Nova Receita</h2>
+              <button style={closeBtn} onClick={fecharModais}>×</button>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Descrição</label>
-              <input
-                type="text"
-                placeholder="Ex: Serviço de consultoria"
-                value={formReceita.descricao}
-                onChange={e => setFormReceita({ ...formReceita, descricao: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Valor (R$)</label>
-              <input
-                type="text"
-                placeholder="0,00"
-                value={formReceita.valor}
-                onChange={e => setFormReceita({ ...formReceita, valor: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Competência</label>
-              <input
-                type="date"
-                value={formReceita.competencia}
-                onChange={e => setFormReceita({ ...formReceita, competencia: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formRow}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Status</label>
-                <select
-                  value={formReceita.status}
-                  onChange={e => setFormReceita({ ...formReceita, status: e.target.value as any })}
-                  style={styles.input}
-                >
-                  <option value="RECEBIDA">RECEBIDA</option>
-                  <option value="PENDENTE">PENDENTE</option>
-                </select>
-              </div>
-              {formReceita.status === "RECEBIDA" && (
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Data Recebimento</label>
-                  <input
-                    type="date"
-                    value={formReceita.recebimento}
-                    onChange={e => setFormReceita({ ...formReceita, recebimento: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-              )}
-            </div>
-            <div style={styles.modalActions}>
-              <button onClick={() => setModalReceita(false)} style={styles.btnCancel}>Cancelar</button>
-              <button onClick={handleSalvarReceita} style={styles.btnPrimary}>Salvar Receita</button>
+
+            <input
+              style={inputSpacing}
+              placeholder="Descrição (ex: Venda de Balcão, Serviços)"
+              value={formReceita.descricao || ""}
+              onChange={e => setFormReceita({ ...formReceita, descricao: e.target.value })}
+            />
+
+            <input
+              style={inputSpacing}
+              type="number"
+              placeholder="Valor (R$)"
+              value={formReceita.valor || ""}
+              onChange={e => setFormReceita({ ...formReceita, valor: Number(e.target.value) })}
+            />
+
+            <input
+              style={inputSpacing}
+              placeholder="Categoria (ex: Vendas, Serviços, Extra)"
+              value={formReceita.categoria || ""}
+              onChange={e => setFormReceita({ ...formReceita, categoria: e.target.value })}
+            />
+
+            <input
+              style={inputSpacing}
+              type="date"
+              value={formReceita.data || ""}
+              onChange={e => setFormReceita({ ...formReceita, data: e.target.value })}
+            />
+
+            <select
+              style={inputSpacing}
+              value={formReceita.status || "RECEBIDA"}
+              onChange={e => setFormReceita({ ...formReceita, status: e.target.value as any })}
+            >
+              <option value="RECEBIDA">Recebida</option>
+              <option value="PENDENTE">Pendente</option>
+            </select>
+
+            <div style={modalActions}>
+              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
+              <button style={primaryBtn} onClick={criarReceita}>Salvar Receita</button>
             </div>
           </div>
         </div>
       )}
 
       {/* MODAL: NOVA DESPESA */}
-      {modalDespesa && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <h3 style={styles.modalTitle}>+ Nova Despesa</h3>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Categoria</label>
-              <select
-                value={formDespesa.categoria}
-                onChange={e => setFormDespesa({ ...formDespesa, categoria: e.target.value })}
-                style={styles.input}
-              >
-                {CATEGORIAS_DESPESAS.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+      {novaDespesaModal && (
+        <div style={overlay} onClick={fecharModais}>
+          <div style={modal} onClick={e => e.stopPropagation()}>
+            <div style={modalHeader}>
+              <h2 style={modalTitle}>Nova Despesa</h2>
+              <button style={closeBtn} onClick={fecharModais}>×</button>
             </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Descrição</label>
-              <input
-                type="text"
-                placeholder="Ex: Aluguel do espaço"
-                value={formDespesa.descricao}
-                onChange={e => setFormDespesa({ ...formDespesa, descricao: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Valor (R$)</label>
-              <input
-                type="text"
-                placeholder="0,00"
-                value={formDespesa.valor}
-                onChange={e => setFormDespesa({ ...formDespesa, valor: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Competência</label>
-              <input
-                type="date"
-                value={formDespesa.competencia}
-                onChange={e => setFormDespesa({ ...formDespesa, competencia: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formRow}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Status</label>
-                <select
-                  value={formDespesa.status}
-                  onChange={e => setFormDespesa({ ...formDespesa, status: e.target.value as any })}
-                  style={styles.input}
-                >
-                  <option value="PAGO">PAGO</option>
-                  <option value="PENDENTE">PENDENTE</option>
-                </select>
-              </div>
-              {formDespesa.status === "PAGO" && (
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Data Pagamento</label>
-                  <input
-                    type="date"
-                    value={formDespesa.pagamento}
-                    onChange={e => setFormDespesa({ ...formDespesa, pagamento: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-              )}
-            </div>
-            <div style={{ ...styles.formGroup, flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                id="recorrente_check"
-                checked={formDespesa.recorrente}
-                onChange={e => setFormDespesa({ ...formDespesa, recorrente: e.target.checked })}
-              />
-              <label htmlFor="recorrente_check" style={styles.label}>Despesa Recorrente</label>
-            </div>
-            <div style={styles.modalActions}>
-              <button onClick={() => setModalDespesa(false)} style={styles.btnCancel}>Cancelar</button>
-              <button onClick={handleSalvarDespesa} style={styles.btnPrimary}>Salvar Despesa</button>
+
+            <input
+              style={inputSpacing}
+              placeholder="Descrição (ex: Aluguel, Luz, Fornecedores)"
+              value={formDespesa.descricao || ""}
+              onChange={e => setFormDespesa({ ...formDespesa, descricao: e.target.value })}
+            />
+
+            <input
+              style={inputSpacing}
+              type="number"
+              placeholder="Valor (R$)"
+              value={formDespesa.valor || ""}
+              onChange={e => setFormDespesa({ ...formDespesa, valor: Number(e.target.value) })}
+            />
+
+            <input
+              style={inputSpacing}
+              placeholder="Categoria (ex: Operacional, Fixo, Variável)"
+              value={formDespesa.categoria || ""}
+              onChange={e => setFormDespesa({ ...formDespesa, categoria: e.target.value })}
+            />
+
+            <input
+              style={inputSpacing}
+              type="date"
+              value={formDespesa.data || ""}
+              onChange={e => setFormDespesa({ ...formDespesa, data: e.target.value })}
+            />
+
+            <select
+              style={inputSpacing}
+              value={formDespesa.status || "PAGO"}
+              onChange={e => setFormDespesa({ ...formDespesa, status: e.target.value as any })}
+            >
+              <option value="PAGO">Pago</option>
+              <option value="PENDENTE">Pendente</option>
+            </select>
+
+            <div style={modalActions}>
+              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
+              <button style={{ ...primaryBtn, background: "#b91c1c" }} onClick={criarDespesa}>
+                Salvar Despesa
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: REGISTRAR PAGAMENTO FIADO */}
-      {modalFiado && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <h3 style={styles.modalTitle}>Registrar Pagamento de Fiado</h3>
-            <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16 }}>
-              Cliente: <strong>{modalFiado.clienteNome}</strong> | Saldo Pendente:{" "}
-              <strong style={{ color: "#b91c1c" }}>{moeda(modalFiado.valorPendente)}</strong>
+      {/* MODAL: ABATER FIADO */}
+      {receberFiadoModal && (
+        <div style={overlay} onClick={fecharModais}>
+          <div style={modal} onClick={e => e.stopPropagation()}>
+            <div style={modalHeader}>
+              <h2 style={modalTitle}>Abater Fiado</h2>
+              <button style={closeBtn} onClick={fecharModais}>×</button>
+            </div>
+
+            <p style={{ fontSize: 14, color: "#555", marginBottom: 15 }}>
+              Cliente: <strong>{receberFiadoModal.clienteNome}</strong><br />
+              Valor pendente atual: <strong style={{ color: "#b45309" }}>{moeda(receberFiadoModal.valorPendente)}</strong>
             </p>
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Valor Recebido (R$)</label>
-              <input
-                type="text"
-                value={formFiado.valorRecebido}
-                onChange={e => setFormFiado({ ...formFiado, valorRecebido: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Data do Recebimento</label>
-              <input
-                type="date"
-                value={formFiado.data}
-                onChange={e => setFormFiado({ ...formFiado, data: e.target.value })}
-                style={styles.input}
-              />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Observação</label>
-              <input
-                type="text"
-                placeholder="Ex: Parcela via PIX"
-                value={formFiado.observacao}
-                onChange={e => setFormFiado({ ...formFiado, observacao: e.target.value })}
-                style={styles.input}
-              />
-            </div>
+            <input
+              style={inputSpacing}
+              type="number"
+              placeholder="Valor a receber/abater (R$)"
+              value={valorAbater}
+              onChange={e => setValorAbater(e.target.value)}
+            />
 
-            <div style={styles.modalActions}>
-              <button onClick={() => setModalFiado(null)} style={styles.btnCancel}>Cancelar</button>
-              <button onClick={handleRegistrarPagamentoFiado} style={styles.btnPrimary}>Confirmar Pagamento</button>
+            <div style={modalActions}>
+              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
+              <button style={primaryBtn} onClick={abaterFiado}>Confirmar Recebimento</button>
             </div>
           </div>
         </div>
@@ -873,280 +963,204 @@ export default function Financeiro() {
   )
 }
 
-// ==========================================
-// ESTILOS VISUAIS UNIFICADOS DO SISTEMA
-// ==========================================
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    backgroundColor: "#fafafa",
-    minHeight: "100vh",
-    padding: "24px 32px",
-    fontFamily: "'Inter', sans-serif",
-    color: "#1f2937"
-  },
-  headerTitleContainer: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20
-  },
-  title: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#111827",
-    margin: 0
-  },
-  filterBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12
-  },
-  labelFilter: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#4b5563",
-    display: "flex",
-    alignItems: "center",
-    gap: 6
-  },
-  inputMonth: {
-    padding: "6px 10px",
-    borderRadius: 6,
-    border: "1px solid #d1d5db",
-    fontSize: 13,
-    backgroundColor: "#ffffff"
-  },
-  btnRefresh: {
-    backgroundColor: "#ffffff",
-    border: "1px solid #d1d5db",
-    padding: "6px 14px",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 13,
-    color: "#374151"
-  },
-  tabsContainer: {
-    display: "flex",
-    gap: 8,
-    borderBottom: "1px solid #e5e7eb",
-    marginBottom: 24
-  },
-  tabButton: {
-    padding: "10px 18px",
-    border: "none",
-    background: "none",
-    fontSize: 14,
-    fontWeight: 500,
-    color: "#6b7280",
-    cursor: "pointer",
-    borderBottom: "2px solid transparent"
-  },
-  tabButtonActive: {
-    color: "#b45309",
-    borderBottom: "2px solid #b45309",
-    fontWeight: "bold"
-  },
-  gridCards: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 16,
-    marginBottom: 24
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    padding: 18,
-    borderRadius: 8,
-    border: "1px solid #f3f4f6",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-    display: "flex",
-    flexDirection: "column"
-  },
-  cardLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.5
-  },
-  cardValue: {
-    fontSize: 22,
-    fontWeight: "bold",
-    margin: "6px 0 2px",
-    color: "#111827"
-  },
-  cardSub: {
-    fontSize: 11,
-    color: "#9ca3af"
-  },
-  gridCardsSecundarios: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: 12,
-    marginTop: 16
-  },
-  cardSm: {
-    backgroundColor: "#ffffff",
-    padding: 12,
-    borderRadius: 6,
-    border: "1px solid #f3f4f6",
-    fontSize: 13
-  },
-  sectionCard: {
-    backgroundColor: "#ffffff",
-    padding: 20,
-    borderRadius: 8,
-    border: "1px solid #f3f4f6",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
-  },
-  sectionTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 18,
-    margin: "0 0 16px 0",
-    color: "#111827"
-  },
-  dreRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "10px 0",
-    fontSize: 14
-  },
-  actionRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16
-  },
-  btnPrimary: {
-    backgroundColor: "#111827",
-    color: "#ffffff",
-    padding: "8px 16px",
-    borderRadius: 6,
-    border: "none",
-    fontWeight: 600,
-    fontSize: 13,
-    cursor: "pointer"
-  },
-  btnSecondary: {
-    backgroundColor: "#fef3c7",
-    color: "#92400e",
-    border: "1px solid #fde68a",
-    padding: "6px 12px",
-    borderRadius: 6,
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: "pointer"
-  },
-  tableWrapper: {
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    border: "1px solid #f3f4f6",
-    overflow: "hidden"
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    textAlign: "left",
-    fontSize: 13
-  },
-  th: {
-    backgroundColor: "#f9fafb",
-    padding: "12px 16px",
-    borderBottom: "1px solid #e5e7eb",
-    fontWeight: 600,
-    color: "#374151"
-  },
-  tr: {
-    borderBottom: "1px solid #f3f4f6"
-  },
-  td: {
-    padding: "12px 16px",
-    color: "#374151"
-  },
-  tdEmpty: {
-    padding: 24,
-    textAlign: "center",
-    color: "#9ca3af"
-  },
-  badgeSuccess: {
-    backgroundColor: "#dcfce7",
-    color: "#15803d",
-    padding: "2px 8px",
-    borderRadius: 12,
-    fontSize: 11,
-    fontWeight: 600
-  },
-  badgeWarning: {
-    backgroundColor: "#fef3c7",
-    color: "#b45309",
-    padding: "2px 8px",
-    borderRadius: 12,
-    fontSize: 11,
-    fontWeight: 600
-  },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000
-  },
-  modalCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    padding: 24,
-    width: "100%",
-    maxWidth: 440,
-    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
-  },
-  modalTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 20,
-    margin: "0 0 16px 0"
-  },
-  formGroup: {
-    display: "flex",
-    flexDirection: "column",
-    marginBottom: 12,
-    gap: 4
-  },
-  formRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 8
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: "#374151"
-  },
-  input: {
-    padding: "8px 10px",
-    borderRadius: 6,
-    border: "1px solid #d1d5db",
-    fontSize: 13
-  },
-  modalActions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 8,
-    marginTop: 20
-  },
-  btnCancel: {
-    backgroundColor: "#ffffff",
-    border: "1px solid #d1d5db",
-    padding: "8px 14px",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontSize: 13
-  },
-  loadingState: {
-    padding: 40,
-    textAlign: "center",
-    color: "#6b7280"
-  }
+// --- ESTILOS IDÊNTICOS AO COMPONENTE DE CLIENTES (CSS IN LINE) ---
+
+const container: React.CSSProperties = {
+  maxWidth: 1100,
+  margin: "0 auto",
+  padding: "20px 16px",
+  fontFamily: "Inter, system-ui, sans-serif",
+  color: "#111"
+}
+
+const header: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 25
+}
+
+const title: React.CSSProperties = {
+  fontSize: 32,
+  fontWeight: 700,
+  margin: 0
+}
+
+const input: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  fontSize: 14,
+  outline: "none",
+  background: "#fff"
+}
+
+const select: React.CSSProperties = {
+  ...input,
+  cursor: "pointer"
+}
+
+const inputSpacing: React.CSSProperties = {
+  ...input,
+  width: "100%",
+  boxSizing: "border-box",
+  marginBottom: 12
+}
+
+const primaryBtn: React.CSSProperties = {
+  background: "#111",
+  color: "#fff",
+  border: "none",
+  padding: "10px 18px",
+  borderRadius: 10,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontSize: 14,
+  transition: "opacity 0.2s"
+}
+
+const primaryBtnSm: React.CSSProperties = {
+  ...primaryBtn,
+  padding: "6px 12px",
+  fontSize: 12
+}
+
+const secondaryBtn: React.CSSProperties = {
+  background: "#f3f0e6",
+  color: "#333",
+  border: "1px solid #eee6d2",
+  padding: "10px 18px",
+  borderRadius: 10,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontSize: 14
+}
+
+const card: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 16,
+  padding: 18,
+  border: "1px solid #eae6db",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.02)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between"
+}
+
+const cardSmall: React.CSSProperties = {
+  ...card,
+  padding: 14,
+  borderRadius: 12
+}
+
+const cardValue: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 700,
+  margin: "8px 0"
+}
+
+const mutedSmall: React.CSSProperties = {
+  fontSize: 13,
+  color: "#666"
+}
+
+const mutedExtraSmall: React.CSSProperties = {
+  fontSize: 11,
+  color: "#888"
+}
+
+const sectionBox: React.CSSProperties = {
+  background: "#fcfbf7",
+  border: "1px solid #eee6d2",
+  borderRadius: 16,
+  padding: 20,
+  marginTop: 10,
+  marginBottom: 20
+}
+
+const sectionBoxTitle: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 700,
+  marginTop: 0,
+  marginBottom: 15,
+  color: "#222"
+}
+
+const dreRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  padding: "8px 0",
+  fontSize: 14
+}
+
+const tagVenda: React.CSSProperties = {
+  marginLeft: 8,
+  background: "#e0f2fe",
+  color: "#0369a1",
+  fontSize: 10,
+  padding: "2px 6px",
+  borderRadius: 4,
+  fontWeight: "bold"
+}
+
+const btnExcluirTabela: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "#b91c1c",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600
+}
+
+const overlay: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  background: "rgba(0, 0, 0, 0.4)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 999,
+  padding: 16
+}
+
+const modal: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 20,
+  padding: 24,
+  width: "100%",
+  maxWidth: 460,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+  maxHeight: "90vh",
+  overflowY: "auto"
+}
+
+const modalHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 18
+}
+
+const modalTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 700,
+  margin: 0
+}
+
+const closeBtn: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  fontSize: 24,
+  cursor: "pointer",
+  color: "#888"
+}
+
+const modalActions: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  marginTop: 18
 }
