@@ -15,24 +15,14 @@ type Props = {
   setPage: (p: Page) => void
 }
 
-export default function Layout({
-  children,
-  setPage
-}: Props) {
-  const [active, setActive] =
-    useState<Page>("clientes")
-
-  const [menuOpen, setMenuOpen] =
-    useState(true)
-
-  const [isMobile, setIsMobile] =
-    useState(false)
+export default function Layout({ children, setPage }: Props) {
+  const [active, setActive] = useState<Page>("clientes")
+  const [menuOpen, setMenuOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
     function handleResize() {
-      const mobile =
-        window.innerWidth <= 768
-
+      const mobile = window.innerWidth <= 768
       setIsMobile(mobile)
 
       if (mobile) {
@@ -44,16 +34,10 @@ export default function Layout({
 
     handleResize()
 
-    window.addEventListener(
-      "resize",
-      handleResize
-    )
+    window.addEventListener("resize", handleResize)
 
     return () => {
-      window.removeEventListener(
-        "resize",
-        handleResize
-      )
+      window.removeEventListener("resize", handleResize)
     }
   }, [])
 
@@ -68,29 +52,22 @@ export default function Layout({
 
   return (
     <div style={layout}>
-      {/* =========================
-          HEADER MOBILE
-      ========================= */}
 
+      {/* HEADER MOBILE */}
       {isMobile && (
         <header style={mobileHeader}>
+
           <button
-            onClick={() =>
-              setMenuOpen(prev => !prev)
-            }
+            onClick={() => setMenuOpen(prev => !prev)}
             style={menuButton}
-            aria-label={
-              menuOpen
-                ? "Fechar menu"
-                : "Abrir menu"
-            }
+            aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={menuOpen}
           >
             <span
               style={{
                 ...hamburgerLine,
                 transform: menuOpen
-                  ? "rotate(45deg) translate(5px, 5px)"
+                  ? "rotate(45deg) translate(4px, 4px)"
                   : "none"
               }}
             />
@@ -106,7 +83,7 @@ export default function Layout({
               style={{
                 ...hamburgerLine,
                 transform: menuOpen
-                  ? "rotate(-45deg) translate(5px, -5px)"
+                  ? "rotate(-45deg) translate(4px, -4px)"
                   : "none"
               }}
             />
@@ -115,44 +92,22 @@ export default function Layout({
           <div style={mobileLogo}>
             Cami&Duda
           </div>
+
         </header>
       )}
 
-      {/* =========================
-          OVERLAY MOBILE
-      ========================= */}
+      {/* OVERLAY MOBILE */}
+      {isMobile && menuOpen && (
+        <div
+          style={overlay}
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
-      {isMobile &&
-        menuOpen && (
-          <div
-            style={overlay}
-            onClick={() =>
-              setMenuOpen(false)
-            }
-          />
-        )}
-
-      {/* =========================
-          SIDEBAR
-      ========================= */}
-
+      {/* SIDEBAR */}
       <aside
         style={{
           ...sidebar,
-
-          width:
-            isMobile
-              ? 280
-              : menuOpen
-                ? 260
-                : 76,
-
-          minWidth:
-            isMobile
-              ? 280
-              : menuOpen
-                ? 260
-                : 76,
 
           ...(isMobile
             ? {
@@ -160,6 +115,7 @@ export default function Layout({
                 top: 0,
                 left: 0,
                 bottom: 0,
+                width: 280,
                 maxWidth: "85vw",
                 height: "100dvh",
                 zIndex: 1001,
@@ -168,8 +124,7 @@ export default function Layout({
                   ? "translateX(0)"
                   : "translateX(-100%)",
 
-                transition:
-                  "transform 0.3s ease",
+                transition: "transform 0.3s ease",
 
                 boxShadow: menuOpen
                   ? "8px 0 30px rgba(0,0,0,0.14)"
@@ -178,169 +133,106 @@ export default function Layout({
                 overflowY: "auto"
               }
             : {
-                position: "relative",
-                transition:
-                  "width 0.25s ease, min-width 0.25s ease"
+                width: menuOpen ? 260 : 76,
+                minWidth: menuOpen ? 260 : 76,
+                transition: "width 0.3s ease, min-width 0.3s ease"
               })
-        }}
+        }
       >
-        {/* =========================
-            CABEÇALHO SIDEBAR
-        ========================= */}
 
+        {/* CABEÇALHO DO MENU */}
         <div
           style={{
             ...sidebarHeader,
-
-            justifyContent:
-              menuOpen || isMobile
-                ? "space-between"
-                : "center"
+            justifyContent: menuOpen
+              ? "space-between"
+              : "center"
           }}
         >
-          {(menuOpen || isMobile) && (
-            <div style={brandWrap}>
-              <div style={logo}>
-                Cami&Duda
-              </div>
+
+          {menuOpen && (
+            <div style={logo}>
+              Cami&Duda
             </div>
           )}
 
-          {/* HAMBÚRGUER DESKTOP */}
-
+          {/* BOTÃO DESKTOP */}
           {!isMobile && (
             <button
-              onClick={() =>
-                setMenuOpen(prev => !prev)
-              }
-              style={desktopMenuButton}
+              onClick={() => setMenuOpen(prev => !prev)}
+              style={{
+                ...desktopMenuButton,
+                ...(menuOpen ? desktopCloseButton : {})
+              }}
               aria-label={
                 menuOpen
                   ? "Recolher menu"
                   : "Expandir menu"
               }
-              title={
-                menuOpen
-                  ? "Recolher menu"
-                  : "Expandir menu"
-              }
             >
-              <span
-                style={hamburgerLine}
-              />
-              <span
-                style={hamburgerLine}
-              />
-              <span
-                style={hamburgerLine}
-              />
+              {menuOpen ? (
+                <span style={discreteX}>
+                  ×
+                </span>
+              ) : (
+                <>
+                  <span style={smallHamburgerLine} />
+                  <span style={smallHamburgerLine} />
+                  <span style={smallHamburgerLine} />
+                </>
+              )}
             </button>
           )}
+
         </div>
 
-        <div
-          style={{
-            ...divider,
-
-            marginLeft:
-              menuOpen || isMobile
-                ? 24
-                : 12,
-
-            marginRight:
-              menuOpen || isMobile
-                ? 24
-                : 12
-          }}
-        />
-
-        {/* =========================
-            NAVEGAÇÃO
-        ========================= */}
+        <div style={divider} />
 
         <NavItem
           label="Dashboard"
-          active={
-            active === "dashboard"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("dashboard")
-          }
+          active={active === "dashboard"}
+          onClick={() => nav("dashboard")}
+          collapsed={!menuOpen}
         />
 
         <NavItem
           label="Clientes"
-          active={
-            active === "clientes"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("clientes")
-          }
+          active={active === "clientes"}
+          onClick={() => nav("clientes")}
+          collapsed={!menuOpen}
         />
 
         <NavItem
           label="Compras"
-          active={
-            active === "compra"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("compra")
-          }
+          active={active === "compra"}
+          onClick={() => nav("compra")}
+          collapsed={!menuOpen}
         />
 
         <NavItem
           label="Troca de Pontos"
-          active={
-            active === "troca"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("troca")
-          }
+          active={active === "troca"}
+          onClick={() => nav("troca")}
+          collapsed={!menuOpen}
         />
 
         <NavItem
           label="Estoque"
-          active={
-            active === "produtos"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("produtos")
-          }
+          active={active === "produtos"}
+          onClick={() => nav("produtos")}
+          collapsed={!menuOpen}
         />
 
         <NavItem
           label="Financeiro"
-          active={
-            active === "financeiro"
-          }
-          collapsed={
-            !menuOpen && !isMobile
-          }
-          onClick={() =>
-            nav("financeiro")
-          }
+          active={active === "financeiro"}
+          onClick={() => nav("financeiro")}
+          collapsed={!menuOpen}
         />
+
       </aside>
 
-      {/* =========================
-          CONTEÚDO
-      ========================= */}
-
+      {/* CONTEÚDO */}
       <main
         style={{
           ...content,
@@ -349,56 +241,47 @@ export default function Layout({
             ? {
                 width: "100%",
                 minWidth: 0,
-                padding:
-                  "80px 16px 30px"
+                padding: "80px 16px 30px"
               }
-            : {
-                transition:
-                  "padding 0.25s ease"
-              })
+            : {})
         }}
       >
         {children}
       </main>
+
     </div>
   )
 }
 
-/* =========================
-   NAV ITEM
-========================= */
-
 function NavItem({
   label,
   active,
-  collapsed,
-  onClick
+  onClick,
+  collapsed
 }: {
   label: string
   active: boolean
-  collapsed: boolean
   onClick: () => void
+  collapsed: boolean
 }) {
   return (
     <button
       onClick={onClick}
-      title={
-        collapsed
-          ? label
-          : undefined
-      }
+      title={collapsed ? label : undefined}
       style={{
         ...navBtn,
 
-        padding:
-          collapsed
-            ? "16px 0"
-            : "16px 36px",
-
-        textAlign:
-          collapsed
-            ? "center"
-            : "left",
+        ...(collapsed
+          ? {
+              padding: "12px 0",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              borderRadius: 10,
+              margin: "4px 10px",
+              width: "calc(100% - 20px)"
+            }
+          : {}),
 
         background: active
           ? "#f9f3df"
@@ -408,35 +291,32 @@ function NavItem({
           ? "#8b6f3d"
           : "#5f5a50",
 
-        borderLeft: active
-          ? "4px solid #d8bf7a"
-          : "4px solid transparent",
+        borderLeft: collapsed
+          ? "none"
+          : active
+            ? "4px solid #d8bf7a"
+            : "4px solid transparent",
 
-        fontWeight:
-          active ? 600 : 500,
+        fontWeight: active
+          ? 600
+          : 500,
 
         boxShadow: active
           ? "0 4px 12px rgba(216,191,122,0.12)"
           : "none"
       }}
     >
+
       {collapsed ? (
         <span
           style={{
-            display: "inline-flex",
-            width: 30,
-            height: 30,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 8,
+            ...collapsedIcon,
             background: active
               ? "#f1e5bd"
-              : "#f7f5ef",
-            fontSize: 11,
-            fontWeight: 700,
+              : "#f4f2ed",
             color: active
               ? "#8b6f3d"
-              : "#777"
+              : "#77736b"
           }}
         >
           {label.charAt(0)}
@@ -444,9 +324,11 @@ function NavItem({
       ) : (
         label
       )}
+
     </button>
   )
 }
+
 
 /* =========================
    LAYOUT
@@ -460,6 +342,7 @@ const layout = {
   overflowX: "hidden" as const
 }
 
+
 /* =========================
    SIDEBAR
 ========================= */
@@ -467,95 +350,103 @@ const layout = {
 const sidebar = {
   minHeight: "100vh",
   background: "#fffdfa",
-  borderRight:
-    "1px solid #efe3bf",
+  borderRight: "1px solid #efe3bf",
   paddingTop: 28,
   display: "flex",
-  flexDirection:
-    "column" as const,
-  boxShadow:
-    "4px 0 18px rgba(216,191,122,0.08)",
-  boxSizing:
-    "border-box" as const,
-  flexShrink: 0
+  flexDirection: "column" as const,
+  boxShadow: "4px 0 18px rgba(216,191,122,0.08)",
+  boxSizing: "border-box" as const,
+  overflowX: "hidden" as const
 }
 
 const sidebarHeader = {
-  minHeight: 58,
-  padding:
-    "0 16px",
+  height: 52,
+  paddingLeft: 24,
+  paddingRight: 18,
   display: "flex",
   alignItems: "center",
-  gap: 10,
-  boxSizing:
-    "border-box" as const
-}
-
-const brandWrap = {
-  paddingLeft: 12,
-  paddingRight: 4,
-  marginBottom: 0
+  boxSizing: "border-box" as const
 }
 
 const logo = {
-  fontFamily:
-    "Playfair Display, serif",
+  fontFamily: "Playfair Display, serif",
   fontSize: 28,
   color: "#b9974f",
   fontWeight: 700,
   letterSpacing: "0.4px",
-  whiteSpace:
-    "nowrap" as const
+  whiteSpace: "nowrap" as const
 }
 
 const divider = {
   height: 1,
   background:
     "linear-gradient(90deg, transparent, #e7d39b, transparent)",
-  margin:
-    "18px 24px 20px",
-  flexShrink: 0
+  margin: "12px 18px 22px"
 }
 
-const navBtn = {
-  border: "none",
-  background: "transparent",
-  textAlign:
-    "left" as const,
-  fontSize: 15,
-  cursor: "pointer",
-  transition:
-    "all 0.25s ease",
-  marginBottom: 6,
-  borderRadius:
-    "0 14px 14px 0",
-  width: "100%",
-  boxSizing:
-    "border-box" as const,
-  minHeight: 52,
-  flexShrink: 0
-}
 
 /* =========================
-   DESKTOP MENU BUTTON
+   MENU BUTTON DESKTOP
 ========================= */
 
 const desktopMenuButton = {
-  width: 40,
-  height: 40,
+  width: 30,
+  height: 30,
   border: "none",
-  background: "#f9f6ec",
-  borderRadius: 10,
+  background: "transparent",
   display: "flex",
-  flexDirection:
-    "column" as const,
-  justifyContent: "center",
   alignItems: "center",
-  gap: 4,
+  justifyContent: "center",
   cursor: "pointer",
   padding: 0,
+  borderRadius: 6,
   flexShrink: 0
 }
+
+const desktopCloseButton = {
+  marginRight: -2
+}
+
+const discreteX = {
+  fontSize: 22,
+  lineHeight: 1,
+  fontWeight: 300,
+  color: "#8b6f3d",
+  opacity: 0.65,
+  transform: "translateY(-1px)"
+}
+
+
+/* =========================
+   MENU
+========================= */
+
+const navBtn = {
+  padding: "15px 30px",
+  border: "none",
+  background: "transparent",
+  textAlign: "left" as const,
+  fontSize: 15,
+  cursor: "pointer",
+  transition: "all 0.25s ease",
+  marginBottom: 6,
+  borderRadius: "0 14px 14px 0",
+  width: "100%",
+  boxSizing: "border-box" as const
+}
+
+const collapsedIcon = {
+  width: 34,
+  height: 34,
+  borderRadius: 9,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 13,
+  fontWeight: 600,
+  transition: "all 0.25s ease"
+}
+
 
 /* =========================
    CONTEÚDO
@@ -565,12 +456,11 @@ const content = {
   flex: 1,
   minWidth: 0,
   width: "100%",
-  padding:
-    "50px 70px",
+  padding: "50px 70px",
   background: "#f6f6f7",
-  boxSizing:
-    "border-box" as const
+  boxSizing: "border-box" as const
 }
+
 
 /* =========================
    MOBILE HEADER
@@ -584,26 +474,27 @@ const mobileHeader = {
   width: "100%",
   height: 64,
   background: "#fffdfa",
-  borderBottom:
-    "1px solid #efe3bf",
+  borderBottom: "1px solid #efe3bf",
   display: "flex",
   alignItems: "center",
   zIndex: 1000,
-  boxShadow:
-    "0 2px 12px rgba(216,191,122,0.08)"
+  boxShadow: "0 2px 12px rgba(216,191,122,0.08)"
 }
 
 const mobileLogo = {
-  fontFamily:
-    "Playfair Display, serif",
+  fontFamily: "Playfair Display, serif",
   fontSize: 24,
   color: "#b9974f",
   fontWeight: 700,
   letterSpacing: "0.4px",
   marginLeft: 12,
-  whiteSpace:
-    "nowrap" as const
+  whiteSpace: "nowrap" as const
 }
+
+
+/* =========================
+   MOBILE HAMBURGER
+========================= */
 
 const menuButton = {
   width: 44,
@@ -612,10 +503,8 @@ const menuButton = {
   border: "none",
   background: "transparent",
   display: "flex",
-  flexDirection:
-    "column" as const,
-  justifyContent:
-    "center",
+  flexDirection: "column" as const,
+  justifyContent: "center",
   alignItems: "center",
   gap: 5,
   cursor: "pointer",
@@ -628,9 +517,23 @@ const hamburgerLine = {
   height: 2,
   background: "#8b6f3d",
   borderRadius: 5,
-  transition:
-    "all 0.25s ease"
+  transition: "all 0.25s ease"
 }
+
+
+/* =========================
+   HAMBURGER RECOLHIDO DESKTOP
+========================= */
+
+const smallHamburgerLine = {
+  display: "block",
+  width: 16,
+  height: 1.5,
+  background: "#8b6f3d",
+  borderRadius: 5,
+  margin: "2px 0"
+}
+
 
 /* =========================
    OVERLAY
@@ -639,8 +542,7 @@ const hamburgerLine = {
 const overlay = {
   position: "fixed" as const,
   inset: 0,
-  background:
-    "rgba(0, 0, 0, 0.32)",
+  background: "rgba(0, 0, 0, 0.32)",
   zIndex: 1000
 }
 
