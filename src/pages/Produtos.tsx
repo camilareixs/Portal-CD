@@ -830,6 +830,61 @@ export default function Produtos() {
     await carregarDados()
   }
 
+  async function excluirProduto(produto: Produto) {
+    const confirmar = window.confirm(
+      `Deseja realmente excluir o produto "${produto.nome}"?`
+    )
+
+    if (!confirmar) return
+
+    setSalvando(true)
+
+    const variantesDoProduto = variantes.filter(
+      variante => variante.produtoId === produto.id
+    )
+
+    if (variantesDoProduto.length > 0) {
+      for (const variante of variantesDoProduto) {
+        const { error } = await supabase
+          .from("produtoVariantes")
+          .delete()
+          .eq("id", variante.id)
+
+        if (error) {
+          console.error(error)
+          setSalvando(false)
+          alert(
+            "Não foi possível excluir o produto porque existem variantes ou histórico vinculado a ele."
+          )
+          return
+        }
+      }
+    }
+
+    const { error } = await supabase
+      .from("produtos")
+      .delete()
+      .eq("id", produto.id)
+
+    setSalvando(false)
+
+    if (error) {
+      console.error(error)
+      alert(
+        "Não foi possível excluir o produto. Ele pode possuir histórico ou registros vinculados."
+      )
+      await carregarDados()
+      return
+    }
+
+    if (produtoSelecionado === produto.id) {
+      setProdutoSelecionado("")
+      setAba("produtos")
+    }
+
+    await carregarDados()
+  }
+
   function abrirEstoque(
     variante: Variante
   ) {
@@ -1621,6 +1676,17 @@ export default function Produtos() {
                                   ? "Inativar"
                                   : "Ativar"}
                               </button>
+
+                              <button
+                                style={dangerButton}
+                                onClick={() =>
+                                  excluirProduto(
+                                    produto
+                                  )
+                                }
+                              >
+                                Excluir
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1793,6 +1859,17 @@ export default function Produtos() {
                           }
                         >
                           Editar
+                        </button>
+
+                        <button
+                          style={dangerSmall}
+                          onClick={() =>
+                            excluirProduto(
+                              produto
+                            )
+                          }
+                        >
+                          Excluir
                         </button>
                       </div>
                     </div>
@@ -4214,6 +4291,19 @@ const secondaryButton = {
   fontSize: 11
 }
 
+const dangerButton = {
+  border:
+    "1px solid #e5c9c9",
+  borderRadius: 7,
+  padding:
+    "6px 9px",
+  background:
+    "#fff8f8",
+  color: "#a85f5f",
+  cursor: "pointer",
+  fontSize: 11
+}
+
 const backButton = {
   border: "none",
   background:
@@ -4340,6 +4430,14 @@ const primarySmall = {
 
 const secondarySmall = {
   ...secondaryButton,
+  flex: 1,
+  padding:
+    "9px 12px",
+  fontSize: 12
+}
+
+const dangerSmall = {
+  ...dangerButton,
   flex: 1,
   padding:
     "9px 12px",
