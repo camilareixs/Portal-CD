@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -7,6 +6,9 @@ type Produto = {
   nome: string
   descricao: string | null
   ativo: boolean
+  criadoem: string
+  atualizadoem: string
+  dataEntrada: string | null
   tecido: string | null
   comprimento: string | null
   modelagem: string | null
@@ -25,6 +27,8 @@ type Variante = {
   estoqueMinimo: number
   estoqueMaximo: number | null
   ativo: boolean
+  criadoem: string
+  atualizadoem: string
   cor: string | null
   tamanho: string | null
 }
@@ -42,74 +46,165 @@ type Movimentacao = {
   criadoem: string
 }
 
+type Cor = {
+  nome: string
+  hex: string
+}
+
 const CATEGORIAS = [
-  "Camiseta",
-  "Moletom",
-  "Caneca",
-  "Tube Top",
-  "Vestido",
-  "Saia",
-  "Blusa",
-  "Outro"
+  "Roupas",
+  "Acessórios"
 ]
 
-const SUBCATEGORIAS = [
-  "Feminino",
-  "Masculino",
-  "Unissex",
-  "Acessório",
-  "Outro"
+const SUBCATEGORIAS: Record<string, string[]> = {
+  Roupas: [
+    "Vestido",
+    "Camiseta",
+    "Camisa",
+    "Saia",
+    "Blusa",
+    "Moletom",
+    "Suéter",
+    "Short",
+    "Regata",
+    "Chemise",
+    "Roupa de Academia",
+    "Roupa Térmica",
+    "Meia",
+    "Meia-Calça"
+  ],
+  Acessórios: [
+    "Cinto",
+    "Bolsa"
+  ]
+}
+
+const CORES_PADRAO: Cor[] = [
+  { nome: "Preto", hex: "#000000" },
+  { nome: "Branco", hex: "#FFFFFF" },
+  { nome: "Off-White", hex: "#F8F5E9" },
+  { nome: "Bege", hex: "#F5F5DC" },
+  { nome: "Marrom", hex: "#8B4513" },
+  { nome: "Cinza", hex: "#808080" },
+
+  { nome: "Azul", hex: "#0000FF" },
+  { nome: "Azul-Marinho", hex: "#000080" },
+  { nome: "Azul Royal", hex: "#4169E1" },
+  { nome: "Azul Bebê", hex: "#89CFF0" },
+  { nome: "Azul Turquesa", hex: "#40E0D0" },
+
+  { nome: "Verde", hex: "#008000" },
+  { nome: "Verde Oliva", hex: "#808000" },
+  { nome: "Verde Musgo", hex: "#556B2F" },
+  { nome: "Verde Militar", hex: "#4B5320" },
+  { nome: "Verde Água", hex: "#7FFFD4" },
+
+  { nome: "Vermelho", hex: "#FF0000" },
+  { nome: "Vinho", hex: "#722F37" },
+  { nome: "Bordô", hex: "#800020" },
+
+  { nome: "Rosa", hex: "#FFC0CB" },
+  { nome: "Pink", hex: "#FF1493" },
+  { nome: "Rosa Bebê", hex: "#F4C2C2" },
+
+  { nome: "Roxo", hex: "#800080" },
+  { nome: "Lilás", hex: "#C8A2C8" },
+
+  { nome: "Amarelo", hex: "#FFFF00" },
+  { nome: "Mostarda", hex: "#FFDB58" },
+
+  { nome: "Laranja", hex: "#FFA500" },
+  { nome: "Terracota", hex: "#E2725B" }
 ]
 
-const TECIDOS = [
-  "Algodão",
-  "Malha",
-  "Moletom",
-  "Poliéster",
-  "Viscose",
-  "Linho",
-  "Outro"
-]
-
-const COMPRIMENTOS = [
-  "Curto",
-  "Médio",
-  "Longo",
-  "Único"
-]
-
-const MODELAGENS = [
-  "Tradicional",
-  "Oversized",
-  "Cropped",
-  "Slim",
-  "Solto",
-  "Único"
-]
-
-const CORES = [
-  "Preto",
-  "Branco",
-  "Cinza",
-  "Bege",
-  "Marrom",
-  "Azul",
-  "Rosa",
-  "Vermelho",
-  "Verde",
-  "Amarelo",
-  "Outra"
-]
-
-const TAMANHOS = [
+const TAMANHOS_PADRAO = [
   "PP",
   "P",
   "M",
   "G",
   "GG",
   "XG",
+  "34",
+  "36",
+  "38",
+  "40",
+  "42",
+  "44",
+  "46",
   "Único"
 ]
+
+const TECIDOS_PADRAO = [
+  "Algodão",
+  "Viscose",
+  "Malha",
+  "Ribana",
+  "Jeans",
+  "Moletom",
+  "Tricô",
+  "Linho",
+  "Poliéster",
+  "Suplex",
+  "Tule",
+  "Renda"
+]
+
+const COMPRIMENTOS_PADRAO = [
+  "Curto",
+  "Midi",
+  "Longo"
+]
+
+const MODELAGENS_PADRAO = [
+  "Justa",
+  "Rodada",
+  "Reta",
+  "Evasê",
+  "Solta",
+  "Acinturada",
+  "Oversized",
+  "Cropped"
+]
+
+const PRECO_PADRAO: Record<string, number> = {
+  Camiseta: 69,
+  Moletom: 165,
+  Caneca: 48,
+  "Tube Top": 59
+}
+
+const TIPOS_MOVIMENTACAO = [
+  "ENTRADA",
+  "SAIDA",
+  "AJUSTE_ENTRADA",
+  "AJUSTE_SAIDA",
+  "DEVOLUCAO",
+  "PERDA"
+]
+
+function carregarLista<T>(chave: string, padrao: T[]): T[] {
+  try {
+    const salvo = localStorage.getItem(chave)
+
+    if (!salvo) {
+      return padrao
+    }
+
+    const parsed = JSON.parse(salvo)
+
+    if (!Array.isArray(parsed)) {
+      return padrao
+    }
+
+    return parsed
+  } catch {
+    return padrao
+  }
+}
+
+function salvarLista<T>(chave: string, lista: T[]) {
+  localStorage.setItem(chave, JSON.stringify(lista))
+}
 
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", {
@@ -118,8 +213,16 @@ function moeda(valor: number) {
   })
 }
 
-function dataFormatada(data: string) {
-  return new Date(data).toLocaleString("pt-BR")
+function dataBR(data: string | null) {
+  if (!data) return "-"
+
+  const [ano, mes, dia] = data.split("-")
+
+  if (!ano || !mes || !dia) {
+    return data
+  }
+
+  return `${dia}/${mes}/${ano}`
 }
 
 export default function Produtos() {
@@ -127,59 +230,102 @@ export default function Produtos() {
   const [variantes, setVariantes] = useState<Variante[]>([])
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([])
 
-  const [produtoSelecionado, setProdutoSelecionado] =
-    useState<Produto | null>(null)
-
   const [aba, setAba] = useState<
     "produtos" | "variantes" | "movimentacoes"
   >("produtos")
+
+  const [produtoSelecionado, setProdutoSelecionado] =
+    useState<string>("")
+
+  const [busca, setBusca] = useState("")
 
   const [modalProduto, setModalProduto] = useState(false)
   const [modalVariante, setModalVariante] = useState(false)
   const [modalEstoque, setModalEstoque] = useState(false)
 
-  const [varianteSelecionada, setVarianteSelecionada] =
+  const [produtoEditando, setProdutoEditando] =
+    useState<Produto | null>(null)
+
+  const [varianteEditando, setVarianteEditando] =
     useState<Variante | null>(null)
 
-  const [busca, setBusca] = useState("")
+  const [varianteEstoque, setVarianteEstoque] =
+    useState<Variante | null>(null)
 
-  const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
 
-  const [nome, setNome] = useState("")
-  const [descricao, setDescricao] = useState("")
-  const [categoria, setCategoria] = useState("")
-  const [subcategoria, setSubcategoria] = useState("")
-  const [tecido, setTecido] = useState("")
-  const [comprimento, setComprimento] = useState("")
-  const [modelagem, setModelagem] = useState("")
+  const [novaOpcaoTipo, setNovaOpcaoTipo] =
+    useState<
+      "cor" |
+      "tamanho" |
+      "tecido" |
+      "comprimento" |
+      "modelagem" |
+      null
+    >(null)
 
-  const [sku, setSku] = useState("")
-  const [cor, setCor] = useState("")
-  const [tamanho, setTamanho] = useState("")
-  const [precoVenda, setPrecoVenda] = useState("")
-  const [custoUnitario, setCustoUnitario] = useState("")
-  const [estoqueMinimo, setEstoqueMinimo] = useState("0")
-  const [estoqueMaximo, setEstoqueMaximo] = useState("")
+  const [novaOpcaoNome, setNovaOpcaoNome] = useState("")
+  const [novaOpcaoHex, setNovaOpcaoHex] = useState("#000000")
 
-  const [tipoMovimentacao, setTipoMovimentacao] =
-    useState("ENTRADA")
-  const [quantidadeMovimentacao, setQuantidadeMovimentacao] =
-    useState("")
-  const [custoMovimentacao, setCustoMovimentacao] =
-    useState("")
-  const [motivoMovimentacao, setMotivoMovimentacao] =
-    useState("")
-  const [observacaoMovimentacao, setObservacaoMovimentacao] =
-    useState("")
+  const [cores, setCores] = useState<Cor[]>(() =>
+    carregarLista("camiduda_cores", CORES_PADRAO)
+  )
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
+  const [tamanhos, setTamanhos] = useState<string[]>(() =>
+    carregarLista("camiduda_tamanhos", TAMANHOS_PADRAO)
+  )
+
+  const [tecidos, setTecidos] = useState<string[]>(() =>
+    carregarLista("camiduda_tecidos", TECIDOS_PADRAO)
+  )
+
+  const [comprimentos, setComprimentos] = useState<string[]>(() =>
+    carregarLista(
+      "camiduda_comprimentos",
+      COMPRIMENTOS_PADRAO
+    )
+  )
+
+  const [modelagens, setModelagens] = useState<string[]>(() =>
+    carregarLista(
+      "camiduda_modelagens",
+      MODELAGENS_PADRAO
+    )
+  )
+
+  const [formProduto, setFormProduto] = useState({
+    nome: "",
+    descricao: "",
+    categoria: "",
+    subcategoria: "",
+    tecido: "",
+    comprimento: "",
+    modelagem: "",
+    dataEntrada: "",
+    ativo: true
+  })
+
+  const [formVariante, setFormVariante] = useState({
+    produtoId: "",
+    cor: "",
+    tamanho: "",
+    sku: "",
+    precoVenda: "",
+    custoUnitario: "",
+    margemAlvo: "",
+    estoqueMinimo: "0",
+    estoqueMaximo: ""
+  })
+
+  const [formEstoque, setFormEstoque] = useState({
+    tipo: "ENTRADA",
+    quantidade: "",
+    custoUnitario: "",
+    motivo: "",
+    observacao: ""
+  })
 
   async function carregarDados() {
-    setCarregando(true)
-
     const [
       produtosResponse,
       variantesResponse,
@@ -187,112 +333,174 @@ export default function Produtos() {
     ] = await Promise.all([
       supabase
         .from("produtos")
-        .select(
-          "id,nome,descricao,ativo,tecido,comprimento,modelagem,categoria,subcategoria"
-        )
+        .select("*")
         .order("nome", { ascending: true }),
 
       supabase
         .from("produtoVariantes")
-        .select(
-          "id,produtoId,sku,precoVenda,custoUnitario,margemAlvo,estoqueAtual,estoqueMinimo,estoqueMaximo,ativo,cor,tamanho"
-        )
+        .select("*")
         .order("criadoem", { ascending: false }),
 
       supabase
         .from("estoqueMovimentacoes")
-        .select(
-          "id,varianteId,tipo,quantidade,custoUnitario,saldoAnterior,saldoPosterior,motivo,observacao,criadoem"
-        )
+        .select("*")
         .order("criadoem", { ascending: false })
-        .limit(200)
     ])
 
     if (produtosResponse.error) {
       console.error(produtosResponse.error)
-      alert("Erro ao carregar os produtos.")
+      alert("Erro ao carregar produtos.")
+      return
     }
 
     if (variantesResponse.error) {
       console.error(variantesResponse.error)
-      alert("Erro ao carregar as variantes.")
+      alert("Erro ao carregar variantes.")
+      return
     }
 
     if (movimentacoesResponse.error) {
       console.error(movimentacoesResponse.error)
-      alert("Erro ao carregar o estoque.")
+      alert("Erro ao carregar movimentações.")
+      return
     }
 
-    setProdutos(
-      (produtosResponse.data || []) as Produto[]
-    )
-
-    setVariantes(
-      (variantesResponse.data || []) as Variante[]
-    )
-
-    setMovimentacoes(
-      (movimentacoesResponse.data || []) as Movimentacao[]
-    )
-
-    setCarregando(false)
+    setProdutos(produtosResponse.data ?? [])
+    setVariantes(variantesResponse.data ?? [])
+    setMovimentacoes(movimentacoesResponse.data ?? [])
   }
 
-  function limparProdutoForm() {
-    setNome("")
-    setDescricao("")
-    setCategoria("")
-    setSubcategoria("")
-    setTecido("")
-    setComprimento("")
-    setModelagem("")
-    setProdutoSelecionado(null)
-  }
+  useEffect(() => {
+    carregarDados()
+  }, [])
 
   function abrirNovoProduto() {
-    limparProdutoForm()
+    setProdutoEditando(null)
+
+    setFormProduto({
+      nome: "",
+      descricao: "",
+      categoria: "",
+      subcategoria: "",
+      tecido: "",
+      comprimento: "",
+      modelagem: "",
+      dataEntrada: new Date().toISOString().split("T")[0],
+      ativo: true
+    })
+
     setModalProduto(true)
   }
 
   function abrirEditarProduto(produto: Produto) {
-    setProdutoSelecionado(produto)
+    setProdutoEditando(produto)
 
-    setNome(produto.nome)
-    setDescricao(produto.descricao || "")
-    setCategoria(produto.categoria || "")
-    setSubcategoria(produto.subcategoria || "")
-    setTecido(produto.tecido || "")
-    setComprimento(produto.comprimento || "")
-    setModelagem(produto.modelagem || "")
+    setFormProduto({
+      nome: produto.nome ?? "",
+      descricao: produto.descricao ?? "",
+      categoria: produto.categoria ?? "",
+      subcategoria: produto.subcategoria ?? "",
+      tecido: produto.tecido ?? "",
+      comprimento: produto.comprimento ?? "",
+      modelagem: produto.modelagem ?? "",
+      dataEntrada: produto.dataEntrada ?? "",
+      ativo: produto.ativo
+    })
 
     setModalProduto(true)
   }
 
+  function abrirNovaVariante() {
+    if (!produtoSelecionado) {
+      alert("Selecione um produto primeiro.")
+      return
+    }
+
+    const produto = produtos.find(
+      p => p.id === produtoSelecionado
+    )
+
+    setVarianteEditando(null)
+
+    setFormVariante({
+      produtoId: produtoSelecionado,
+      cor: "",
+      tamanho: "",
+      sku: "",
+      precoVenda: produto
+        ? PRECO_PADRAO[produto.subcategoria ?? ""]?.toString() ?? ""
+        : "",
+      custoUnitario: "",
+      margemAlvo: "",
+      estoqueMinimo: "0",
+      estoqueMaximo: ""
+    })
+
+    setModalVariante(true)
+  }
+
+  function abrirEditarVariante(variante: Variante) {
+    setVarianteEditando(variante)
+
+    setFormVariante({
+      produtoId: variante.produtoId,
+      cor: variante.cor ?? "",
+      tamanho: variante.tamanho ?? "",
+      sku: variante.sku ?? "",
+      precoVenda: String(variante.precoVenda ?? ""),
+      custoUnitario: String(variante.custoUnitario ?? ""),
+      margemAlvo:
+        variante.margemAlvo !== null
+          ? String(variante.margemAlvo)
+          : "",
+      estoqueMinimo: String(variante.estoqueMinimo ?? 0),
+      estoqueMaximo:
+        variante.estoqueMaximo !== null
+          ? String(variante.estoqueMaximo)
+          : ""
+    })
+
+    setModalVariante(true)
+  }
+
   async function salvarProduto() {
-    if (!nome.trim()) {
+    if (!formProduto.nome.trim()) {
       alert("Informe o nome do produto.")
+      return
+    }
+
+    if (!formProduto.categoria) {
+      alert("Selecione uma categoria.")
       return
     }
 
     setSalvando(true)
 
     const dados = {
-      nome: nome.trim(),
-      descricao: descricao.trim() || null,
-      categoria: categoria || null,
-      subcategoria: subcategoria || null,
-      tecido: tecido || null,
-      comprimento: comprimento || null,
-      modelagem: modelagem || null
+      nome: formProduto.nome.trim(),
+      descricao:
+        formProduto.descricao.trim() || null,
+      categoria: formProduto.categoria || null,
+      subcategoria:
+        formProduto.subcategoria || null,
+      tecido: formProduto.tecido || null,
+      comprimento:
+        formProduto.comprimento || null,
+      modelagem:
+        formProduto.modelagem || null,
+      dataEntrada:
+        formProduto.dataEntrada || null,
+      ativo: formProduto.ativo,
+      atualizadoem: new Date().toISOString()
     }
 
-    let error = null
+    let error
 
-    if (produtoSelecionado) {
+    if (produtoEditando) {
       const response = await supabase
         .from("produtos")
         .update(dados)
-        .eq("id", produtoSelecionado.id)
+        .eq("id", produtoEditando.id)
 
       error = response.error
     } else {
@@ -307,129 +515,68 @@ export default function Produtos() {
 
     if (error) {
       console.error(error)
-      alert("Não foi possível salvar o produto.")
+      alert(
+        "Erro ao salvar produto: " +
+        error.message
+      )
       return
     }
 
     setModalProduto(false)
-    limparProdutoForm()
     await carregarDados()
-  }
-
-  async function alternarProduto(produto: Produto) {
-    const novoStatus = !produto.ativo
-
-    const { error } = await supabase
-      .from("produtos")
-      .update({
-        ativo: novoStatus
-      })
-      .eq("id", produto.id)
-
-    if (error) {
-      console.error(error)
-      alert("Não foi possível alterar o status do produto.")
-      return
-    }
-
-    await carregarDados()
-  }
-
-  function limparVarianteForm() {
-    setSku("")
-    setCor("")
-    setTamanho("")
-    setPrecoVenda("")
-    setCustoUnitario("")
-    setEstoqueMinimo("0")
-    setEstoqueMaximo("")
-    setVarianteSelecionada(null)
-  }
-
-  function abrirNovaVariante(produto?: Produto) {
-    if (produto) {
-      setProdutoSelecionado(produto)
-    }
-
-    limparVarianteForm()
-    setModalVariante(true)
-  }
-
-  function abrirEditarVariante(variante: Variante) {
-    const produto = produtos.find(
-      p => p.id === variante.produtoId
-    )
-
-    if (produto) {
-      setProdutoSelecionado(produto)
-    }
-
-    setVarianteSelecionada(variante)
-    setSku(variante.sku)
-    setCor(variante.cor || "")
-    setTamanho(variante.tamanho || "")
-    setPrecoVenda(String(variante.precoVenda))
-    setCustoUnitario(String(variante.custoUnitario))
-    setEstoqueMinimo(String(variante.estoqueMinimo))
-    setEstoqueMaximo(
-      variante.estoqueMaximo === null
-        ? ""
-        : String(variante.estoqueMaximo)
-    )
-
-    setModalVariante(true)
   }
 
   async function salvarVariante() {
-    if (!produtoSelecionado) {
-      alert("Selecione um produto.")
+    if (!formVariante.produtoId) {
+      alert("Selecione o produto.")
       return
     }
 
-    if (!sku.trim()) {
+    if (!formVariante.sku.trim()) {
       alert("Informe o SKU.")
       return
     }
 
     const preco = Number(
-      precoVenda.replace(",", ".")
+      formVariante.precoVenda.replace(",", ".")
     )
 
     const custo = Number(
-      custoUnitario.replace(",", ".")
+      formVariante.custoUnitario.replace(",", ".")
     )
 
-    const minimo = Number(
-      estoqueMinimo.replace(",", ".")
+    const estoqueMinimo = Number(
+      formVariante.estoqueMinimo || 0
     )
 
-    const maximo =
-      estoqueMaximo.trim() === ""
+    const estoqueMaximo =
+      formVariante.estoqueMaximo.trim() === ""
         ? null
         : Number(
-            estoqueMaximo.replace(",", ".")
+            formVariante.estoqueMaximo
           )
 
-    if (
-      Number.isNaN(preco) ||
-      Number.isNaN(custo) ||
-      Number.isNaN(minimo)
-    ) {
-      alert("Verifique os valores informados.")
+    if (Number.isNaN(preco) || preco < 0) {
+      alert("Informe um preço de venda válido.")
       return
     }
 
-    if (preco < 0 || custo < 0 || minimo < 0) {
-      alert("Os valores não podem ser negativos.")
+    if (Number.isNaN(custo) || custo < 0) {
+      alert("Informe um custo válido.")
+      return
+    }
+
+    if (estoqueMinimo < 0) {
+      alert("Estoque mínimo inválido.")
       return
     }
 
     if (
-      maximo !== null &&
-      (Number.isNaN(maximo) || maximo < minimo)
+      estoqueMaximo !== null &&
+      estoqueMaximo < estoqueMinimo
     ) {
       alert(
-        "O estoque máximo precisa ser maior ou igual ao estoque mínimo."
+        "O estoque máximo não pode ser menor que o estoque mínimo."
       )
       return
     }
@@ -437,32 +584,37 @@ export default function Produtos() {
     setSalvando(true)
 
     const dados = {
-      produtoId: produtoSelecionado.id,
-      sku: sku.trim(),
+      produtoId: formVariante.produtoId,
+      cor: formVariante.cor || null,
+      tamanho: formVariante.tamanho || null,
+      sku: formVariante.sku.trim(),
       precoVenda: preco,
       custoUnitario: custo,
-      estoqueMinimo: minimo,
-      estoqueMaximo: maximo,
-      cor: cor || null,
-      tamanho: tamanho || null
+      margemAlvo:
+        formVariante.margemAlvo.trim() === ""
+          ? null
+          : Number(
+              formVariante.margemAlvo.replace(",", ".")
+            ),
+      estoqueMinimo,
+      estoqueMaximo,
+      ativo: true,
+      atualizadoem: new Date().toISOString()
     }
 
-    let error = null
+    let error
 
-    if (varianteSelecionada) {
+    if (varianteEditando) {
       const response = await supabase
         .from("produtoVariantes")
         .update(dados)
-        .eq("id", varianteSelecionada.id)
+        .eq("id", varianteEditando.id)
 
       error = response.error
     } else {
       const response = await supabase
         .from("produtoVariantes")
-        .insert({
-          ...dados,
-          estoqueAtual: 0
-        })
+        .insert(dados)
 
       error = response.error
     }
@@ -473,38 +625,69 @@ export default function Produtos() {
       console.error(error)
 
       if (
-        error.message?.toLowerCase().includes("uqprodutovariante")
+        error.message
+          .toLowerCase()
+          .includes("uqprodutovariantecombinacao")
       ) {
         alert(
-          "Já existe uma variante com esse produto, cor e tamanho."
+          "Já existe uma variante com essa combinação de cor e tamanho para este produto."
         )
       } else if (
-        error.message?.toLowerCase().includes("sku")
+        error.message
+          .toLowerCase()
+          .includes("produtoVariantes_sku_key")
       ) {
-        alert("Esse SKU já está cadastrado.")
+        alert("Este SKU já está cadastrado.")
       } else {
-        alert("Não foi possível salvar a variante.")
+        alert(
+          "Erro ao salvar variante: " +
+          error.message
+        )
       }
 
       return
     }
 
     setModalVariante(false)
-    limparVarianteForm()
     await carregarDados()
   }
 
-  async function alternarVariante(variante: Variante) {
+  async function alterarStatusProduto(
+    produto: Produto
+  ) {
+    const novoStatus = !produto.ativo
+
+    const { error } = await supabase
+      .from("produtos")
+      .update({
+        ativo: novoStatus,
+        atualizadoem: new Date().toISOString()
+      })
+      .eq("id", produto.id)
+
+    if (error) {
+      console.error(error)
+      alert("Erro ao alterar status do produto.")
+      return
+    }
+
+    await carregarDados()
+  }
+
+  async function alterarStatusVariante(
+    variante: Variante
+  ) {
     const { error } = await supabase
       .from("produtoVariantes")
       .update({
-        ativo: !variante.ativo
+        ativo: !variante.ativo,
+        atualizadoem: new Date().toISOString()
       })
       .eq("id", variante.id)
 
     if (error) {
       console.error(error)
-      alert("Não foi possível alterar o status da variante.")
+      alert("Erro ao alterar status da variante.")
       return
     }
 
@@ -512,44 +695,48 @@ export default function Produtos() {
   }
 
   function abrirEstoque(variante: Variante) {
-    setVarianteSelecionada(variante)
+    setVarianteEstoque(variante)
 
-    setTipoMovimentacao("ENTRADA")
-    setQuantidadeMovimentacao("")
-    setCustoMovimentacao(
-      String(variante.custoUnitario)
-    )
-    setMotivoMovimentacao("")
-    setObservacaoMovimentacao("")
+    setFormEstoque({
+      tipo: "ENTRADA",
+      quantidade: "",
+      custoUnitario:
+        variante.custoUnitario?.toString() ?? "",
+      motivo: "",
+      observacao: ""
+    })
 
     setModalEstoque(true)
   }
 
   async function movimentarEstoque() {
-    if (!varianteSelecionada) {
-      alert("Selecione uma variante.")
+    if (!varianteEstoque) {
       return
     }
 
     const quantidade = Number(
-      quantidadeMovimentacao.replace(",", ".")
+      formEstoque.quantidade
     )
-
-    const custo =
-      custoMovimentacao.trim() === ""
-        ? null
-        : Number(
-            custoMovimentacao.replace(",", ".")
-          )
 
     if (
       Number.isNaN(quantidade) ||
-      quantidade <= 0 ||
-      !Number.isInteger(quantidade)
+      quantidade <= 0
     ) {
-      alert("A quantidade deve ser um número inteiro maior que zero.")
+      alert("Informe uma quantidade válida.")
       return
     }
+
+    if (!formEstoque.motivo.trim()) {
+      alert("Informe o motivo da movimentação.")
+      return
+    }
+
+    const custo =
+      formEstoque.custoUnitario.trim() === ""
+        ? null
+        : Number(
+            formEstoque.custoUnitario.replace(",", ".")
+          )
 
     if (
       custo !== null &&
@@ -559,25 +746,23 @@ export default function Produtos() {
       return
     }
 
-    if (!motivoMovimentacao.trim()) {
-      alert("Informe o motivo da movimentação.")
-      return
-    }
-
     setSalvando(true)
 
     const { error } = await supabase.rpc(
       "movimentarEstoque",
       {
-        p_variante_id: varianteSelecionada.id,
-        p_tipo: tipoMovimentacao,
+        p_variante_id:
+          varianteEstoque.id,
+        p_tipo: formEstoque.tipo,
         p_quantidade: quantidade,
-        p_motivo: motivoMovimentacao.trim(),
+        p_motivo:
+          formEstoque.motivo.trim(),
         p_custo_unitario: custo,
         p_origem_tipo: null,
         p_origem_id: null,
         p_observacao:
-          observacaoMovimentacao.trim() || null
+          formEstoque.observacao.trim() ||
+          null
       }
     )
 
@@ -586,18 +771,188 @@ export default function Produtos() {
     if (error) {
       console.error(error)
       alert(
-        error.message ||
-          "Não foi possível movimentar o estoque."
+        "Erro ao movimentar estoque: " +
+        error.message
       )
       return
     }
 
     setModalEstoque(false)
+
     await carregarDados()
   }
 
+  function adicionarNovaOpcao() {
+    const nome = novaOpcaoNome.trim()
+
+    if (!nome) {
+      alert("Informe o nome da opção.")
+      return
+    }
+
+    if (novaOpcaoTipo === "cor") {
+      const existe = cores.some(
+        c =>
+          c.nome.toLowerCase() ===
+          nome.toLowerCase()
+      )
+
+      if (existe) {
+        alert("Essa cor já existe.")
+        return
+      }
+
+      const novaCor = {
+        nome,
+        hex: novaOpcaoHex
+      }
+
+      const novaLista = [
+        ...cores,
+        novaCor
+      ]
+
+      setCores(novaLista)
+      salvarLista(
+        "camiduda_cores",
+        novaLista
+      )
+
+      setFormVariante(prev => ({
+        ...prev,
+        cor: nome
+      }))
+    }
+
+    if (novaOpcaoTipo === "tamanho") {
+      const existe = tamanhos.some(
+        item =>
+          item.toLowerCase() ===
+          nome.toLowerCase()
+      )
+
+      if (existe) {
+        alert("Esse tamanho já existe.")
+        return
+      }
+
+      const novaLista = [
+        ...tamanhos,
+        nome
+      ]
+
+      setTamanhos(novaLista)
+
+      salvarLista(
+        "camiduda_tamanhos",
+        novaLista
+      )
+
+      setFormVariante(prev => ({
+        ...prev,
+        tamanho: nome
+      }))
+    }
+
+    if (novaOpcaoTipo === "tecido") {
+      const existe = tecidos.some(
+        item =>
+          item.toLowerCase() ===
+          nome.toLowerCase()
+      )
+
+      if (existe) {
+        alert("Esse tecido já existe.")
+        return
+      }
+
+      const novaLista = [
+        ...tecidos,
+        nome
+      ]
+
+      setTecidos(novaLista)
+
+      salvarLista(
+        "camiduda_tecidos",
+        novaLista
+      )
+
+      setFormProduto(prev => ({
+        ...prev,
+        tecido: nome
+      }))
+    }
+
+    if (novaOpcaoTipo === "comprimento") {
+      const existe = comprimentos.some(
+        item =>
+          item.toLowerCase() ===
+          nome.toLowerCase()
+      )
+
+      if (existe) {
+        alert("Esse comprimento já existe.")
+        return
+      }
+
+      const novaLista = [
+        ...comprimentos,
+        nome
+      ]
+
+      setComprimentos(novaLista)
+
+      salvarLista(
+        "camiduda_comprimentos",
+        novaLista
+      )
+
+      setFormProduto(prev => ({
+        ...prev,
+        comprimento: nome
+      }))
+    }
+
+    if (novaOpcaoTipo === "modelagem") {
+      const existe = modelagens.some(
+        item =>
+          item.toLowerCase() ===
+          nome.toLowerCase()
+      )
+
+      if (existe) {
+        alert("Essa modelagem já existe.")
+        return
+      }
+
+      const novaLista = [
+        ...modelagens,
+        nome
+      ]
+
+      setModelagens(novaLista)
+
+      salvarLista(
+        "camiduda_modelagens",
+        novaLista
+      )
+
+      setFormProduto(prev => ({
+        ...prev,
+        modelagem: nome
+      }))
+    }
+
+    setNovaOpcaoTipo(null)
+    setNovaOpcaoNome("")
+    setNovaOpcaoHex("#000000")
+  }
+
   const produtosFiltrados = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
+    const termo = busca
+      .trim()
+      .toLowerCase()
 
     if (!termo) {
       return produtos
@@ -607,7 +962,8 @@ export default function Produtos() {
       [
         produto.nome,
         produto.categoria,
-        produto.subcategoria
+        produto.subcategoria,
+        produto.tecido
       ]
         .filter(Boolean)
         .some(valor =>
@@ -618,83 +974,66 @@ export default function Produtos() {
     )
   }, [produtos, busca])
 
-  const variantesDoProduto = useMemo(() => {
+  const variantesFiltradas = useMemo(() => {
     if (!produtoSelecionado) {
       return []
     }
 
     return variantes.filter(
       variante =>
-        variante.produtoId === produtoSelecionado.id
+        variante.produtoId ===
+        produtoSelecionado
     )
   }, [variantes, produtoSelecionado])
 
-  const estoqueTotal = useMemo(() => {
-    return variantes.reduce(
-      (total, variante) =>
-        total + variante.estoqueAtual,
-      0
-    )
-  }, [variantes])
+  const totalUnidades = useMemo(
+    () =>
+      variantes.reduce(
+        (total, variante) =>
+          total + variante.estoqueAtual,
+        0
+      ),
+    [variantes]
+  )
 
-  const variantesEstoqueBaixo = useMemo(() => {
-    return variantes.filter(
-      variante =>
-        variante.ativo &&
-        variante.estoqueAtual <=
-          variante.estoqueMinimo
-    )
-  }, [variantes])
+  const valorEstoque = useMemo(
+    () =>
+      variantes.reduce(
+        (total, variante) =>
+          total +
+          variante.estoqueAtual *
+            variante.custoUnitario,
+        0
+      ),
+    [variantes]
+  )
 
-  const valorEstoque = useMemo(() => {
-    return variantes.reduce(
-      (total, variante) =>
-        total +
-        variante.estoqueAtual *
-          variante.custoUnitario,
-      0
-    )
-  }, [variantes])
+  const estoqueBaixo = useMemo(
+    () =>
+      variantes.filter(
+        variante =>
+          variante.ativo &&
+          variante.estoqueAtual <=
+            variante.estoqueMinimo
+      ).length,
+    [variantes]
+  )
 
-  function nomeProduto(varianteId: string) {
-    const variante = variantes.find(
-      v => v.id === varianteId
-    )
+  const produtoNome = produtos.find(
+    p => p.id === produtoSelecionado
+  )?.nome
 
-    if (!variante) {
-      return "-"
-    }
-
-    const produto = produtos.find(
-      p => p.id === variante.produtoId
-    )
-
-    if (!produto) {
-      return "-"
-    }
-
-    return produto.nome
-  }
-
-  function descricaoVariante(variante: Variante) {
-    const partes = [
-      variante.cor,
-      variante.tamanho
-    ].filter(Boolean)
-
-    return partes.length
-      ? partes.join(" / ")
-      : "Variante única"
-  }
-
-  if (carregando) {
-    return (
-      <div style={loadingContainer}>
-        <div style={loadingText}>
-          Carregando produtos e estoque...
-        </div>
-      </div>
-    )
+  function abrirNovaOpcao(
+    tipo:
+      | "cor"
+      | "tamanho"
+      | "tecido"
+      | "comprimento"
+      | "modelagem"
+  ) {
+    setNovaOpcaoTipo(tipo)
+    setNovaOpcaoNome("")
+    setNovaOpcaoHex("#000000")
   }
 
   return (
@@ -706,147 +1045,132 @@ export default function Produtos() {
           </h1>
 
           <p style={subtitle}>
-            Cadastre seus produtos e acompanhe o estoque da Cami&Duda.
+            Gerencie produtos, variantes e
+            movimentações de estoque.
           </p>
         </div>
 
-        <button
-          style={primaryButton}
-          onClick={abrirNovoProduto}
-        >
-          + Novo produto
-        </button>
+        <div style={headerButtons}>
+          {aba === "produtos" && (
+            <button
+              style={primaryButton}
+              onClick={abrirNovoProduto}
+            >
+              + Novo Produto
+            </button>
+          )}
+
+          {aba === "variantes" && (
+            <button
+              style={primaryButton}
+              onClick={abrirNovaVariante}
+            >
+              + Nova Variante
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* RESUMO */}
-      <div style={cardsGrid}>
-        <div style={summaryCard}>
-          <span style={summaryLabel}>
+      <div style={cards}>
+        <div style={card}>
+          <span style={cardLabel}>
             Produtos
           </span>
 
-          <strong style={summaryValue}>
+          <strong style={cardValue}>
             {produtos.length}
           </strong>
-
-          <span style={summaryDescription}>
-            {produtos.filter(p => p.ativo).length} ativos
-          </span>
         </div>
 
-        <div style={summaryCard}>
-          <span style={summaryLabel}>
+        <div style={card}>
+          <span style={cardLabel}>
             Variantes
           </span>
 
-          <strong style={summaryValue}>
+          <strong style={cardValue}>
             {variantes.length}
           </strong>
-
-          <span style={summaryDescription}>
-            {variantes.filter(v => v.ativo).length} ativas
-          </span>
         </div>
 
-        <div style={summaryCard}>
-          <span style={summaryLabel}>
+        <div style={card}>
+          <span style={cardLabel}>
             Unidades em estoque
           </span>
 
-          <strong style={summaryValue}>
-            {estoqueTotal}
+          <strong style={cardValue}>
+            {totalUnidades}
           </strong>
-
-          <span style={summaryDescription}>
-            unidades disponíveis
-          </span>
         </div>
 
-        <div style={summaryCard}>
-          <span style={summaryLabel}>
-            Valor do estoque
+        <div style={card}>
+          <span style={cardLabel}>
+            Valor em estoque
           </span>
 
-          <strong style={summaryValue}>
+          <strong style={cardValue}>
             {moeda(valorEstoque)}
           </strong>
-
-          <span style={summaryDescription}>
-            considerando o custo
-          </span>
         </div>
 
-        <div
-          style={{
-            ...summaryCard,
-            border:
-              variantesEstoqueBaixo.length > 0
-                ? "1px solid #e6c98b"
-                : "1px solid #eee7d8"
-          }}
-        >
-          <span style={summaryLabel}>
+        <div style={card}>
+          <span style={cardLabel}>
             Estoque baixo
           </span>
 
           <strong
             style={{
-              ...summaryValue,
+              ...cardValue,
               color:
-                variantesEstoqueBaixo.length > 0
-                  ? "#a77724"
-                  : "#6d685f"
+                estoqueBaixo > 0
+                  ? "#a16b00"
+                  : "#5f5a50"
             }}
           >
-            {variantesEstoqueBaixo.length}
+            {estoqueBaixo}
           </strong>
-
-          <span style={summaryDescription}>
-            variantes precisam de atenção
-          </span>
         </div>
       </div>
 
-      {/* ABAS */}
-      <div style={tabsContainer}>
+      <div style={tabs}>
         <button
+          onClick={() => setAba("produtos")}
           style={{
-            ...tabButton,
+            ...tab,
             ...(aba === "produtos"
               ? activeTab
               : {})
           }}
-          onClick={() => setAba("produtos")}
         >
           Produtos
         </button>
 
         <button
+          onClick={() => setAba("variantes")}
           style={{
-            ...tabButton,
+            ...tab,
             ...(aba === "variantes"
               ? activeTab
               : {})
           }}
-          onClick={() => setAba("variantes")}
         >
           Variantes e Estoque
         </button>
 
         <button
+          onClick={() =>
+            setAba("movimentacoes")
+          }
           style={{
-            ...tabButton,
+            ...tab,
             ...(aba === "movimentacoes"
               ? activeTab
               : {})
           }}
-          onClick={() => setAba("movimentacoes")}
         >
           Movimentações
         </button>
       </div>
 
-      {/* PRODUTOS */}
       {aba === "produtos" && (
         <section style={section}>
           <div style={sectionHeader}>
@@ -854,10 +1178,6 @@ export default function Produtos() {
               <h2 style={sectionTitle}>
                 Produtos cadastrados
               </h2>
-
-              <p style={sectionSubtitle}>
-                Gerencie os produtos disponíveis na loja.
-              </p>
             </div>
 
             <input
@@ -866,183 +1186,155 @@ export default function Produtos() {
                 setBusca(e.target.value)
               }
               placeholder="Buscar produto..."
-              style={searchInput}
+              style={search}
             />
           </div>
 
-          {produtosFiltrados.length === 0 ? (
-            <div style={emptyState}>
-              <strong>
-                Nenhum produto encontrado
-              </strong>
+          <div style={tableWrapper}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>
+                    Produto
+                  </th>
 
-              <span>
-                Cadastre seu primeiro produto para começar.
-              </span>
-            </div>
-          ) : (
-            <div style={tableWrapper}>
-              <table style={table}>
-                <thead>
-                  <tr>
-                    <th style={th}>
-                      Produto
-                    </th>
+                  <th style={th}>
+                    Categoria
+                  </th>
 
-                    <th style={th}>
-                      Categoria
-                    </th>
+                  <th style={th}>
+                    Subcategoria
+                  </th>
 
-                    <th style={th}>
-                      Características
-                    </th>
+                  <th style={th}>
+                    Tecido
+                  </th>
 
-                    <th style={th}>
-                      Variantes
-                    </th>
+                  <th style={th}>
+                    Data de entrada
+                  </th>
 
-                    <th style={th}>
-                      Status
-                    </th>
+                  <th style={th}>
+                    Status
+                  </th>
 
-                    <th style={th}>
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
+                  <th style={th}>
+                    Ações
+                  </th>
+                </tr>
+              </thead>
 
-                <tbody>
-                  {produtosFiltrados.map(produto => {
-                    const qtdVariantes =
-                      variantes.filter(
-                        variante =>
-                          variante.produtoId ===
-                          produto.id
-                      ).length
+              <tbody>
+                {produtosFiltrados.map(
+                  produto => (
+                    <tr key={produto.id}>
+                      <td style={td}>
+                        <strong>
+                          {produto.nome}
+                        </strong>
+                      </td>
 
-                    return (
-                      <tr key={produto.id}>
-                        <td style={td}>
-                          <strong>
-                            {produto.nome}
-                          </strong>
+                      <td style={td}>
+                        {produto.categoria ??
+                          "-"}
+                      </td>
 
-                          {produto.descricao && (
-                            <div style={smallText}>
-                              {produto.descricao}
-                            </div>
-                          )}
-                        </td>
+                      <td style={td}>
+                        {produto.subcategoria ??
+                          "-"}
+                      </td>
 
-                        <td style={td}>
-                          {produto.categoria || "-"}
-                          {produto.subcategoria && (
-                            <div style={smallText}>
-                              {produto.subcategoria}
-                            </div>
-                          )}
-                        </td>
+                      <td style={td}>
+                        {produto.tecido ??
+                          "-"}
+                      </td>
 
-                        <td style={td}>
-                          <div>
-                            {produto.tecido || "-"}
-                          </div>
+                      <td style={td}>
+                        {dataBR(
+                          produto.dataEntrada
+                        )}
+                      </td>
 
-                          <div style={smallText}>
-                            {produto.comprimento || ""}
-                            {produto.comprimento &&
-                            produto.modelagem
-                              ? " · "
-                              : ""}
-                            {produto.modelagem || ""}
-                          </div>
-                        </td>
+                      <td style={td}>
+                        <span
+                          style={{
+                            ...status,
+                            background:
+                              produto.ativo
+                                ? "#eef7ee"
+                                : "#f4f4f4",
+                            color:
+                              produto.ativo
+                                ? "#477047"
+                                : "#777"
+                          }}
+                        >
+                          {produto.ativo
+                            ? "Ativo"
+                            : "Inativo"}
+                        </span>
+                      </td>
 
-                        <td style={td}>
-                          {qtdVariantes}
-                        </td>
+                      <td style={td}>
+                        <div
+                          style={
+                            actionButtons
+                          }
+                        >
+                          <button
+                            style={secondaryButton}
+                            onClick={() =>
+                              abrirEditarProduto(
+                                produto
+                              )
+                            }
+                          >
+                            Editar
+                          </button>
 
-                        <td style={td}>
-                          <span
-                            style={{
-                              ...statusBadge,
-                              background:
-                                produto.ativo
-                                  ? "#f1f7ee"
-                                  : "#f3f1ed",
-                              color:
-                                produto.ativo
-                                  ? "#557448"
-                                  : "#777066"
+                          <button
+                            style={secondaryButton}
+                            onClick={() => {
+                              setProdutoSelecionado(
+                                produto.id
+                              )
+                              setAba(
+                                "variantes"
+                              )
                             }}
                           >
+                            Variantes
+                          </button>
+
+                          <button
+                            style={secondaryButton}
+                            onClick={() =>
+                              alterarStatusProduto(
+                                produto
+                              )
+                            }
+                          >
                             {produto.ativo
-                              ? "Ativo"
-                              : "Inativo"}
-                          </span>
-                        </td>
+                              ? "Inativar"
+                              : "Ativar"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
 
-                        <td style={td}>
-                          <div style={actions}>
-                            <button
-                              style={secondaryButton}
-                              onClick={() =>
-                                abrirEditarProduto(
-                                  produto
-                                )
-                              }
-                            >
-                              Editar
-                            </button>
-
-                            <button
-                              style={secondaryButton}
-                              onClick={() => {
-                                setProdutoSelecionado(
-                                  produto
-                                )
-                                setAba("variantes")
-                              }}
-                            >
-                              Estoque
-                            </button>
-
-                            <button
-                              style={secondaryButton}
-                              onClick={() =>
-                                abrirNovaVariante(
-                                  produto
-                                )
-                              }
-                            >
-                              + Variante
-                            </button>
-
-                            <button
-                              style={textButton}
-                              onClick={() =>
-                                alternarProduto(
-                                  produto
-                                )
-                              }
-                            >
-                              {produto.ativo
-                                ? "Inativar"
-                                : "Ativar"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+            {produtosFiltrados.length === 0 && (
+              <div style={empty}>
+                Nenhum produto encontrado.
+              </div>
+            )}
+          </div>
         </section>
       )}
 
-      {/* VARIANTES */}
       {aba === "variantes" && (
         <section style={section}>
           <div style={sectionHeader}>
@@ -1052,102 +1344,51 @@ export default function Produtos() {
               </h2>
 
               <p style={sectionSubtitle}>
-                Controle preço, custo e quantidade disponível.
+                {produtoNome
+                  ? `Produto: ${produtoNome}`
+                  : "Selecione um produto para visualizar as variantes."}
               </p>
             </div>
 
-            <div style={variantHeaderActions}>
-              <select
-                value={
-                  produtoSelecionado?.id || ""
-                }
-                onChange={e => {
-                  const produto =
-                    produtos.find(
-                      p =>
-                        p.id === e.target.value
-                    )
+            <select
+              value={produtoSelecionado}
+              onChange={e =>
+                setProdutoSelecionado(
+                  e.target.value
+                )
+              }
+              style={input}
+            >
+              <option value="">
+                Selecione o produto
+              </option>
 
-                  setProdutoSelecionado(
-                    produto || null
-                  )
-                }}
-                style={select}
-              >
-                <option value="">
-                  Todos os produtos
+              {produtos.map(produto => (
+                <option
+                  key={produto.id}
+                  value={produto.id}
+                >
+                  {produto.nome}
                 </option>
-
-                {produtos.map(produto => (
-                  <option
-                    key={produto.id}
-                    value={produto.id}
-                  >
-                    {produto.nome}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                style={primaryButton}
-                onClick={() =>
-                  abrirNovaVariante(
-                    produtoSelecionado || undefined
-                  )
-                }
-                disabled={!produtoSelecionado}
-              >
-                + Nova variante
-              </button>
-            </div>
+              ))}
+            </select>
           </div>
 
-          {!produtoSelecionado ? (
-            <div style={emptyState}>
-              <strong>
-                Selecione um produto
-              </strong>
-
-              <span>
-                Escolha um produto acima para visualizar suas variantes.
-              </span>
-            </div>
-          ) : variantesDoProduto.length === 0 ? (
-            <div style={emptyState}>
-              <strong>
-                Nenhuma variante cadastrada
-              </strong>
-
-              <span>
-                Cadastre cor, tamanho, SKU, preço e custo.
-              </span>
-
-              <button
-                style={primaryButton}
-                onClick={() =>
-                  abrirNovaVariante(
-                    produtoSelecionado
-                  )
-                }
-              >
-                Cadastrar variante
-              </button>
-            </div>
-          ) : (
+          {produtoSelecionado && (
             <div style={tableWrapper}>
               <table style={table}>
                 <thead>
                   <tr>
-                    <th style={th}>
-                      SKU
-                    </th>
-
                     <th style={th}>
                       Cor
                     </th>
 
                     <th style={th}>
                       Tamanho
+                    </th>
+
+                    <th style={th}>
+                      SKU
                     </th>
 
                     <th style={th}>
@@ -1163,6 +1404,10 @@ export default function Produtos() {
                     </th>
 
                     <th style={th}>
+                      Mínimo
+                    </th>
+
+                    <th style={th}>
                       Status
                     </th>
 
@@ -1173,28 +1418,58 @@ export default function Produtos() {
                 </thead>
 
                 <tbody>
-                  {variantesDoProduto.map(
+                  {variantesFiltradas.map(
                     variante => {
-                      const estoqueBaixo =
-                        variante.ativo &&
-                        variante.estoqueAtual <=
-                          variante.estoqueMinimo
+                      const cor =
+                        cores.find(
+                          c =>
+                            c.nome ===
+                            variante.cor
+                        )
 
                       return (
-                        <tr key={variante.id}>
+                        <tr
+                          key={variante.id}
+                        >
                           <td style={td}>
-                            <strong>
-                              {variante.sku}
-                            </strong>
+                            <div
+                              style={{
+                                display:
+                                  "flex",
+                                alignItems:
+                                  "center",
+                                gap: 8
+                              }}
+                            >
+                              {cor && (
+                                <span
+                                  style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius:
+                                      "50%",
+                                    background:
+                                      cor.hex,
+                                    border:
+                                      "1px solid #ddd",
+                                    display:
+                                      "inline-block"
+                                  }}
+                                />
+                              )}
+
+                              {variante.cor ??
+                                "-"}
+                            </div>
                           </td>
 
                           <td style={td}>
-                            {variante.cor || "-"}
-                          </td>
-
-                          <td style={td}>
-                            {variante.tamanho ||
+                            {variante.tamanho ??
                               "-"}
+                          </td>
+
+                          <td style={td}>
+                            {variante.sku}
                           </td>
 
                           <td style={td}>
@@ -1213,57 +1488,50 @@ export default function Produtos() {
                             <strong
                               style={{
                                 color:
-                                  estoqueBaixo
-                                    ? "#a77724"
-                                    : "#403d38"
+                                  variante.estoqueAtual <=
+                                  variante.estoqueMinimo
+                                    ? "#a16b00"
+                                    : "#4f4a42"
                               }}
                             >
                               {
                                 variante.estoqueAtual
                               }
                             </strong>
+                          </td>
 
-                            <div style={smallText}>
-                              mínimo:{" "}
-                              {
-                                variante.estoqueMinimo
-                              }
-                            </div>
+                          <td style={td}>
+                            {
+                              variante.estoqueMinimo
+                            }
                           </td>
 
                           <td style={td}>
                             <span
                               style={{
-                                ...statusBadge,
+                                ...status,
                                 background:
                                   variante.ativo
-                                    ? "#f1f7ee"
-                                    : "#f3f1ed",
+                                    ? "#eef7ee"
+                                    : "#f4f4f4",
                                 color:
                                   variante.ativo
-                                    ? "#557448"
-                                    : "#777066"
+                                    ? "#477047"
+                                    : "#777"
                               }}
                             >
                               {variante.ativo
-                                ? "Ativa"
-                                : "Inativa"}
+                                ? "Ativo"
+                                : "Inativo"}
                             </span>
                           </td>
 
                           <td style={td}>
-                            <div style={actions}>
-                              <button
-                                style={primarySmallButton}
-                                onClick={() =>
-                                  abrirEstoque(
-                                    variante
-                                  )
-                                }
-                              >
-                                Estoque
-                              </button>
-
+                            <div
+                              style={
+                                actionButtons
+                              }
+                            >
                               <button
                                 style={
                                   secondaryButton
@@ -1279,10 +1547,23 @@ export default function Produtos() {
 
                               <button
                                 style={
-                                  textButton
+                                  secondaryButton
                                 }
                                 onClick={() =>
-                                  alternarVariante(
+                                  abrirEstoque(
+                                    variante
+                                  )
+                                }
+                              >
+                                Estoque
+                              </button>
+
+                              <button
+                                style={
+                                  secondaryButton
+                                }
+                                onClick={() =>
+                                  alterarStatusVariante(
                                     variante
                                   )
                                 }
@@ -1299,183 +1580,163 @@ export default function Produtos() {
                   )}
                 </tbody>
               </table>
+
+              {variantesFiltradas.length ===
+                0 && (
+                <div style={empty}>
+                  Nenhuma variante cadastrada
+                  para este produto.
+                </div>
+              )}
             </div>
           )}
         </section>
       )}
 
-      {/* MOVIMENTAÇÕES */}
       {aba === "movimentacoes" && (
         <section style={section}>
           <div style={sectionHeader}>
             <div>
               <h2 style={sectionTitle}>
-                Histórico de estoque
+                Movimentações de estoque
               </h2>
 
               <p style={sectionSubtitle}>
-                Registro das entradas, saídas, ajustes, perdas e devoluções.
+                Histórico de entradas,
+                saídas e ajustes.
               </p>
             </div>
           </div>
 
-          {movimentacoes.length === 0 ? (
-            <div style={emptyState}>
-              <strong>
-                Nenhuma movimentação registrada
-              </strong>
+          <div style={tableWrapper}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>
+                    Data
+                  </th>
 
-              <span>
-                As movimentações aparecerão aqui conforme o estoque for alterado.
-              </span>
-            </div>
-          ) : (
-            <div style={tableWrapper}>
-              <table style={table}>
-                <thead>
-                  <tr>
-                    <th style={th}>
-                      Data
-                    </th>
+                  <th style={th}>
+                    Variante
+                  </th>
 
-                    <th style={th}>
-                      Produto
-                    </th>
+                  <th style={th}>
+                    Tipo
+                  </th>
 
-                    <th style={th}>
-                      Tipo
-                    </th>
+                  <th style={th}>
+                    Quantidade
+                  </th>
 
-                    <th style={th}>
-                      Quantidade
-                    </th>
+                  <th style={th}>
+                    Saldo anterior
+                  </th>
 
-                    <th style={th}>
-                      Saldo
-                    </th>
+                  <th style={th}>
+                    Saldo posterior
+                  </th>
 
-                    <th style={th}>
-                      Motivo
-                    </th>
+                  <th style={th}>
+                    Motivo
+                  </th>
 
-                    <th style={th}>
-                      Observação
-                    </th>
-                  </tr>
-                </thead>
+                  <th style={th}>
+                    Observação
+                  </th>
+                </tr>
+              </thead>
 
-                <tbody>
-                  {movimentacoes.map(
-                    movimentacao => (
-                      <tr key={movimentacao.id}>
+              <tbody>
+                {movimentacoes.map(
+                  movimentacao => {
+                    const variante =
+                      variantes.find(
+                        v =>
+                          v.id ===
+                          movimentacao.varianteId
+                      )
+
+                    return (
+                      <tr
+                        key={
+                          movimentacao.id
+                        }
+                      >
                         <td style={td}>
-                          {dataFormatada(
+                          {new Date(
                             movimentacao.criadoem
+                          ).toLocaleString(
+                            "pt-BR"
                           )}
                         </td>
 
                         <td style={td}>
-                          <strong>
-                            {nomeProduto(
-                              movimentacao.varianteId
-                            )}
-                          </strong>
-
-                          <div style={smallText}>
-                            {(() => {
-                              const variante =
-                                variantes.find(
-                                  v =>
-                                    v.id ===
-                                    movimentacao.varianteId
-                                )
-
-                              return variante
-                                ? `${variante.sku} · ${descricaoVariante(
-                                    variante
-                                  )}`
-                                : "-"
-                            })()}
-                          </div>
+                          {variante
+                            ? `${variante.cor ?? ""} ${variante.tamanho ?? ""} - ${variante.sku}`
+                            : "-"}
                         </td>
 
                         <td style={td}>
-                          <span
-                            style={{
-                              ...movementBadge,
-                              background:
-                                movimentacao.tipo ===
-                                  "ENTRADA" ||
-                                movimentacao.tipo ===
-                                  "DEVOLUCAO" ||
-                                movimentacao.tipo ===
-                                  "AJUSTE_ENTRADA"
-                                  ? "#f1f7ee"
-                                  : "#faf1e7",
-                              color:
-                                movimentacao.tipo ===
-                                  "ENTRADA" ||
-                                movimentacao.tipo ===
-                                  "DEVOLUCAO" ||
-                                movimentacao.tipo ===
-                                  "AJUSTE_ENTRADA"
-                                  ? "#557448"
-                                  : "#956a36"
-                            }}
-                          >
-                            {
-                              movimentacao.tipo
-                            }
-                          </span>
+                          {movimentacao.tipo}
                         </td>
 
                         <td style={td}>
-                          {movimentacao.quantidade}
+                          {
+                            movimentacao.quantidade
+                          }
                         </td>
 
                         <td style={td}>
                           {
                             movimentacao.saldoAnterior
-                          }{" "}
-                          →{" "}
+                          }
+                        </td>
+
+                        <td style={td}>
                           {
                             movimentacao.saldoPosterior
                           }
                         </td>
 
                         <td style={td}>
-                          {movimentacao.motivo ||
+                          {movimentacao.motivo ??
                             "-"}
                         </td>
 
                         <td style={td}>
-                          {movimentacao.observacao ||
+                          {movimentacao.observacao ??
                             "-"}
                         </td>
                       </tr>
                     )
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  }
+                )}
+              </tbody>
+            </table>
+
+            {movimentacoes.length === 0 && (
+              <div style={empty}>
+                Nenhuma movimentação registrada.
+              </div>
+            )}
+          </div>
         </section>
       )}
 
-      {/* MODAL PRODUTO */}
       {modalProduto && (
-        <div style={modalOverlay}>
+        <div style={overlayModal}>
           <div style={modal}>
             <div style={modalHeader}>
               <div>
                 <h2 style={modalTitle}>
-                  {produtoSelecionado
-                    ? "Editar produto"
-                    : "Novo produto"}
+                  {produtoEditando
+                    ? "Editar Produto"
+                    : "Novo Produto"}
                 </h2>
 
                 <p style={modalSubtitle}>
-                  Cadastre as informações principais do produto.
+                  Cadastre as informações gerais
+                  do produto.
                 </p>
               </div>
 
@@ -1490,36 +1751,26 @@ export default function Produtos() {
             </div>
 
             <div style={formGrid}>
-              <div style={fieldFull}>
+              <div
+                style={{
+                  ...field,
+                  gridColumn: "1 / -1"
+                }}
+              >
                 <label style={label}>
-                  Nome do produto *
+                  Nome do produto
                 </label>
 
                 <input
-                  value={nome}
+                  value={formProduto.nome}
                   onChange={e =>
-                    setNome(e.target.value)
+                    setFormProduto(prev => ({
+                      ...prev,
+                      nome: e.target.value
+                    }))
                   }
                   style={input}
-                  placeholder="Ex.: Camiseta FEI"
-                />
-              </div>
-
-              <div style={fieldFull}>
-                <label style={label}>
-                  Descrição
-                </label>
-
-                <textarea
-                  value={descricao}
-                  onChange={e =>
-                    setDescricao(
-                      e.target.value
-                    )
-                  }
-                  style={textarea}
-                  placeholder="Descrição do produto..."
-                  rows={3}
+                  placeholder="Ex.: Camiseta Cami&Duda"
                 />
               </div>
 
@@ -1529,11 +1780,16 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={categoria}
+                  value={
+                    formProduto.categoria
+                  }
                   onChange={e =>
-                    setCategoria(
-                      e.target.value
-                    )
+                    setFormProduto(prev => ({
+                      ...prev,
+                      categoria:
+                        e.target.value,
+                      subcategoria: ""
+                    }))
                   }
                   style={input}
                 >
@@ -1541,14 +1797,16 @@ export default function Produtos() {
                     Selecione
                   </option>
 
-                  {CATEGORIAS.map(item => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
+                  {CATEGORIAS.map(
+                    categoria => (
+                      <option
+                        key={categoria}
+                        value={categoria}
+                      >
+                        {categoria}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
@@ -1558,24 +1816,35 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={subcategoria}
+                  value={
+                    formProduto.subcategoria
+                  }
                   onChange={e =>
-                    setSubcategoria(
-                      e.target.value
-                    )
+                    setFormProduto(prev => ({
+                      ...prev,
+                      subcategoria:
+                        e.target.value
+                    }))
                   }
                   style={input}
+                  disabled={
+                    !formProduto.categoria
+                  }
                 >
                   <option value="">
                     Selecione
                   </option>
 
-                  {SUBCATEGORIAS.map(item => (
+                  {(
+                    SUBCATEGORIAS[
+                      formProduto.categoria
+                    ] ?? []
+                  ).map(subcategoria => (
                     <option
-                      key={item}
-                      value={item}
+                      key={subcategoria}
+                      value={subcategoria}
                     >
-                      {item}
+                      {subcategoria}
                     </option>
                   ))}
                 </select>
@@ -1587,24 +1856,44 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={tecido}
-                  onChange={e =>
-                    setTecido(e.target.value)
+                  value={
+                    formProduto.tecido
                   }
+                  onChange={e => {
+                    if (
+                      e.target.value ===
+                      "__novo__"
+                    ) {
+                      abrirNovaOpcao(
+                        "tecido"
+                      )
+                      return
+                    }
+
+                    setFormProduto(prev => ({
+                      ...prev,
+                      tecido:
+                        e.target.value
+                    }))
+                  }}
                   style={input}
                 >
                   <option value="">
                     Selecione
                   </option>
 
-                  {TECIDOS.map(item => (
+                  {tecidos.map(tecido => (
                     <option
-                      key={item}
-                      value={item}
+                      key={tecido}
+                      value={tecido}
                     >
-                      {item}
+                      {tecido}
                     </option>
                   ))}
+
+                  <option value="__novo__">
+                    + Adicionar novo tecido
+                  </option>
                 </select>
               </div>
 
@@ -1614,26 +1903,46 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={comprimento}
-                  onChange={e =>
-                    setComprimento(
-                      e.target.value
-                    )
+                  value={
+                    formProduto.comprimento
                   }
+                  onChange={e => {
+                    if (
+                      e.target.value ===
+                      "__novo__"
+                    ) {
+                      abrirNovaOpcao(
+                        "comprimento"
+                      )
+                      return
+                    }
+
+                    setFormProduto(prev => ({
+                      ...prev,
+                      comprimento:
+                        e.target.value
+                    }))
+                  }}
                   style={input}
                 >
                   <option value="">
                     Selecione
                   </option>
 
-                  {COMPRIMENTOS.map(item => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
+                  {comprimentos.map(
+                    comprimento => (
+                      <option
+                        key={comprimento}
+                        value={comprimento}
+                      >
+                        {comprimento}
+                      </option>
+                    )
+                  )}
+
+                  <option value="__novo__">
+                    + Adicionar novo comprimento
+                  </option>
                 </select>
               </div>
 
@@ -1643,27 +1952,95 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={modelagem}
-                  onChange={e =>
-                    setModelagem(
-                      e.target.value
-                    )
+                  value={
+                    formProduto.modelagem
                   }
+                  onChange={e => {
+                    if (
+                      e.target.value ===
+                      "__novo__"
+                    ) {
+                      abrirNovaOpcao(
+                        "modelagem"
+                      )
+                      return
+                    }
+
+                    setFormProduto(prev => ({
+                      ...prev,
+                      modelagem:
+                        e.target.value
+                    }))
+                  }}
                   style={input}
                 >
                   <option value="">
                     Selecione
                   </option>
 
-                  {MODELAGENS.map(item => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
+                  {modelagens.map(
+                    modelagem => (
+                      <option
+                        key={modelagem}
+                        value={modelagem}
+                      >
+                        {modelagem}
+                      </option>
+                    )
+                  )}
+
+                  <option value="__novo__">
+                    + Adicionar nova modelagem
+                  </option>
                 </select>
+              </div>
+
+              <div style={field}>
+                <label style={label}>
+                  Data de entrada
+                </label>
+
+                <input
+                  type="date"
+                  value={
+                    formProduto.dataEntrada
+                  }
+                  onChange={e =>
+                    setFormProduto(prev => ({
+                      ...prev,
+                      dataEntrada:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                />
+              </div>
+
+              <div
+                style={{
+                  ...field,
+                  gridColumn: "1 / -1"
+                }}
+              >
+                <label style={label}>
+                  Descrição
+                </label>
+
+                <textarea
+                  value={
+                    formProduto.descricao
+                  }
+                  onChange={e =>
+                    setFormProduto(prev => ({
+                      ...prev,
+                      descricao:
+                        e.target.value
+                    }))
+                  }
+                  style={textarea}
+                  rows={4}
+                  placeholder="Descrição do produto..."
+                />
               </div>
             </div>
 
@@ -1684,28 +2061,27 @@ export default function Produtos() {
               >
                 {salvando
                   ? "Salvando..."
-                  : "Salvar produto"}
+                  : "Salvar Produto"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL VARIANTE */}
       {modalVariante && (
-        <div style={modalOverlay}>
+        <div style={overlayModal}>
           <div style={modal}>
             <div style={modalHeader}>
               <div>
                 <h2 style={modalTitle}>
-                  {varianteSelecionada
-                    ? "Editar variante"
-                    : "Nova variante"}
+                  {varianteEditando
+                    ? "Editar Variante"
+                    : "Nova Variante"}
                 </h2>
 
                 <p style={modalSubtitle}>
-                  {produtoSelecionado?.nome ||
-                    "Produto"}
+                  Cadastre uma combinação de
+                  cor e tamanho.
                 </p>
               </div>
 
@@ -1720,31 +2096,25 @@ export default function Produtos() {
             </div>
 
             <div style={formGrid}>
-              <div style={fieldFull}>
+              <div style={field}>
                 <label style={label}>
                   Produto
                 </label>
 
                 <select
                   value={
-                    produtoSelecionado?.id ||
-                    ""
+                    formVariante.produtoId
                   }
-                  onChange={e => {
-                    const produto =
-                      produtos.find(
-                        p =>
-                          p.id ===
-                          e.target.value
-                      )
-
-                    setProdutoSelecionado(
-                      produto || null
-                    )
-                  }}
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      produtoId:
+                        e.target.value
+                    }))
+                  }
                   style={input}
                   disabled={
-                    !!varianteSelecionada
+                    !!varianteEditando
                   }
                 >
                   <option value="">
@@ -1762,46 +2132,92 @@ export default function Produtos() {
                 </select>
               </div>
 
-              <div style={fieldFull}>
-                <label style={label}>
-                  SKU *
-                </label>
-
-                <input
-                  value={sku}
-                  onChange={e =>
-                    setSku(e.target.value)
-                  }
-                  style={input}
-                  placeholder="Ex.: CAM-PT-M"
-                />
-              </div>
-
               <div style={field}>
                 <label style={label}>
                   Cor
                 </label>
 
                 <select
-                  value={cor}
-                  onChange={e =>
-                    setCor(e.target.value)
+                  value={
+                    formVariante.cor
                   }
+                  onChange={e => {
+                    if (
+                      e.target.value ===
+                      "__novo__"
+                    ) {
+                      abrirNovaOpcao(
+                        "cor"
+                      )
+                      return
+                    }
+
+                    setFormVariante(prev => ({
+                      ...prev,
+                      cor:
+                        e.target.value
+                    }))
+                  }}
                   style={input}
                 >
                   <option value="">
-                    Sem cor
+                    Selecione
                   </option>
 
-                  {CORES.map(item => (
+                  {cores.map(cor => (
                     <option
-                      key={item}
-                      value={item}
+                      key={cor.nome}
+                      value={cor.nome}
                     >
-                      {item}
+                      {cor.nome}
                     </option>
                   ))}
+
+                  <option value="__novo__">
+                    + Adicionar nova cor
+                  </option>
                 </select>
+
+                {formVariante.cor && (
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      gap: 8,
+                      marginTop: 8,
+                      fontSize: 13,
+                      color: "#777"
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius:
+                          "50%",
+                        background:
+                          cores.find(
+                            c =>
+                              c.nome ===
+                              formVariante.cor
+                          )?.hex ??
+                          "#ddd",
+                        border:
+                          "1px solid #ddd"
+                      }}
+                    />
+
+                    {
+                      cores.find(
+                        c =>
+                          c.nome ===
+                          formVariante.cor
+                      )?.hex
+                    }
+                  </div>
+                )}
               </div>
 
               <div style={field}>
@@ -1810,71 +2226,134 @@ export default function Produtos() {
                 </label>
 
                 <select
-                  value={tamanho}
-                  onChange={e =>
-                    setTamanho(
-                      e.target.value
-                    )
+                  value={
+                    formVariante.tamanho
                   }
+                  onChange={e => {
+                    if (
+                      e.target.value ===
+                      "__novo__"
+                    ) {
+                      abrirNovaOpcao(
+                        "tamanho"
+                      )
+                      return
+                    }
+
+                    setFormVariante(prev => ({
+                      ...prev,
+                      tamanho:
+                        e.target.value
+                    }))
+                  }}
                   style={input}
                 >
                   <option value="">
-                    Sem tamanho
+                    Selecione
                   </option>
 
-                  {TAMANHOS.map(item => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
+                  {tamanhos.map(
+                    tamanho => (
+                      <option
+                        key={tamanho}
+                        value={tamanho}
+                      >
+                        {tamanho}
+                      </option>
+                    )
+                  )}
+
+                  <option value="__novo__">
+                    + Adicionar novo tamanho
+                  </option>
                 </select>
               </div>
 
               <div style={field}>
                 <label style={label}>
-                  Preço de venda *
+                  SKU
                 </label>
 
-                <div style={inputPrefix}>
-                  <span>R$</span>
-
-                  <input
-                    value={precoVenda}
-                    onChange={e =>
-                      setPrecoVenda(
+                <input
+                  value={
+                    formVariante.sku
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      sku:
                         e.target.value
-                      )
-                    }
-                    style={inputNoBorder}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                  />
-                </div>
+                    }))
+                  }
+                  style={input}
+                  placeholder="Ex.: CAM-PT-M"
+                />
               </div>
 
               <div style={field}>
                 <label style={label}>
-                  Custo unitário *
+                  Preço de venda
                 </label>
 
-                <div style={inputPrefix}>
-                  <span>R$</span>
-
-                  <input
-                    value={custoUnitario}
-                    onChange={e =>
-                      setCustoUnitario(
+                <input
+                  value={
+                    formVariante.precoVenda
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      precoVenda:
                         e.target.value
-                      )
-                    }
-                    style={inputNoBorder}
-                    placeholder="0,00"
-                    inputMode="decimal"
-                  />
-                </div>
+                    }))
+                  }
+                  style={input}
+                  placeholder="0,00"
+                  inputMode="decimal"
+                />
+              </div>
+
+              <div style={field}>
+                <label style={label}>
+                  Custo unitário
+                </label>
+
+                <input
+                  value={
+                    formVariante.custoUnitario
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      custoUnitario:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                  placeholder="0,00"
+                  inputMode="decimal"
+                />
+              </div>
+
+              <div style={field}>
+                <label style={label}>
+                  Margem alvo (%)
+                </label>
+
+                <input
+                  value={
+                    formVariante.margemAlvo
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      margemAlvo:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                  placeholder="Ex.: 45"
+                  inputMode="decimal"
+                />
               </div>
 
               <div style={field}>
@@ -1883,15 +2362,19 @@ export default function Produtos() {
                 </label>
 
                 <input
-                  value={estoqueMinimo}
-                  onChange={e =>
-                    setEstoqueMinimo(
-                      e.target.value
-                    )
-                  }
-                  style={input}
                   type="number"
                   min="0"
+                  value={
+                    formVariante.estoqueMinimo
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      estoqueMinimo:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
                 />
               </div>
 
@@ -1901,40 +2384,23 @@ export default function Produtos() {
                 </label>
 
                 <input
-                  value={estoqueMaximo}
-                  onChange={e =>
-                    setEstoqueMaximo(
-                      e.target.value
-                    )
-                  }
-                  style={input}
                   type="number"
                   min="0"
+                  value={
+                    formVariante.estoqueMaximo
+                  }
+                  onChange={e =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      estoqueMaximo:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
                   placeholder="Opcional"
                 />
               </div>
             </div>
-
-            {varianteSelecionada && (
-              <div style={currentStockBox}>
-                <span>
-                  Estoque atual
-                </span>
-
-                <strong>
-                  {
-                    varianteSelecionada.estoqueAtual
-                  }{" "}
-                  unidades
-                </strong>
-
-                <small>
-                  Para alterar a quantidade, use o botão
-                  {" "}
-                  <strong>Estoque</strong>.
-                </small>
-              </div>
-            )}
 
             <div style={modalFooter}>
               <button
@@ -1953,209 +2419,339 @@ export default function Produtos() {
               >
                 {salvando
                   ? "Salvando..."
-                  : "Salvar variante"}
+                  : "Salvar Variante"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL ESTOQUE */}
-      {modalEstoque &&
-        varianteSelecionada && (
-          <div style={modalOverlay}>
-            <div style={modal}>
-              <div style={modalHeader}>
-                <div>
-                  <h2 style={modalTitle}>
-                    Movimentar estoque
-                  </h2>
+      {modalEstoque && (
+        <div style={overlayModal}>
+          <div style={modal}>
+            <div style={modalHeader}>
+              <div>
+                <h2 style={modalTitle}>
+                  Movimentar Estoque
+                </h2>
 
-                  <p style={modalSubtitle}>
-                    {nomeProduto(
-                      varianteSelecionada.id
-                    )}
-                    {" · "}
-                    {varianteSelecionada.sku}
-                  </p>
-                </div>
+                <p style={modalSubtitle}>
+                  {varianteEstoque?.sku}
+                  {" — "}
+                  Estoque atual:{" "}
+                  {varianteEstoque?.estoqueAtual ??
+                    0}
+                </p>
+              </div>
 
-                <button
-                  style={closeButton}
-                  onClick={() =>
-                    setModalEstoque(false)
+              <button
+                style={closeButton}
+                onClick={() =>
+                  setModalEstoque(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={formGrid}>
+              <div style={field}>
+                <label style={label}>
+                  Tipo
+                </label>
+
+                <select
+                  value={
+                    formEstoque.tipo
                   }
-                >
-                  ×
-                </button>
-              </div>
-
-              <div style={currentStockLarge}>
-                <span>
-                  Estoque atual
-                </span>
-
-                <strong>
-                  {
-                    varianteSelecionada.estoqueAtual
-                  }{" "}
-                  unidades
-                </strong>
-              </div>
-
-              <div style={formGrid}>
-                <div style={fieldFull}>
-                  <label style={label}>
-                    Tipo de movimentação *
-                  </label>
-
-                  <select
-                    value={tipoMovimentacao}
-                    onChange={e =>
-                      setTipoMovimentacao(
+                  onChange={e =>
+                    setFormEstoque(prev => ({
+                      ...prev,
+                      tipo:
                         e.target.value
-                      )
-                    }
-                    style={input}
-                  >
-                    <option value="ENTRADA">
-                      Entrada
-                    </option>
-
-                    <option value="SAIDA">
-                      Saída
-                    </option>
-
-                    <option value="AJUSTE_ENTRADA">
-                      Ajuste de entrada
-                    </option>
-
-                    <option value="AJUSTE_SAIDA">
-                      Ajuste de saída
-                    </option>
-
-                    <option value="DEVOLUCAO">
-                      Devolução
-                    </option>
-
-                    <option value="PERDA">
-                      Perda
-                    </option>
-                  </select>
-                </div>
-
-                <div style={field}>
-                  <label style={label}>
-                    Quantidade *
-                  </label>
-
-                  <input
-                    value={
-                      quantidadeMovimentacao
-                    }
-                    onChange={e =>
-                      setQuantidadeMovimentacao(
-                        e.target.value
-                      )
-                    }
-                    style={input}
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div style={field}>
-                  <label style={label}>
-                    Custo unitário
-                  </label>
-
-                  <div style={inputPrefix}>
-                    <span>R$</span>
-
-                    <input
-                      value={custoMovimentacao}
-                      onChange={e =>
-                        setCustoMovimentacao(
-                          e.target.value
-                        )
-                      }
-                      style={inputNoBorder}
-                      placeholder="0,00"
-                      inputMode="decimal"
-                    />
-                  </div>
-                </div>
-
-                <div style={fieldFull}>
-                  <label style={label}>
-                    Motivo *
-                  </label>
-
-                  <input
-                    value={motivoMovimentacao}
-                    onChange={e =>
-                      setMotivoMovimentacao(
-                        e.target.value
-                      )
-                    }
-                    style={input}
-                    placeholder="Ex.: Reposição de estoque"
-                  />
-                </div>
-
-                <div style={fieldFull}>
-                  <label style={label}>
-                    Observação
-                  </label>
-
-                  <textarea
-                    value={
-                      observacaoMovimentacao
-                    }
-                    onChange={e =>
-                      setObservacaoMovimentacao(
-                        e.target.value
-                      )
-                    }
-                    style={textarea}
-                    rows={3}
-                    placeholder="Informações adicionais..."
-                  />
-                </div>
-              </div>
-
-              <div style={modalFooter}>
-                <button
-                  style={cancelButton}
-                  onClick={() =>
-                    setModalEstoque(false)
+                    }))
                   }
+                  style={input}
                 >
-                  Cancelar
-                </button>
+                  {TIPOS_MOVIMENTACAO.map(
+                    tipo => (
+                      <option
+                        key={tipo}
+                        value={tipo}
+                      >
+                        {tipo}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
 
-                <button
-                  style={primaryButton}
-                  onClick={movimentarEstoque}
-                  disabled={salvando}
-                >
-                  {salvando
-                    ? "Processando..."
-                    : "Confirmar movimentação"}
-                </button>
+              <div style={field}>
+                <label style={label}>
+                  Quantidade
+                </label>
+
+                <input
+                  type="number"
+                  min="1"
+                  value={
+                    formEstoque.quantidade
+                  }
+                  onChange={e =>
+                    setFormEstoque(prev => ({
+                      ...prev,
+                      quantidade:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                />
+              </div>
+
+              <div style={field}>
+                <label style={label}>
+                  Custo unitário
+                </label>
+
+                <input
+                  value={
+                    formEstoque.custoUnitario
+                  }
+                  onChange={e =>
+                    setFormEstoque(prev => ({
+                      ...prev,
+                      custoUnitario:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                  placeholder="Opcional"
+                  inputMode="decimal"
+                />
+              </div>
+
+              <div style={field}>
+                <label style={label}>
+                  Motivo
+                </label>
+
+                <input
+                  value={
+                    formEstoque.motivo
+                  }
+                  onChange={e =>
+                    setFormEstoque(prev => ({
+                      ...prev,
+                      motivo:
+                        e.target.value
+                    }))
+                  }
+                  style={input}
+                  placeholder="Ex.: Compra de fornecedor"
+                />
+              </div>
+
+              <div
+                style={{
+                  ...field,
+                  gridColumn: "1 / -1"
+                }}
+              >
+                <label style={label}>
+                  Observação
+                </label>
+
+                <textarea
+                  value={
+                    formEstoque.observacao
+                  }
+                  onChange={e =>
+                    setFormEstoque(prev => ({
+                      ...prev,
+                      observacao:
+                        e.target.value
+                    }))
+                  }
+                  style={textarea}
+                  rows={4}
+                  placeholder="Observação opcional..."
+                />
               </div>
             </div>
+
+            <div style={modalFooter}>
+              <button
+                style={cancelButton}
+                onClick={() =>
+                  setModalEstoque(false)
+                }
+              >
+                Cancelar
+              </button>
+
+              <button
+                style={primaryButton}
+                onClick={
+                  movimentarEstoque
+                }
+                disabled={salvando}
+              >
+                {salvando
+                  ? "Salvando..."
+                  : "Registrar movimentação"}
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {novaOpcaoTipo && (
+        <div style={overlayModal}>
+          <div
+            style={{
+              ...modal,
+              maxWidth: 460
+            }}
+          >
+            <div style={modalHeader}>
+              <div>
+                <h2 style={modalTitle}>
+                  Adicionar{" "}
+                  {novaOpcaoTipo === "cor"
+                    ? "cor"
+                    : novaOpcaoTipo ===
+                        "tamanho"
+                      ? "tamanho"
+                      : novaOpcaoTipo ===
+                          "tecido"
+                        ? "tecido"
+                        : novaOpcaoTipo ===
+                            "comprimento"
+                          ? "comprimento"
+                          : "modelagem"}
+                </h2>
+
+                <p style={modalSubtitle}>
+                  A nova opção será salva
+                  neste navegador.
+                </p>
+              </div>
+
+              <button
+                style={closeButton}
+                onClick={() =>
+                  setNovaOpcaoTipo(null)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={field}>
+              <label style={label}>
+                Nome
+              </label>
+
+              <input
+                value={novaOpcaoNome}
+                onChange={e =>
+                  setNovaOpcaoNome(
+                    e.target.value
+                  )
+                }
+                style={input}
+                placeholder={
+                  novaOpcaoTipo === "cor"
+                    ? "Ex.: Dourado"
+                    : "Digite o nome"
+                }
+                autoFocus
+              />
+            </div>
+
+            {novaOpcaoTipo === "cor" && (
+              <div
+                style={{
+                  ...field,
+                  marginTop: 16
+                }}
+              >
+                <label style={label}>
+                  Cor / HEX
+                </label>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center"
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={
+                      novaOpcaoHex
+                    }
+                    onChange={e =>
+                      setNovaOpcaoHex(
+                        e.target.value
+                      )
+                    }
+                    style={{
+                      width: 50,
+                      height: 42,
+                      border: "1px solid #ddd",
+                      borderRadius: 8,
+                      padding: 2,
+                      background:
+                        "#fff"
+                    }}
+                  />
+
+                  <input
+                    value={
+                      novaOpcaoHex
+                    }
+                    onChange={e =>
+                      setNovaOpcaoHex(
+                        e.target.value
+                      )
+                    }
+                    style={{
+                      ...input,
+                      flex: 1
+                    }}
+                    placeholder="#000000"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div style={modalFooter}>
+              <button
+                style={cancelButton}
+                onClick={() =>
+                  setNovaOpcaoTipo(null)
+                }
+              >
+                Cancelar
+              </button>
+
+              <button
+                style={primaryButton}
+                onClick={
+                  adicionarNovaOpcao
+                }
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-/* =========================
-   ESTILOS
-========================= */
 
 const page = {
   width: "100%",
@@ -2168,317 +2764,242 @@ const header = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 20,
-  marginBottom: 28
+  marginBottom: 30
 }
 
 const title = {
   margin: 0,
   fontFamily: "Playfair Display, serif",
-  fontSize: 32,
-  color: "#3f3b34",
-  fontWeight: 700
+  fontSize: 34,
+  color: "#3f3b34"
 }
 
 const subtitle = {
-  margin: "7px 0 0",
-  color: "#777168",
+  margin: "8px 0 0",
+  color: "#77736b",
   fontSize: 14
+}
+
+const headerButtons = {
+  display: "flex",
+  gap: 10
 }
 
 const primaryButton = {
   border: "none",
+  borderRadius: 10,
+  padding: "12px 20px",
   background: "#b9974f",
   color: "#fff",
-  padding: "12px 20px",
-  borderRadius: 10,
-  fontSize: 14,
   fontWeight: 600,
   cursor: "pointer",
-  whiteSpace: "nowrap" as const,
-  boxShadow: "0 5px 14px rgba(185,151,79,0.18)"
-}
-
-const primarySmallButton = {
-  ...primaryButton,
-  padding: "8px 13px",
-  fontSize: 13
+  fontSize: 14
 }
 
 const secondaryButton = {
-  border: "1px solid #e5dcc8",
-  background: "#fffdfa",
-  color: "#665f53",
-  padding: "8px 13px",
+  border: "1px solid #e2d5b5",
   borderRadius: 8,
-  fontSize: 13,
+  padding: "7px 10px",
+  background: "#fffdfa",
+  color: "#665a45",
+  cursor: "pointer",
+  fontSize: 12
+}
+
+const cancelButton = {
+  border: "1px solid #ddd",
+  borderRadius: 10,
+  padding: "12px 20px",
+  background: "#fff",
+  color: "#666",
   fontWeight: 500,
   cursor: "pointer"
 }
 
-const textButton = {
-  border: "none",
-  background: "transparent",
-  color: "#8b6f3d",
-  padding: "8px 5px",
-  fontSize: 13,
-  cursor: "pointer"
-}
-
-const cardsGrid = {
+const cards = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(190px, 1fr))",
+    "repeat(auto-fit, minmax(170px, 1fr))",
   gap: 14,
   marginBottom: 28
 }
 
-const summaryCard = {
-  background: "#fffdfa",
-  border: "1px solid #eee7d8",
+const card = {
+  background: "#fff",
+  border: "1px solid #eee7d7",
   borderRadius: 14,
   padding: 20,
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 5,
   boxShadow:
-    "0 4px 14px rgba(120,100,60,0.04)"
+    "0 4px 14px rgba(216,191,122,0.08)"
 }
 
-const summaryLabel = {
-  fontSize: 12,
-  color: "#8b857a",
-  fontWeight: 500
+const cardLabel = {
+  display: "block",
+  color: "#888176",
+  fontSize: 13,
+  marginBottom: 8
 }
 
-const summaryValue = {
+const cardValue = {
   fontSize: 24,
-  color: "#403d38",
-  fontWeight: 700,
-  marginTop: 3
+  color: "#4d473d"
 }
 
-const summaryDescription = {
-  fontSize: 12,
-  color: "#99938a"
-}
-
-const tabsContainer = {
+const tabs = {
   display: "flex",
-  gap: 5,
-  borderBottom: "1px solid #e8e0d0",
-  marginBottom: 20,
+  gap: 4,
+  borderBottom: "1px solid #e7dfcc",
+  marginBottom: 24,
   overflowX: "auto" as const
 }
 
-const tabButton = {
+const tab = {
   border: "none",
   background: "transparent",
-  color: "#777168",
   padding: "13px 18px",
-  fontSize: 14,
+  color: "#777",
   fontWeight: 500,
   cursor: "pointer",
-  whiteSpace: "nowrap" as const,
-  borderBottom: "3px solid transparent"
+  whiteSpace: "nowrap" as const
 }
 
 const activeTab = {
   color: "#8b6f3d",
-  fontWeight: 600,
   borderBottom:
-    "3px solid #d8bf7a"
+    "3px solid #d8bf7a",
+  fontWeight: 600
 }
 
 const section = {
-  background: "#fffdfa",
-  border: "1px solid #eee7d8",
-  borderRadius: 15,
+  background: "#fff",
+  borderRadius: 16,
+  border: "1px solid #eee7d7",
   padding: 24,
   boxShadow:
-    "0 4px 15px rgba(120,100,60,0.035)"
+    "0 4px 16px rgba(0,0,0,0.03)"
 }
 
 const sectionHeader = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 15,
+  gap: 16,
   marginBottom: 22,
   flexWrap: "wrap" as const
 }
 
 const sectionTitle = {
   margin: 0,
-  color: "#464139",
-  fontSize: 19,
-  fontWeight: 650
+  fontSize: 20,
+  color: "#4b463e"
 }
 
 const sectionSubtitle = {
-  margin: "5px 0 0",
-  color: "#898278",
+  margin: "6px 0 0",
+  color: "#888176",
   fontSize: 13
 }
 
-const searchInput = {
-  width: 260,
+const search = {
+  width: 240,
   maxWidth: "100%",
-  border: "1px solid #ddd5c6",
+  border: "1px solid #ddd5c3",
   borderRadius: 9,
-  padding: "10px 13px",
-  background: "#fff",
-  color: "#464139",
-  fontSize: 13,
-  outline: "none"
-}
-
-const variantHeaderActions = {
-  display: "flex",
-  gap: 10,
-  alignItems: "center",
-  flexWrap: "wrap" as const
-}
-
-const select = {
-  border: "1px solid #ddd5c6",
-  borderRadius: 9,
-  padding: "10px 13px",
-  background: "#fff",
-  color: "#464139",
-  fontSize: 13,
-  minWidth: 200,
-  outline: "none"
+  padding: "10px 12px",
+  outline: "none",
+  background: "#fff"
 }
 
 const tableWrapper = {
   width: "100%",
-  overflowX: "auto" as const,
-  border: "1px solid #eee8dc",
-  borderRadius: 10
+  overflowX: "auto" as const
 }
 
 const table = {
   width: "100%",
   borderCollapse: "collapse" as const,
-  minWidth: 850
+  minWidth: 900
 }
 
 const th = {
   textAlign: "left" as const,
-  padding: "13px 14px",
-  background: "#faf7ef",
-  color: "#746d61",
+  padding: "13px 12px",
+  background: "#faf8f2",
+  color: "#766f63",
   fontSize: 12,
-  fontWeight: 650,
-  borderBottom: "1px solid #eee8dc",
-  whiteSpace: "nowrap" as const
+  fontWeight: 600,
+  borderBottom: "1px solid #e8e0d0"
 }
 
 const td = {
-  padding: "14px",
-  borderBottom: "1px solid #f0ece4",
-  color: "#4f4a42",
-  fontSize: 13,
-  verticalAlign: "middle" as const
+  padding: "14px 12px",
+  borderBottom: "1px solid #eee",
+  color: "#555047",
+  fontSize: 13
 }
 
-const smallText = {
-  marginTop: 4,
-  color: "#969087",
-  fontSize: 11
-}
-
-const statusBadge = {
-  display: "inline-flex",
-  alignItems: "center",
+const status = {
+  display: "inline-block",
   padding: "5px 9px",
   borderRadius: 20,
   fontSize: 11,
   fontWeight: 600
 }
 
-const movementBadge = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "5px 9px",
-  borderRadius: 20,
-  fontSize: 10,
-  fontWeight: 650
-}
-
-const actions = {
+const actionButtons = {
   display: "flex",
-  alignItems: "center",
   gap: 6,
   flexWrap: "wrap" as const
 }
 
-const emptyState = {
-  minHeight: 220,
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
+const empty = {
   textAlign: "center" as const,
-  color: "#777168",
-  padding: 30
+  padding: 40,
+  color: "#999"
 }
 
-const loadingContainer = {
-  minHeight: 400,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center"
-}
-
-const loadingText = {
-  color: "#8b6f3d",
-  fontSize: 14
-}
-
-const modalOverlay = {
+const overlayModal = {
   position: "fixed" as const,
   inset: 0,
-  background: "rgba(35,31,25,0.42)",
+  background: "rgba(0,0,0,0.38)",
   display: "flex",
-  alignItems: "center",
   justifyContent: "center",
+  alignItems: "center",
   padding: 20,
-  zIndex: 2000
+  zIndex: 2000,
+  overflowY: "auto" as const
 }
 
 const modal = {
   width: "100%",
-  maxWidth: 720,
+  maxWidth: 760,
   maxHeight: "90vh",
   overflowY: "auto" as const,
   background: "#fffdfa",
-  borderRadius: 17,
+  borderRadius: 16,
+  padding: 26,
   boxShadow:
-    "0 20px 60px rgba(30,25,15,0.2)",
-  padding: 28,
-  boxSizing: "border-box" as const
+    "0 20px 60px rgba(0,0,0,0.18)"
 }
 
 const modalHeader = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 15,
-  alignItems: "flex-start",
-  marginBottom: 25
+  gap: 20,
+  marginBottom: 24
 }
 
 const modalTitle = {
   margin: 0,
-  color: "#403c35",
-  fontSize: 21,
-  fontWeight: 650
+  color: "#403b33",
+  fontFamily:
+    "Playfair Display, serif",
+  fontSize: 25
 }
 
 const modalSubtitle = {
-  margin: "5px 0 0",
-  color: "#898278",
+  margin: "6px 0 0",
+  color: "#888176",
   fontSize: 13
 }
 
@@ -2486,19 +3007,19 @@ const closeButton = {
   width: 34,
   height: 34,
   border: "none",
-  background: "#f6f2e9",
-  color: "#6f685c",
-  borderRadius: "50%",
-  fontSize: 22,
-  lineHeight: 1,
-  cursor: "pointer"
+  borderRadius: 8,
+  background: "#f5f1e7",
+  color: "#76684e",
+  fontSize: 24,
+  cursor: "pointer",
+  lineHeight: 1
 }
 
 const formGrid = {
   display: "grid",
   gridTemplateColumns:
     "repeat(2, minmax(0, 1fr))",
-  gap: 17
+  gap: 18
 }
 
 const field = {
@@ -2507,101 +3028,42 @@ const field = {
   gap: 7
 }
 
-const fieldFull = {
-  ...field,
-  gridColumn: "1 / -1"
-}
-
 const label = {
-  color: "#625c52",
-  fontSize: 12,
-  fontWeight: 600
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#625c52"
 }
 
 const input = {
   width: "100%",
   boxSizing: "border-box" as const,
-  border: "1px solid #ddd5c6",
+  border: "1px solid #ddd5c3",
   borderRadius: 9,
-  background: "#fff",
-  color: "#454038",
   padding: "11px 12px",
-  fontSize: 13,
+  background: "#fff",
+  color: "#4e4941",
+  fontSize: 14,
   outline: "none"
 }
 
 const textarea = {
-  ...input,
-  resize: "vertical" as const,
-  fontFamily: "inherit"
-}
-
-const inputPrefix = {
-  display: "flex",
-  alignItems: "center",
-  gap: 7,
-  border: "1px solid #ddd5c6",
+  width: "100%",
+  boxSizing: "border-box" as const,
+  border: "1px solid #ddd5c3",
   borderRadius: 9,
+  padding: "11px 12px",
   background: "#fff",
-  paddingLeft: 12,
-  color: "#8b6f3d",
-  fontSize: 13,
-  fontWeight: 600
-}
-
-const inputNoBorder = {
-  flex: 1,
-  minWidth: 0,
-  border: "none",
+  color: "#4e4941",
+  fontSize: 14,
   outline: "none",
-  background: "transparent",
-  color: "#454038",
-  padding: "11px 12px 11px 0",
-  fontSize: 13
-}
-
-const currentStockBox = {
-  marginTop: 20,
-  padding: 15,
-  borderRadius: 10,
-  background: "#faf7ef",
-  border: "1px solid #eee3c9",
-  display: "flex",
-  flexDirection: "column" as const,
-  gap: 4,
-  color: "#6e675c",
-  fontSize: 12
-}
-
-const currentStockLarge = {
-  marginBottom: 22,
-  padding: 18,
-  borderRadius: 11,
-  background: "#faf7ef",
-  border: "1px solid #eee3c9",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  color: "#746d61",
-  fontSize: 13
+  resize: "vertical" as const
 }
 
 const modalFooter = {
   display: "flex",
   justifyContent: "flex-end",
   gap: 10,
-  marginTop: 28,
-  paddingTop: 20,
-  borderTop: "1px solid #eee8dc"
+  marginTop: 26,
+  paddingTop: 18,
+  borderTop: "1px solid #eee6d6"
 }
-
-const cancelButton = {
-  border: "1px solid #ddd5c6",
-  background: "#fff",
-  color: "#6c665c",
-  padding: "11px 18px",
-  borderRadius: 9,
-  fontSize: 13,
-  cursor: "pointer"
-}
-
