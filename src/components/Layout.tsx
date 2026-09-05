@@ -346,11 +346,6 @@ const sidebarHeader = {
   boxSizing: "border-box" as const
 }
 
-const brandWrap = {
-  paddingLeft: 36,
-  paddingRight: 24,
-  marginBottom: 30
-}
 
 const logo = {
   fontFamily: "Playfair Display, serif",
