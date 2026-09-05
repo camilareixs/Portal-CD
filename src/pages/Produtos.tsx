@@ -839,50 +839,95 @@ export default function Produtos() {
 
     setSalvando(true)
 
-    const variantesDoProduto = variantes.filter(
-      variante => variante.produtoId === produto.id
-    )
+    try {
+      const variantesDoProduto = variantes.filter(
+        variante => variante.produtoId === produto.id
+      )
 
-    if (variantesDoProduto.length > 0) {
-      for (const variante of variantesDoProduto) {
-        const { error } = await supabase
-          .from("produtoVariantes")
-          .delete()
-          .eq("id", variante.id)
+      const idsVariantes = variantesDoProduto.map(
+        variante => variante.id
+      )
 
-        if (error) {
-          console.error(error)
-          setSalvando(false)
+      // Antes de excluir, verifica se alguma variante possui
+      // histórico de vendas ou movimentações de estoque.
+      if (idsVariantes.length > 0) {
+        const { data: itensVenda, error: erroVenda } =
+          await supabase
+            .from("vendaItens")
+            .select("id")
+            .in("varianteId", idsVariantes)
+            .limit(1)
+
+        if (erroVenda) {
+          console.error(erroVenda)
+          alert(`Erro ao verificar histórico de vendas: ${erroVenda.message}`)
+          return
+        }
+
+        if (itensVenda && itensVenda.length > 0) {
           alert(
-            "Não foi possível excluir o produto porque existem variantes ou histórico vinculado a ele."
+            "Este produto não pode ser excluído porque possui histórico de vendas. Inative o produto em vez de excluí-lo."
           )
           return
         }
+
+        const { data: movimentacoes, error: erroEstoque } =
+          await supabase
+            .from("estoqueMovimentacoes")
+            .select("id")
+            .in("varianteId", idsVariantes)
+            .limit(1)
+
+        if (erroEstoque) {
+          console.error(erroEstoque)
+          alert(
+            `Erro ao verificar histórico de estoque: ${erroEstoque.message}`
+          )
+          return
+        }
+
+        if (movimentacoes && movimentacoes.length > 0) {
+          alert(
+            "Este produto não pode ser excluído porque possui histórico de estoque. Inative o produto em vez de excluí-lo."
+          )
+          return
+        }
+
+        // Não há histórico. Agora as variantes podem ser excluídas.
+        const { error: erroVariantes } = await supabase
+          .from("produtoVariantes")
+          .delete()
+          .in("id", idsVariantes)
+
+        if (erroVariantes) {
+          console.error(erroVariantes)
+          alert(`Não foi possível excluir as variantes: ${erroVariantes.message}`)
+          return
+        }
       }
-    }
 
-    const { error } = await supabase
-      .from("produtos")
-      .delete()
-      .eq("id", produto.id)
+      const { error: erroProduto } = await supabase
+        .from("produtos")
+        .delete()
+        .eq("id", produto.id)
 
-    setSalvando(false)
+      if (erroProduto) {
+        console.error(erroProduto)
+        alert(`Não foi possível excluir o produto: ${erroProduto.message}`)
+        return
+      }
 
-    if (error) {
-      console.error(error)
-      alert(
-        "Não foi possível excluir o produto. Ele pode possuir histórico ou registros vinculados."
-      )
+      if (produtoSelecionado === produto.id) {
+        setProdutoSelecionado("")
+        setAba("produtos")
+      }
+
       await carregarDados()
-      return
-    }
 
-    if (produtoSelecionado === produto.id) {
-      setProdutoSelecionado("")
-      setAba("produtos")
+      alert("Produto excluído com sucesso.")
+    } finally {
+      setSalvando(false)
     }
-
-    await carregarDados()
   }
 
   function abrirEstoque(
