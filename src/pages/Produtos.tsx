@@ -285,6 +285,8 @@ export default function Produtos() {
 
   const [varianteEditando, setVarianteEditando] =
     useState<Variante | null>(null)
+  const [varianteEstoque, setVarianteEstoque] =
+    useState<Variante | null>(null)
 const [salvando, setSalvando] = useState(false)
 
   const [novaOpcaoTipo, setNovaOpcaoTipo] =
@@ -455,6 +457,10 @@ const [salvando, setSalvando] = useState(false)
     setMovimentacoes(
       movimentacoesResponse.data ?? []
     )
+  }
+
+  async function atualizarDados() {
+    await carregarDados()
   }
 
   useEffect(() => {
@@ -884,14 +890,26 @@ const [salvando, setSalvando] = useState(false)
 
       window.alert("Produto excluído com sucesso.")
       setProdutoSelecionado("")
-      await atualizarDados()
+      await carregarDados()
     } catch (error: any) {
       console.error("Erro ao excluir produto:", error)
       window.alert(
         `Não foi possível excluir o produto.\n\n${error?.message ?? "Erro desconhecido."}`
       )
-      await atualizarDados()
+      await carregarDados()
     }
+  }
+
+  function abrirEstoque(variante: Variante) {
+    setVarianteEstoque(variante)
+    setFormEstoque({
+      tipo: "ENTRADA",
+      quantidade: "",
+      custoUnitario: variante.custoUnitario.toFixed(2).replace(".", ","),
+      motivo: "",
+      observacao: ""
+    })
+    setModalEstoque(true)
   }
 
   async function movimentarEstoque() {
