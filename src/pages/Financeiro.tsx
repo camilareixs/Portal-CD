@@ -1,1166 +1,3062 @@
-import { useEffect, useState, useMemo } from "react"
-import { supabase } from "../lib/supabase"
 
-// --- TIPOS DE DADOS ---
+import { useEffect, useMemo, useState } from "react"
+import { supabase } from "../lib/supabase"
 
 type Receita = {
   id: string
+  tipo: "VENDA" | "PAGAMENTO_FIADO" | "OUTRA_RECEITA" | "OUTROS"
   descricao: string
   valor: number
-  categoria: string
-  tipo: "VENDA" | "OUTRO"
-  status: "RECEBIDA" | "PENDENTE"
-  data: string
-  vendaId?: string
+  dataCompetencia: string
+  dataRecebimento: string | null
+  status: "PENDENTE" | "RECEBIDA" | "CANCELADA"
+  observacao: string
+  criadoem: string
+  compraId: string | null
 }
 
 type Despesa = {
   id: string
   descricao: string
   valor: number
+  dataCompetencia: string
+  dataPagamento: string | null
+  recorrente: boolean
+  status: "PENDENTE" | "PAGA" | "CANCELADA"
+  observacao: string
   categoria: string
-  status: "PAGO" | "PENDENTE"
-  data: string
+  criadoem: string
 }
 
-type CompraFiado = {
+type Compra = {
   id: string
-  clienteId: string
-  clienteNome: string
-  valorTotal: number
-  valorRecebido: number
-  valorPendente: number
-  data: string
+  clienteid: string | null
+  cliente: string
+  cpf: string
+  valor: number
+  pagamento: string
+  criadoem: string
+  status: "PENDENTE" | "CONCLUIDA" | "CANCELADA"
+}
+
+type VendaItem = {
+  id: string
+  compraId: string
+  quantidade: number
+  custoUnitario: number
+}
+
+type Fiado = {
+  compra: Compra
+  recebido: number
+  pendente: number
+}
+
+const categoriasDespesas = [
+  "Aluguel",
+  "Marketing",
+  "Embalagens",
+  "Transporte",
+  "Taxas",
+  "Fornecedores",
+  "Operacional",
+  "Outros"
+]
+
+const meses = [
+  { value: "todos", label: "Todos os meses" },
+  { value: "01", label: "Janeiro" },
+  { value: "02", label: "Fevereiro" },
+  { value: "03", label: "Março" },
+  { value: "04", label: "Abril" },
+  { value: "05", label: "Maio" },
+  { value: "06", label: "Junho" },
+  { value: "07", label: "Julho" },
+  { value: "08", label: "Agosto" },
+  { value: "09", label: "Setembro" },
+  { value: "10", label: "Outubro" },
+  { value: "11", label: "Novembro" },
+  { value: "12", label: "Dezembro" }
+]
+
+function moeda(valor: number) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  })
+}
+
+function dataBR(data: string | null | undefined) {
+  if (!data) return "-"
+
+  const d = new Date(data)
+
+  if (Number.isNaN(d.getTime())) return "-"
+
+  return d.toLocaleDateString("pt-BR")
+}
+
+function mesDaData(data: string | null | undefined) {
+  if (!data) return ""
+
+  const d = new Date(data)
+
+  if (Number.isNaN(d.getTime())) return ""
+
+  return String(d.getMonth() + 1).padStart(2, "0")
+}
+
+function inicioDoMesAtual() {
+  const hoje = new Date()
+
+  return `${hoje.getFullYear()}-${String(
+    hoje.getMonth() + 1
+  ).padStart(2, "0")}-01`
 }
 
 export default function Financeiro() {
-  // --- ESTADOS DA APLICAÇÃO ---
   const [receitas, setReceitas] = useState<Receita[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
-  const [comprasFiado, setComprasFiado] = useState<CompraFiado[]>([])
-  const [custoProdutosVendidos, setCustoProdutosVendidos] = useState<number>(0)
-  const [vendasTotaisCount, setVendasTotaisCount] = useState<number>(0)
+  const [compras, setCompras] = useState<Compra[]>([])
+  const [vendaItens, setVendaItens] = useState<VendaItem[]>([])
 
-  // Filtros
-  const [abaAtiva, setAbaAtiva] = useState<"resumo" | "receitas" | "despesas" | "fiado">("resumo")
+  const [aba, setAba] = useState<
+    "resumo" | "receitas" | "despesas" | "fiado"
+  >("resumo")
+
+  const [filtroMes, setFiltroMes] = useState("todos")
   const [busca, setBusca] = useState("")
-  const [statusFiltro, setStatusFiltro] = useState("")
-  const [categoriaFiltro, setCategoriaFiltro] = useState("")
-  //const [periodoFiltro, setPeriodoFiltro] = useState("todos")
+  const [filtroStatus, setFiltroStatus] = useState("todos")
 
-  // Modais e Formulários
-  const [novaReceitaModal, setNovaReceitaModal] = useState(false)
-  const [novaDespesaModal, setNovaDespesaModal] = useState(false)
-  const [receberFiadoModal, setReceberFiadoModal] = useState<CompraFiado | null>(null)
-  const [valorAbater, setValorAbater] = useState("")
+  const [modalReceita, setModalReceita] = useState(false)
+  const [modalDespesa, setModalDespesa] = useState(false)
+  const [modalFiado, setModalFiado] = useState(false)
 
-  const [formReceita, setFormReceita] = useState<Partial<Receita>>({
-    tipo: "OUTRO",
-    status: "RECEBIDA",
-    data: new Date().toISOString().split("T")[0]
-  })
+  const [fiadoSelecionado, setFiadoSelecionado] =
+    useState<Fiado | null>(null)
 
-  const [formDespesa, setFormDespesa] = useState<Partial<Despesa>>({
-    status: "PAGO",
-    data: new Date().toISOString().split("T")[0]
-  })
+  const [valorPagamentoFiado, setValorPagamentoFiado] =
+    useState(0)
 
-  // --- CARREGAMENTO DE DADOS ---
+  const [descricaoReceita, setDescricaoReceita] =
+    useState("")
+
+  const [valorReceita, setValorReceita] =
+    useState(0)
+
+  const [tipoReceita, setTipoReceita] =
+    useState<Receita["tipo"]>("OUTRA_RECEITA")
+
+  const [observacaoReceita, setObservacaoReceita] =
+    useState("")
+
+  const [descricaoDespesa, setDescricaoDespesa] =
+    useState("")
+
+  const [valorDespesa, setValorDespesa] =
+    useState(0)
+
+  const [categoriaDespesa, setCategoriaDespesa] =
+    useState("Outros")
+
+  const [dataCompetenciaDespesa, setDataCompetenciaDespesa] =
+    useState(inicioDoMesAtual())
+
+  const [dataPagamentoDespesa, setDataPagamentoDespesa] =
+    useState(inicioDoMesAtual())
+
+  const [despesaRecorrente, setDespesaRecorrente] =
+    useState(false)
+
+  const [statusDespesa, setStatusDespesa] =
+    useState<Despesa["status"]>("PAGA")
+
+  const [observacaoDespesa, setObservacaoDespesa] =
+    useState("")
+
+  const [carregando, setCarregando] =
+    useState(false)
 
   async function fetchFinanceiro() {
-    // 1. Buscar Receitas
-    const { data: dataReceitas, error: errReceitas } = await supabase
-      .from("receitas")
-      .select("*")
-      .order("data", { ascending: false })
+    setCarregando(true)
 
-    if (!errReceitas && dataReceitas) {
+    const [
+      receitasResult,
+      despesasResult,
+      comprasResult,
+      itensResult
+    ] = await Promise.all([
+      supabase
+        .from("receitas")
+        .select("*")
+        .order("dataCompetencia", {
+          ascending: false
+        }),
+
+      supabase
+        .from("despesas")
+        .select("*")
+        .order("dataCompetencia", {
+          ascending: false
+        }),
+
+      supabase
+        .from("compras")
+        .select(
+          "id,clienteid,cliente,cpf,valor,pagamento,criadoem,status"
+        )
+        .order("criadoem", {
+          ascending: false
+        }),
+
+      supabase
+        .from("vendaItens")
+        .select(
+          "id,compraId,quantidade,custoUnitario"
+        )
+    ])
+
+    if (receitasResult.error) {
+      alert(
+        "Erro ao carregar receitas: " +
+          receitasResult.error.message
+      )
+    }
+
+    if (despesasResult.error) {
+      alert(
+        "Erro ao carregar despesas: " +
+          despesasResult.error.message
+      )
+    }
+
+    if (comprasResult.error) {
+      alert(
+        "Erro ao carregar vendas: " +
+          comprasResult.error.message
+      )
+    }
+
+    if (itensResult.error) {
+      alert(
+        "Erro ao carregar itens das vendas: " +
+          itensResult.error.message
+      )
+    }
+
+    if (receitasResult.data) {
       setReceitas(
-        dataReceitas.map((r: any) => ({
+        receitasResult.data.map((r: any) => ({
           id: String(r.id),
-          descricao: r.descricao || "Receita sem nome",
+          tipo: r.tipo,
+          descricao: r.descricao || "",
           valor: Number(r.valor || 0),
-          categoria: r.categoria || "Geral",
-          tipo: r.tipo || "OUTRO",
-          status: r.status || "RECEBIDA",
-          data: r.data || r.criadoem || "",
-          vendaId: r.vendaid ? String(r.vendaid) : undefined
+          dataCompetencia:
+            r.dataCompetencia || "",
+          dataRecebimento:
+            r.dataRecebimento || null,
+          status: r.status,
+          observacao:
+            r.observacao || "",
+          criadoem:
+            r.criadoem || "",
+          compraId:
+            r.compraId
+              ? String(r.compraId)
+              : null
         }))
       )
     }
 
-    // 2. Buscar Despesas
-    const { data: dataDespesas, error: errDespesas } = await supabase
-      .from("despesas")
-      .select("*")
-      .order("data", { ascending: false })
-
-    if (!errDespesas && dataDespesas) {
+    if (despesasResult.data) {
       setDespesas(
-        dataDespesas.map((d: any) => ({
+        despesasResult.data.map((d: any) => ({
           id: String(d.id),
-          descricao: d.descricao || "Despesa sem nome",
-          valor: Number(d.valor || 0),
-          categoria: d.categoria || "Operacional",
-          status: d.status || "PAGO",
-          data: d.data || d.criadoem || ""
+          descricao:
+            d.descricao || "",
+          valor:
+            Number(d.valor || 0),
+          dataCompetencia:
+            d.dataCompetencia || "",
+          dataPagamento:
+            d.dataPagamento || null,
+          recorrente:
+            Boolean(d.recorrente),
+          status: d.status,
+          observacao:
+            d.observacao || "",
+          categoria:
+            d.categoria || "Outros",
+          criadoem:
+            d.criadoem || ""
         }))
       )
     }
 
-    // 3. Buscar Compras Fiado / Contas a Receber
-    const { data: dataFiado, error: errFiado } = await supabase
-      .from("compras")
-      .select("*")
-      .gt("valor_pendente", 0)
-      .order("criadoem", { ascending: false })
-
-    if (!errFiado && dataFiado) {
-      setComprasFiado(
-        dataFiado.map((f: any) => ({
-          id: String(f.id),
-          clienteId: String(f.clienteid),
-          clienteNome: f.cliente || "Cliente",
-          valorTotal: Number(f.valor || 0),
-          valorRecebido: Number(f.valor_recebido || 0),
-          valorPendente: Number(f.valor_pendente || f.valor || 0),
-          data: f.criadoem || ""
+    if (comprasResult.data) {
+      setCompras(
+        comprasResult.data.map((c: any) => ({
+          id: String(c.id),
+          clienteid:
+            c.clienteid
+              ? String(c.clienteid)
+              : null,
+          cliente:
+            c.cliente || "",
+          cpf:
+            c.cpf || "",
+          valor:
+            Number(c.valor || 0),
+          pagamento:
+            c.pagamento || "",
+          criadoem:
+            c.criadoem || "",
+          status:
+            c.status || "CONCLUIDA"
         }))
       )
     }
 
-    // 4. Buscar Custo dos Produtos Vendidos (CMV) das compras/vendas
-    const { data: dataVendas } = await supabase.from("compras").select("custo_total, valor")
-
-    if (dataVendas) {
-      setVendasTotaisCount(dataVendas.length)
-      const cmvTotal = dataVendas.reduce((acc, v: any) => acc + Number(v.custo_total || 0), 0)
-      setCustoProdutosVendidos(cmvTotal)
+    if (itensResult.data) {
+      setVendaItens(
+        itensResult.data.map((item: any) => ({
+          id: String(item.id),
+          compraId:
+            String(item.compraId),
+          quantidade:
+            Number(item.quantidade || 0),
+          custoUnitario:
+            Number(item.custoUnitario || 0)
+        }))
+      )
     }
+
+    setCarregando(false)
   }
 
   useEffect(() => {
     fetchFinanceiro()
   }, [])
 
-  // --- AÇÕES DO BANCO DE DADOS ---
+  /*
+   * =========================
+   * VENDAS
+   * =========================
+   */
+
+  const vendasValidas = useMemo(() => {
+    return compras.filter(
+      compra =>
+        compra.status !== "CANCELADA" &&
+        compra.status !== "PENDENTE" &&
+        compra.pagamento !== "Receita"
+    )
+  }, [compras])
+
+  const faturamento = useMemo(() => {
+    return vendasValidas
+      .filter(compra => {
+        if (filtroMes === "todos") {
+          return true
+        }
+
+        return (
+          mesDaData(compra.criadoem) ===
+          filtroMes
+        )
+      })
+      .reduce(
+        (total, compra) =>
+          total + compra.valor,
+        0
+      )
+  }, [
+    vendasValidas,
+    filtroMes
+  ])
+
+  /*
+   * =========================
+   * RECEITAS
+   * =========================
+   */
+
+  const receitasRecebidas = useMemo(() => {
+    return receitas
+      .filter(
+        receita =>
+          receita.status ===
+          "RECEBIDA"
+      )
+      .filter(receita => {
+        if (filtroMes === "todos") {
+          return true
+        }
+
+        const data =
+          receita.dataRecebimento ||
+          receita.dataCompetencia
+
+        return (
+          mesDaData(data) ===
+          filtroMes
+        )
+      })
+  }, [
+    receitas,
+    filtroMes
+  ])
+
+  const totalRecebido = useMemo(() => {
+    return receitasRecebidas.reduce(
+      (total, receita) =>
+        total + receita.valor,
+      0
+    )
+  }, [receitasRecebidas])
+
+  const recebidoFiado = useMemo(() => {
+    return receitasRecebidas
+      .filter(
+        receita =>
+          receita.tipo ===
+          "PAGAMENTO_FIADO"
+      )
+      .reduce(
+        (total, receita) =>
+          total + receita.valor,
+        0
+      )
+  }, [receitasRecebidas])
+
+  /*
+   * =========================
+   * DESPESAS
+   * =========================
+   */
+
+  const despesasPagas = useMemo(() => {
+    return despesas
+      .filter(
+        despesa =>
+          despesa.status ===
+          "PAGA"
+      )
+      .filter(despesa => {
+        if (filtroMes === "todos") {
+          return true
+        }
+
+        const data =
+          despesa.dataPagamento ||
+          despesa.dataCompetencia
+
+        return (
+          mesDaData(data) ===
+          filtroMes
+        )
+      })
+  }, [
+    despesas,
+    filtroMes
+  ])
+
+  const totalDespesas = useMemo(() => {
+    return despesasPagas.reduce(
+      (total, despesa) =>
+        total + despesa.valor,
+      0
+    )
+  }, [despesasPagas])
+
+  /*
+   * =========================
+   * CMV
+   * =========================
+   */
+
+  const custoProdutosVendidos =
+    useMemo(() => {
+      const vendasIds = new Set(
+        vendasValidas
+          .filter(compra => {
+            if (
+              filtroMes ===
+              "todos"
+            ) {
+              return true
+            }
+
+            return (
+              mesDaData(
+                compra.criadoem
+              ) === filtroMes
+            )
+          })
+          .map(compra => compra.id)
+      )
+
+      return vendaItens
+        .filter(item =>
+          vendasIds.has(
+            item.compraId
+          )
+        )
+        .reduce(
+          (total, item) =>
+            total +
+            item.quantidade *
+              item.custoUnitario,
+          0
+        )
+    }, [
+      vendaItens,
+      vendasValidas,
+      filtroMes
+    ])
+
+  /*
+   * =========================
+   * RESULTADO
+   * =========================
+   */
+
+  const lucroBruto =
+    faturamento -
+    custoProdutosVendidos
+
+  const resultadoLiquido =
+    lucroBruto -
+    totalDespesas
+
+  const resultadoCaixa =
+    totalRecebido -
+    totalDespesas
+
+  /*
+   * =========================
+   * FIADO
+   * =========================
+   */
+
+  const fiado = useMemo(() => {
+    const vendasFiado =
+      compras.filter(
+        compra =>
+          compra.status !==
+            "CANCELADA" &&
+          compra.pagamento.includes(
+            "Em aberto"
+          )
+      )
+
+    return vendasFiado
+      .map(compra => {
+        const recebido =
+          receitas
+            .filter(
+              receita =>
+                receita.compraId ===
+                  compra.id &&
+                receita.tipo ===
+                  "PAGAMENTO_FIADO" &&
+                receita.status ===
+                  "RECEBIDA"
+            )
+            .reduce(
+              (total, receita) =>
+                total +
+                receita.valor,
+              0
+            )
+
+        return {
+          compra,
+          recebido,
+          pendente: Math.max(
+            compra.valor -
+              recebido,
+            0
+          )
+        }
+      })
+      .filter(
+        item =>
+          item.pendente > 0
+      )
+  }, [
+    compras,
+    receitas
+  ])
+
+  const totalAReceber =
+    useMemo(() => {
+      return fiado
+        .filter(item => {
+          if (
+            filtroMes ===
+            "todos"
+          ) {
+            return true
+          }
+
+          return (
+            mesDaData(
+              item.compra.criadoem
+            ) === filtroMes
+          )
+        })
+        .reduce(
+          (total, item) =>
+            total + item.pendente,
+          0
+        )
+    }, [
+      fiado,
+      filtroMes
+    ])
+
+  /*
+   * =========================
+   * FILTROS DE RECEITAS
+   * =========================
+   */
+
+  const receitasFiltradas =
+    useMemo(() => {
+      const termo =
+        busca
+          .toLowerCase()
+          .trim()
+
+      return receitas.filter(
+        receita => {
+          const data =
+            receita.dataCompetencia
+
+          const mesMatch =
+            filtroMes ===
+              "todos" ||
+            mesDaData(data) ===
+              filtroMes
+
+          const statusMatch =
+            filtroStatus ===
+              "todos" ||
+            receita.status ===
+              filtroStatus
+
+          const texto =
+            `${receita.descricao} ${receita.tipo}`
+              .toLowerCase()
+
+          const buscaMatch =
+            texto.includes(termo)
+
+          return (
+            mesMatch &&
+            statusMatch &&
+            buscaMatch
+          )
+        }
+      )
+    }, [
+      receitas,
+      busca,
+      filtroMes,
+      filtroStatus
+    ])
+
+  /*
+   * =========================
+   * FILTROS DE DESPESAS
+   * =========================
+   */
+
+  const despesasFiltradas =
+    useMemo(() => {
+      const termo =
+        busca
+          .toLowerCase()
+          .trim()
+
+      return despesas.filter(
+        despesa => {
+          const mesMatch =
+            filtroMes ===
+              "todos" ||
+            mesDaData(
+              despesa.dataCompetencia
+            ) === filtroMes
+
+          const statusMatch =
+            filtroStatus ===
+              "todos" ||
+            despesa.status ===
+              filtroStatus
+
+          const texto =
+            `${despesa.descricao} ${despesa.categoria}`
+              .toLowerCase()
+
+          return (
+            mesMatch &&
+            statusMatch &&
+            texto.includes(termo)
+          )
+        }
+      )
+    }, [
+      despesas,
+      busca,
+      filtroMes,
+      filtroStatus
+    ])
+
+  /*
+   * =========================
+   * CRIAR RECEITA
+   * =========================
+   */
 
   async function criarReceita() {
-    if (!formReceita.descricao?.trim() || !formReceita.valor) {
-      alert("Preencha a descrição e o valor da receita")
+    if (
+      descricaoReceita.trim() ===
+      ""
+    ) {
+      alert(
+        "Digite uma descrição para a receita."
+      )
       return
     }
 
-    const { error } = await supabase.from("receitas").insert([
-      {
-        descricao: formReceita.descricao,
-        valor: Number(formReceita.valor),
-        categoria: formReceita.categoria || "Geral",
-        tipo: formReceita.tipo || "OUTRO",
-        status: formReceita.status || "RECEBIDA",
-        data: formReceita.data || new Date().toISOString()
-      }
-    ])
+    if (valorReceita <= 0) {
+      alert(
+        "Digite um valor válido para a receita."
+      )
+      return
+    }
+
+    const hoje =
+      new Date()
+        .toISOString()
+        .split("T")[0]
+
+    const { error } =
+      await supabase
+        .from("receitas")
+        .insert({
+          tipo: tipoReceita,
+          descricao:
+            descricaoReceita.trim(),
+          valor: valorReceita,
+          dataCompetencia:
+            hoje,
+          dataRecebimento:
+            hoje,
+          status: "RECEBIDA",
+          observacao:
+            observacaoReceita.trim() ||
+            null
+        })
 
     if (error) {
-      alert("Erro ao criar receita: " + error.message)
+      alert(
+        "Erro ao cadastrar receita: " +
+          error.message
+      )
       return
     }
 
-    alert("Receita lançada com sucesso!")
-    setNovaReceitaModal(false)
-    setFormReceita({ tipo: "OUTRO", status: "RECEBIDA", data: new Date().toISOString().split("T")[0] })
-    fetchFinanceiro()
+    alert(
+      "Receita cadastrada com sucesso!"
+    )
+
+    setModalReceita(false)
+    setDescricaoReceita("")
+    setValorReceita(0)
+    setTipoReceita(
+      "OUTRA_RECEITA"
+    )
+    setObservacaoReceita("")
+
+    await fetchFinanceiro()
   }
+
+  /*
+   * =========================
+   * CRIAR DESPESA
+   * =========================
+   */
 
   async function criarDespesa() {
-    if (!formDespesa.descricao?.trim() || !formDespesa.valor) {
-      alert("Preencha a descrição e o valor da despesa")
+    if (
+      descricaoDespesa.trim() ===
+      ""
+    ) {
+      alert(
+        "Digite uma descrição para a despesa."
+      )
       return
     }
 
-    const { error } = await supabase.from("despesas").insert([
-      {
-        descricao: formDespesa.descricao,
-        valor: Number(formDespesa.valor),
-        categoria: formDespesa.categoria || "Operacional",
-        status: formDespesa.status || "PAGO",
-        data: formDespesa.data || new Date().toISOString()
-      }
-    ])
+    if (valorDespesa <= 0) {
+      alert(
+        "Digite um valor válido para a despesa."
+      )
+      return
+    }
+
+    const { error } =
+      await supabase
+        .from("despesas")
+        .insert({
+          descricao:
+            descricaoDespesa.trim(),
+          valor: valorDespesa,
+          dataCompetencia:
+            dataCompetenciaDespesa,
+          dataPagamento:
+            statusDespesa ===
+            "PAGA"
+              ? dataPagamentoDespesa
+              : null,
+          recorrente:
+            despesaRecorrente,
+          status:
+            statusDespesa,
+          observacao:
+            observacaoDespesa.trim() ||
+            null,
+          categoria:
+            categoriaDespesa
+        })
 
     if (error) {
-      alert("Erro ao criar despesa: " + error.message)
+      alert(
+        "Erro ao cadastrar despesa: " +
+          error.message
+      )
       return
     }
 
-    alert("Despesa lançada com sucesso!")
-    setNovaDespesaModal(false)
-    setFormDespesa({ status: "PAGO", data: new Date().toISOString().split("T")[0] })
-    fetchFinanceiro()
-  }
-
-  async function abaterFiado() {
-    if (!receberFiadoModal || !valorAbater) return
-
-    const valorNum = Number(valorAbater)
-    if (isNaN(valorNum) || valorNum <= 0) {
-      alert("Informe um valor válido!")
-      return
-    }
-
-    const novoRecebido = receberFiadoModal.valorRecebido + valorNum
-    const novoPendente = Math.max(0, receberFiadoModal.valorPendente - valorNum)
-
-    const { error } = await supabase
-      .from("compras")
-      .update({
-        valor_recebido: novoRecebido,
-        valor_pendente: novoPendente
-      })
-      .eq("id", receberFiadoModal.id)
-
-    if (error) {
-      alert("Erro ao abater valor: " + error.message)
-      return
-    }
-
-    // Registrar como receita de pagamento de fiado
-    await supabase.from("receitas").insert([
-      {
-        descricao: `Recebimento Fiado - ${receberFiadoModal.clienteNome}`,
-        valor: valorNum,
-        categoria: "Fiado",
-        tipo: "OUTRO",
-        status: "RECEBIDA",
-        data: new Date().toISOString()
-      }
-    ])
-
-    alert("Pagamento abatido com sucesso!")
-    setReceberFiadoModal(null)
-    setValorAbater("")
-    fetchFinanceiro()
-  }
-
-  async function excluirRegistro(tabela: "receitas" | "despesas", id: string) {
-    if (!window.confirm("Deseja realmente excluir este registro financeiro?")) return
-
-    const { error } = await supabase.from(tabela).delete().eq("id", id)
-
-    if (error) {
-      alert("Erro ao excluir: " + error.message)
-      return
-    }
-
-    fetchFinanceiro()
-  }
-
-  // --- CÁLCULOS E MÉTRICAS CONSOLIDADAS ---
-
-  const resumoMetrics = useMemo(() => {
-    const totalReceitas = receitas
-      .filter(r => r.status === "RECEBIDA")
-      .reduce((acc, r) => acc + Number(r.valor), 0)
-
-    const totalDespesas = despesas
-      .filter(d => d.status === "PAGO")
-      .reduce((acc, r) => acc + Number(r.valor), 0)
-
-    const totalAReceber = comprasFiado.reduce((acc, f) => acc + f.valorPendente, 0)
-    const totalRecebidoFiado = comprasFiado.reduce((acc, f) => acc + f.valorRecebido, 0)
-
-    const faturamentoVendas = receitas
-      .filter(r => r.tipo === "VENDA" && r.status === "RECEBIDA")
-      .reduce((acc, r) => acc + Number(r.valor), 0)
-
-    // Lucro Bruto = Faturamento de Vendas - Custo das Mercadorias (CMV)
-    const lucroBruto = faturamentoVendas - custoProdutosVendidos
-
-    // Lucro Líquido Real = Lucro Bruto - Despesas Operacionais
-    const lucroLiquido = lucroBruto - totalDespesas
-
-    // Resultado de Caixa
-    const resultadoLiquido = totalReceitas - totalDespesas
-    const clientesComFiado = new Set(comprasFiado.map(f => f.clienteId)).size
-
-    return {
-      totalReceitas,
-      totalDespesas,
-      resultadoLiquido,
-      lucroBruto,
-      lucroLiquido,
-      totalAReceber,
-      totalRecebidoFiado,
-      faturamentoVendas,
-      qtdVendas: vendasTotaisCount,
-      qtdReceitas: receitas.length,
-      qtdDespesas: despesas.length,
-      clientesComFiado
-    }
-  }, [receitas, despesas, comprasFiado, custoProdutosVendidos, vendasTotaisCount])
-
-  // Formatação de moeda e datas
-  function moeda(valor: number) {
-    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-  }
-
-  function formatarData(dataStr: string) {
-    if (!dataStr) return "-"
-    const d = new Date(dataStr)
-    return isNaN(d.getTime()) ? dataStr : d.toLocaleDateString("pt-BR")
-  }
-
-  // Filtros aplicados
-  const categoriasUnicas = Array.from(
-    new Set(
-      abaAtiva === "receitas"
-        ? receitas.map(r => r.categoria)
-        : despesas.map(d => d.categoria)
+    alert(
+      "Despesa cadastrada com sucesso!"
     )
-  ).sort()
 
-  const receitasFiltradas = receitas
-    .filter(r => r.descricao.toLowerCase().includes(busca.toLowerCase()))
-    .filter(r => !statusFiltro || r.status === statusFiltro)
-    .filter(r => !categoriaFiltro || r.categoria === categoriaFiltro)
+    setModalDespesa(false)
+    setDescricaoDespesa("")
+    setValorDespesa(0)
+    setCategoriaDespesa("Outros")
+    setDataCompetenciaDespesa(
+      inicioDoMesAtual()
+    )
+    setDataPagamentoDespesa(
+      inicioDoMesAtual()
+    )
+    setDespesaRecorrente(false)
+    setStatusDespesa("PAGA")
+    setObservacaoDespesa("")
 
-  const despesasFiltradas = despesas
-    .filter(d => d.descricao.toLowerCase().includes(busca.toLowerCase()))
-    .filter(d => !statusFiltro || d.status === statusFiltro)
-    .filter(d => !categoriaFiltro || d.categoria === categoriaFiltro)
-
-  const fiadoFiltrado = comprasFiado.filter(f =>
-    f.clienteNome.toLowerCase().includes(busca.toLowerCase())
-  )
-
-  function fecharModais() {
-    setNovaReceitaModal(false)
-    setNovaDespesaModal(false)
-    setReceberFiadoModal(null)
-    setValorAbater("")
+    await fetchFinanceiro()
   }
+
+  /*
+   * =========================
+   * RECEBER FIADO
+   * =========================
+   */
+
+  async function registrarPagamentoFiado() {
+    if (!fiadoSelecionado) {
+      return
+    }
+
+    if (
+      valorPagamentoFiado <= 0
+    ) {
+      alert(
+        "Digite um valor válido."
+      )
+      return
+    }
+
+    if (
+      valorPagamentoFiado >
+      fiadoSelecionado.pendente
+    ) {
+      alert(
+        "O pagamento não pode ser maior que o valor pendente."
+      )
+      return
+    }
+
+    const hoje =
+      new Date()
+        .toISOString()
+        .split("T")[0]
+
+    const { error } =
+      await supabase
+        .from("receitas")
+        .insert({
+          tipo:
+            "PAGAMENTO_FIADO",
+          descricao:
+            `Pagamento de fiado - ${
+              fiadoSelecionado
+                .compra.cliente ||
+              "Cliente"
+            }`,
+          valor:
+            valorPagamentoFiado,
+          dataCompetencia:
+            hoje,
+          dataRecebimento:
+            hoje,
+          status:
+            "RECEBIDA",
+          observacao:
+            `Pagamento referente à venda ${fiadoSelecionado.compra.id}`,
+          compraId:
+            fiadoSelecionado.compra.id
+        })
+
+    if (error) {
+      alert(
+        "Erro ao registrar pagamento: " +
+          error.message
+      )
+      return
+    }
+
+    alert(
+      "Pagamento registrado com sucesso!"
+    )
+
+    setModalFiado(false)
+    setFiadoSelecionado(null)
+    setValorPagamentoFiado(0)
+
+    await fetchFinanceiro()
+  }
+
+  /*
+   * =========================
+   * EXCLUIR / CANCELAR RECEITA
+   * =========================
+   */
+
+  async function cancelarReceita(
+    receita: Receita
+  ) {
+    const confirmar =
+      window.confirm(
+        `Deseja cancelar esta receita?\n\n${receita.descricao}\n${moeda(
+          receita.valor
+        )}`
+      )
+
+    if (!confirmar) return
+
+    const { error } =
+      await supabase
+        .from("receitas")
+        .update({
+          status:
+            "CANCELADA"
+        })
+        .eq(
+          "id",
+          receita.id
+        )
+
+    if (error) {
+      alert(
+        "Erro ao cancelar receita: " +
+          error.message
+      )
+      return
+    }
+
+    await fetchFinanceiro()
+  }
+
+  /*
+   * =========================
+   * CANCELAR DESPESA
+   * =========================
+   */
+
+  async function cancelarDespesa(
+    despesa: Despesa
+  ) {
+    const confirmar =
+      window.confirm(
+        `Deseja cancelar esta despesa?\n\n${despesa.descricao}\n${moeda(
+          despesa.valor
+        )}`
+      )
+
+    if (!confirmar) return
+
+    const { error } =
+      await supabase
+        .from("despesas")
+        .update({
+          status:
+            "CANCELADA"
+        })
+        .eq(
+          "id",
+          despesa.id
+        )
+
+    if (error) {
+      alert(
+        "Erro ao cancelar despesa: " +
+          error.message
+      )
+      return
+    }
+
+    await fetchFinanceiro()
+  }
+
+  function abrirPagamentoFiado(
+    item: Fiado
+  ) {
+    setFiadoSelecionado(item)
+    setValorPagamentoFiado(0)
+    setModalFiado(true)
+  }
+
+  /*
+   * =========================
+   * RENDER
+   * =========================
+   */
 
   return (
     <div style={container}>
-      {/* MESMA ESTILIZAÇÃO E RESPONSIVIDADE DO COMPONENTE CLIENTES */}
-      <style>{`
-        .financeiro-filtros {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 25px;
-          flex-wrap: wrap;
-        }
+      <style>
+        {`
+          @media (max-width: 900px) {
+            .financeiro-filtros {
+              grid-template-columns: 1fr 1fr !important;
+            }
 
-        .financeiro-busca {
-          flex: 2;
-          min-width: 220px;
-        }
+            .financeiro-cards {
+              grid-template-columns: 1fr 1fr !important;
+            }
 
-        .financeiro-select {
-          flex: 1;
-          min-width: 140px;
-        }
-
-        .financeiro-abas {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 25px;
-          border-bottom: 2px solid #eae6db;
-          padding-bottom: 10px;
-          overflow-x: auto;
-        }
-
-        .financeiro-aba-btn {
-          background: transparent;
-          border: none;
-          padding: 8px 16px;
-          font-size: 15px;
-          font-weight: 600;
-          color: #777;
-          cursor: pointer;
-          border-radius: 8px;
-          transition: all 0.2s ease;
-        }
-
-        .financeiro-aba-btn.ativa {
-          background: #111;
-          color: #fff;
-        }
-
-        .financeiro-grid-cards {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 16px;
-          margin-bottom: 25px;
-        }
-
-        .financeiro-grid-secundario {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 12px;
-          margin-top: 20px;
-        }
-
-        .financeiro-tabela-wrapper {
-          background: #fff;
-          border-radius: 16px;
-          border: 1px solid #eae6db;
-          overflow-x: auto;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-        }
-
-        .financeiro-tabela {
-          width: 100%;
-          border-collapse: collapse;
-          text-align: left;
-          font-size: 14px;
-        }
-
-        .financeiro-tabela th {
-          background: #fcfbf7;
-          padding: 14px;
-          font-weight: 600;
-          color: #555;
-          border-bottom: 1px solid #eae6db;
-        }
-
-        .financeiro-tabela td {
-          padding: 14px;
-          border-bottom: 1px solid #f3f0e6;
-          color: #333;
-        }
-
-        .financeiro-tabela tr:last-child td {
-          border-bottom: none;
-        }
-
-        .badge {
-          display: inline-block;
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .badge-sucesso { background: #dcfce7; color: #15803d; }
-        .badge-alerta { background: #fef3c7; color: #b45309; }
-        .badge-perigo { background: #fee2e2; color: #b91c1c; }
-
-        @media (max-width: 600px) {
-          .financeiro-header {
-            margin-bottom: 18px !important;
+            .financeiro-row {
+              grid-template-columns: 1fr 1fr !important;
+            }
           }
 
-          .financeiro-header-title {
-            font-size: 28px !important;
+          @media (max-width: 600px) {
+            .financeiro-container {
+              padding: 18px !important;
+            }
+
+            .financeiro-filtros {
+              grid-template-columns: 1fr !important;
+            }
+
+            .financeiro-cards {
+              grid-template-columns: 1fr !important;
+            }
+
+            .financeiro-row {
+              grid-template-columns: 1fr !important;
+            }
+
+            .financeiro-header-buttons {
+              width: 100%;
+            }
+
+            .financeiro-header-buttons button {
+              flex: 1;
+            }
+
+            .financeiro-tabs {
+              overflow-x: auto;
+            }
+
+            .financeiro-tabs button {
+              white-space: nowrap;
+            }
           }
+        `}
+      </style>
 
-          .financeiro-filtros {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px !important;
-            margin-bottom: 22px !important;
-          }
+      {/* CABEÇALHO */}
 
-          .financeiro-busca {
-            grid-column: 1 / -1;
-          }
+      <div style={header}>
+        <div>
+          <h1 style={title}>
+            Financeiro
+          </h1>
 
-          .financeiro-grid-cards {
-            grid-template-columns: 1fr 1fr !important;
-            gap: 10px !important;
-          }
+          <div style={subtitle}>
+            Controle de receitas, despesas e valores a receber.
+          </div>
+        </div>
 
-          .financeiro-modal {
-            width: 100% !important;
-            max-width: 410px !important;
-            padding: 18px !important;
-            border-radius: 20px !important;
-          }
-        }
-      `}</style>
-
-      {/* HEADER */}
-      <div className="financeiro-header" style={header}>
-        <h1 className="financeiro-header-title" style={title}>
-          Financeiro
-        </h1>
-
-        <div style={{ display: "flex", gap: 8 }}>
+        <div
+          className="financeiro-header-buttons"
+          style={headerButtons}
+        >
           <button
-            style={primaryBtn}
-            onClick={() => {
-              setFormReceita({
-                tipo: "OUTRO",
-                status: "RECEBIDA",
-                data: new Date().toISOString().split("T")[0]
-              })
-              setNovaReceitaModal(true)
-            }}
+            style={btnSecondary}
+            onClick={() =>
+              setModalDespesa(true)
+            }
           >
-            + Receita
+            Nova despesa
           </button>
 
           <button
-            style={{ ...primaryBtn, background: "#b91c1c" }}
-            onClick={() => {
-              setFormDespesa({
-                status: "PAGO",
-                data: new Date().toISOString().split("T")[0]
-              })
-              setNovaDespesaModal(true)
-            }}
+            style={btnSmall}
+            onClick={() =>
+              setModalReceita(true)
+            }
           >
-            + Despesa
+            Nova receita
           </button>
         </div>
       </div>
 
-      {/* ABAS DE NAVEGAÇÃO */}
-      <div className="financeiro-abas">
-        <button
-          className={`financeiro-aba-btn ${abaAtiva === "resumo" ? "ativa" : ""}`}
-          onClick={() => setAbaAtiva("resumo")}
+      {/* CARDS */}
+
+      <div
+        className="financeiro-cards"
+        style={dashGrid}
+      >
+        <Dash
+          label="Faturamento"
+          value={moeda(
+            faturamento
+          )}
+        />
+
+        <Dash
+          label="Recebido"
+          value={moeda(
+            totalRecebido
+          )}
+        />
+
+        <Dash
+          label="A receber"
+          value={moeda(
+            totalAReceber
+          )}
+        />
+
+        <Dash
+          label="Despesas"
+          value={moeda(
+            totalDespesas
+          )}
+        />
+
+        <Dash
+          label="Resultado"
+          value={moeda(
+            resultadoLiquido
+          )}
+        />
+
+        <Dash
+          label="Vendas"
+          value={
+            vendasValidas.filter(
+              compra =>
+                filtroMes ===
+                  "todos" ||
+                mesDaData(
+                  compra.criadoem
+                ) === filtroMes
+            ).length
+          }
+        />
+      </div>
+
+      {/* FILTROS */}
+
+      <div
+        className="financeiro-filtros"
+        style={filtrosBar}
+      >
+        <input
+          placeholder="Buscar por descrição..."
+          value={busca}
+          onChange={e =>
+            setBusca(
+              e.target.value
+            )
+          }
+          style={inputFiltro}
+        />
+
+        <select
+          value={filtroMes}
+          onChange={e =>
+            setFiltroMes(
+              e.target.value
+            )
+          }
+          style={selectFiltro}
         >
-          Resumo & DRE
-        </button>
-        <button
-          className={`financeiro-aba-btn ${abaAtiva === "receitas" ? "ativa" : ""}`}
-          onClick={() => { setAbaAtiva("receitas"); setStatusFiltro(""); setCategoriaFiltro(""); }}
+          {meses.map(mes => (
+            <option
+              key={mes.value}
+              value={mes.value}
+            >
+              {mes.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filtroStatus}
+          onChange={e =>
+            setFiltroStatus(
+              e.target.value
+            )
+          }
+          style={selectFiltro}
         >
-          Receitas ({receitas.length})
-        </button>
+          <option value="todos">
+            Todos os status
+          </option>
+
+          <option value="RECEBIDA">
+            Recebida
+          </option>
+
+          <option value="PENDENTE">
+            Pendente
+          </option>
+
+          <option value="PAGA">
+            Paga
+          </option>
+
+          <option value="CANCELADA">
+            Cancelada
+          </option>
+        </select>
+
         <button
-          className={`financeiro-aba-btn ${abaAtiva === "despesas" ? "ativa" : ""}`}
-          onClick={() => { setAbaAtiva("despesas"); setStatusFiltro(""); setCategoriaFiltro(""); }}
+          style={refreshBtn}
+          onClick={fetchFinanceiro}
+          disabled={carregando}
         >
-          Despesas ({despesas.length})
-        </button>
-        <button
-          className={`financeiro-aba-btn ${abaAtiva === "fiado" ? "ativa" : ""}`}
-          onClick={() => setAbaAtiva("fiado")}
-        >
-          Contas a Receber ({comprasFiado.length})
+          {carregando
+            ? "Atualizando..."
+            : "Atualizar"}
         </button>
       </div>
 
-      {/* ABA 1: RESUMO & DRE */}
-      {abaAtiva === "resumo" && (
-        <div>
-          <div className="financeiro-grid-cards">
-            <div style={card}>
-              <span style={mutedSmall}>Faturamento (Vendas)</span>
-              <strong style={cardValue}>{moeda(resumoMetrics.faturamentoVendas)}</strong>
-              <span style={mutedExtraSmall}>Total de vendas confirmadas</span>
-            </div>
+      {/* ABAS */}
 
-            <div style={card}>
-              <span style={mutedSmall}>Lucro Bruto</span>
-              <strong style={{ ...cardValue, color: resumoMetrics.lucroBruto >= 0 ? "#15803d" : "#b91c1c" }}>
-                {moeda(resumoMetrics.lucroBruto)}
-              </strong>
-              <span style={mutedExtraSmall}>Faturamento (-) CMV ({moeda(custoProdutosVendidos)})</span>
-            </div>
+      <div
+        className="financeiro-tabs"
+        style={tabs}
+      >
+        <button
+          style={
+            aba === "resumo"
+              ? tabAtiva
+              : tab
+          }
+          onClick={() => {
+            setAba("resumo")
+            setBusca("")
+            setFiltroStatus(
+              "todos"
+            )
+          }}
+        >
+          Resumo
+        </button>
 
-            <div style={{ ...card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-              <span style={{ ...mutedSmall, color: "#166534" }}>Lucro Líquido Real</span>
-              <strong style={{ ...cardValue, color: resumoMetrics.lucroLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
-                {moeda(resumoMetrics.lucroLiquido)}
-              </strong>
-              <span style={mutedExtraSmall}>Lucro Bruto (-) Despesas Operacionais</span>
-            </div>
+        <button
+          style={
+            aba === "receitas"
+              ? tabAtiva
+              : tab
+          }
+          onClick={() =>
+            setAba("receitas")
+          }
+        >
+          Receitas
+        </button>
 
-            <div style={{ ...card, borderColor: "#fde68a" }}>
-              <span style={mutedSmall}>A Receber (Fiado)</span>
-              <strong style={{ ...cardValue, color: "#b45309" }}>
-                {moeda(resumoMetrics.totalAReceber)}
-              </strong>
-              <span style={mutedExtraSmall}>{resumoMetrics.clientesComFiado} cliente(s) pendente(s)</span>
+        <button
+          style={
+            aba === "despesas"
+              ? tabAtiva
+              : tab
+          }
+          onClick={() =>
+            setAba("despesas")
+          }
+        >
+          Despesas
+        </button>
+
+        <button
+          style={
+            aba === "fiado"
+              ? tabAtiva
+              : tab
+          }
+          onClick={() =>
+            setAba("fiado")
+          }
+        >
+          A receber
+          {fiado.length > 0 && (
+            <span style={tabBadge}>
+              {fiado.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* =========================
+          RESUMO
+      ========================= */}
+
+      {aba === "resumo" && (
+        <>
+          <div style={section}>
+            <h3 style={sectionTitle}>
+              Resumo financeiro
+            </h3>
+
+            <div style={resumoGrid}>
+              <ResumoLinha
+                label="Faturamento"
+                valor={moeda(
+                  faturamento
+                )}
+              />
+
+              <ResumoLinha
+                label="Custo dos produtos vendidos"
+                valor={moeda(
+                  custoProdutosVendidos
+                )}
+              />
+
+              <ResumoLinha
+                label="Lucro bruto"
+                valor={moeda(
+                  lucroBruto
+                )}
+              />
+
+              <ResumoLinha
+                label="Despesas pagas"
+                valor={moeda(
+                  totalDespesas
+                )}
+              />
+
+              <ResumoLinha
+                label="Resultado líquido"
+                valor={moeda(
+                  resultadoLiquido
+                )}
+                destaque
+              />
+
+              <ResumoLinha
+                label="Recebido no período"
+                valor={moeda(
+                  totalRecebido
+                )}
+              />
+
+              <ResumoLinha
+                label="Pagamentos de fiado"
+                valor={moeda(
+                  recebidoFiado
+                )}
+              />
+
+              <ResumoLinha
+                label="Resultado de caixa"
+                valor={moeda(
+                  resultadoCaixa
+                )}
+              />
             </div>
           </div>
 
-          {/* DRE SIMPLIFICADO */}
-          <div style={sectionBox}>
-            <h3 style={sectionBoxTitle}>Demonstrativo do Resultado do Exercício (DRE)</h3>
+          <div style={section}>
+            <h3 style={sectionTitle}>
+              Últimas movimentações
+            </h3>
 
-            <div style={dreRow}>
-              <span>(+) Faturamento Bruto de Vendas</span>
-              <strong>{moeda(resumoMetrics.faturamentoVendas)}</strong>
-            </div>
+            {receitas
+              .slice(0, 5)
+              .map(receita => (
+                <div
+                  key={receita.id}
+                  style={movimentoRow}
+                >
+                  <div>
+                    <strong>
+                      {
+                        receita.descricao
+                      }
+                    </strong>
 
-            <div style={{ ...dreRow, color: "#b91c1c" }}>
-              <span>(-) Custo das Mercadorias Vendidas (CMV)</span>
-              <strong>- {moeda(custoProdutosVendidos)}</strong>
-            </div>
+                    <div
+                      style={muted}
+                    >
+                      {tipoReceitaLabel(
+                        receita.tipo
+                      )}{" "}
+                      •{" "}
+                      {dataBR(
+                        receita.dataCompetencia
+                      )}
+                    </div>
+                  </div>
 
-            <div style={{ ...dreRow, borderTop: "1px solid #eee6d2", fontWeight: "bold" }}>
-              <span>(=) Lucro Bruto</span>
-              <span style={{ color: resumoMetrics.lucroBruto >= 0 ? "#15803d" : "#b91c1c" }}>
-                {moeda(resumoMetrics.lucroBruto)}
-              </span>
-            </div>
-
-            <div style={{ ...dreRow, color: "#b91c1c" }}>
-              <span>(-) Despesas Operacionais</span>
-              <strong>- {moeda(resumoMetrics.totalDespesas)}</strong>
-            </div>
-
-            <div style={{ ...dreRow, borderTop: "2px solid #111", fontWeight: "bold", fontSize: 16, marginTop: 8 }}>
-              <span>(=) Lucro Líquido Final</span>
-              <span style={{ color: resumoMetrics.lucroLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
-                {moeda(resumoMetrics.lucroLiquido)}
-              </span>
-            </div>
-          </div>
-
-          {/* MÉTRICAS SECUNDÁRIAS DE CAIXA */}
-          <div className="financeiro-grid-secundario">
-            <div style={cardSmall}>
-              <span style={mutedSmall}>Receitas Totais Entradas</span>
-              <strong>{moeda(resumoMetrics.totalReceitas)}</strong>
-            </div>
-            <div style={cardSmall}>
-              <span style={mutedSmall}>Despesas Totais Saídas</span>
-              <strong>{moeda(resumoMetrics.totalDespesas)}</strong>
-            </div>
-            <div style={cardSmall}>
-              <span style={mutedSmall}>Resultado de Caixa</span>
-              <strong style={{ color: resumoMetrics.resultadoLiquido >= 0 ? "#15803d" : "#b91c1c" }}>
-                {moeda(resumoMetrics.resultadoLiquido)}
-              </strong>
-            </div>
-            <div style={cardSmall}>
-              <span style={mutedSmall}>Total de Vendas</span>
-              <strong>{resumoMetrics.qtdVendas} realizada(s)</strong>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ABA 2 E 3: LISTAGEM COM FILTROS DE RECEITAS E DESPESAS */}
-      {(abaAtiva === "receitas" || abaAtiva === "despesas") && (
-        <div>
-          <div className="financeiro-filtros">
-            <input
-              className="financeiro-busca"
-              placeholder={`Buscar em ${abaAtiva}...`}
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              style={input}
-            />
-
-            <select
-              className="financeiro-select"
-              value={statusFiltro}
-              onChange={e => setStatusFiltro(e.target.value)}
-              style={select}
-            >
-              <option value="">Status (Todos)</option>
-              <option value={abaAtiva === "receitas" ? "RECEBIDA" : "PAGO"}>
-                {abaAtiva === "receitas" ? "Recebidas" : "Pagas"}
-              </option>
-              <option value="PENDENTE">Pendentes</option>
-            </select>
-
-            <select
-              className="financeiro-select"
-              value={categoriaFiltro}
-              onChange={e => setCategoriaFiltro(e.target.value)}
-              style={select}
-            >
-              <option value="">Categorias (Todas)</option>
-              {categoriasUnicas.map(cat => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
+                  <strong
+                    style={valorReceitaStyle}
+                  >
+                    +{" "}
+                    {moeda(
+                      receita.valor
+                    )}
+                  </strong>
+                </div>
               ))}
-            </select>
+
+            {despesas
+              .slice(0, 5)
+              .map(despesa => (
+                <div
+                  key={despesa.id}
+                  style={movimentoRow}
+                >
+                  <div>
+                    <strong>
+                      {
+                        despesa.descricao
+                      }
+                    </strong>
+
+                    <div
+                      style={muted}
+                    >
+                      {
+                        despesa.categoria
+                      }{" "}
+                      •{" "}
+                      {dataBR(
+                        despesa.dataCompetencia
+                      )}
+                    </div>
+                  </div>
+
+                  <strong
+                    style={valorDespesaStyle}
+                  >
+                    -{" "}
+                    {moeda(
+                      despesa.valor
+                    )}
+                  </strong>
+                </div>
+              ))}
+
+            {receitas.length ===
+              0 &&
+              despesas.length ===
+                0 && (
+                <div
+                  style={emptyText}
+                >
+                  Nenhuma movimentação
+                  encontrada.
+                </div>
+              )}
+          </div>
+        </>
+      )}
+
+      {/* =========================
+          RECEITAS
+      ========================= */}
+
+      {aba === "receitas" && (
+        <div style={section}>
+          <div style={sectionHeader}>
+            <div>
+              <h3
+                style={
+                  sectionTitleNoMargin
+                }
+              >
+                Receitas
+              </h3>
+
+              <div
+                style={muted}
+              >
+                Entradas financeiras
+                registradas.
+              </div>
+            </div>
+
+            <button
+              style={btnSmall}
+              onClick={() =>
+                setModalReceita(true)
+              }
+            >
+              + Nova receita
+            </button>
           </div>
 
-          <div className="financeiro-tabela-wrapper">
-            <table className="financeiro-tabela">
-              <thead>
-                <tr>
-                  <th>Descrição</th>
-                  <th>Data</th>
-                  <th>Categoria</th>
-                  <th>Status</th>
-                  <th>Valor</th>
-                  <th style={{ textAlign: "right" }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {abaAtiva === "receitas" ? (
-                  receitasFiltradas.length > 0 ? (
-                    receitasFiltradas.map(r => (
-                      <tr key={r.id}>
-                        <td>
-                          <strong>{r.descricao}</strong>
-                          {r.tipo === "VENDA" && <span style={tagVenda}>Venda</span>}
-                        </td>
-                        <td>{formatarData(r.data)}</td>
-                        <td>{r.categoria}</td>
-                        <td>
-                          <span className={`badge ${r.status === "RECEBIDA" ? "badge-sucesso" : "badge-alerta"}`}>
-                            {r.status}
-                          </span>
-                        </td>
-                        <td style={{ color: "#15803d", fontWeight: "600" }}>{moeda(r.valor)}</td>
-                        <td style={{ textAlign: "right" }}>
-                          <button
-                            style={btnExcluirTabela}
-                            onClick={() => excluirRegistro("receitas", r.id)}
-                          >
-                            Excluir
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
-                        Nenhuma receita encontrada.
-                      </td>
-                    </tr>
-                  )
-                ) : (
-                  despesasFiltradas.length > 0 ? (
-                    despesasFiltradas.map(d => (
-                      <tr key={d.id}>
-                        <td><strong>{d.descricao}</strong></td>
-                        <td>{formatarData(d.data)}</td>
-                        <td>{d.categoria}</td>
-                        <td>
-                          <span className={`badge ${d.status === "PAGO" ? "badge-sucesso" : "badge-alerta"}`}>
-                            {d.status}
-                          </span>
-                        </td>
-                        <td style={{ color: "#b91c1c", fontWeight: "600" }}>{moeda(d.valor)}</td>
-                        <td style={{ textAlign: "right" }}>
-                          <button
-                            style={btnExcluirTabela}
-                            onClick={() => excluirRegistro("despesas", d.id)}
-                          >
-                            Excluir
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
-                        Nenhuma despesa encontrada.
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
+          <div style={lista}>
+            {receitasFiltradas.map(
+              receita => (
+                <div
+                  key={receita.id}
+                  className="financeiro-row"
+                  style={financeiroRow}
+                >
+                  <div>
+                    <strong>
+                      {
+                        receita.descricao
+                      }
+                    </strong>
+
+                    <div
+                      style={muted}
+                    >
+                      {tipoReceitaLabel(
+                        receita.tipo
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Competência
+                    </span>
+
+                    {
+                      dataBR(
+                        receita.dataCompetencia
+                      )
+                    }
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Recebimento
+                    </span>
+
+                    {
+                      dataBR(
+                        receita.dataRecebimento
+                      )
+                    }
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Status
+                    </span>
+
+                    <StatusBadge
+                      status={
+                        receita.status
+                      }
+                    />
+                  </div>
+
+                  <div
+                    style={
+                      rowValorReceita
+                    }
+                  >
+                    {moeda(
+                      receita.valor
+                    )}
+                  </div>
+
+                  <button
+                    style={
+                      deleteBtn
+                    }
+                    disabled={
+                      receita.status ===
+                      "CANCELADA"
+                    }
+                    onClick={() =>
+                      cancelarReceita(
+                        receita
+                      )
+                    }
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )
+            )}
+
+            {receitasFiltradas.length ===
+              0 && (
+              <div
+                style={emptyText}
+              >
+                Nenhuma receita
+                encontrada.
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ABA 4: FIADO / CONTAS A RECEBER */}
-      {abaAtiva === "fiado" && (
-        <div>
-          <div className="financeiro-filtros">
+      {/* =========================
+          DESPESAS
+      ========================= */}
+
+      {aba === "despesas" && (
+        <div style={section}>
+          <div style={sectionHeader}>
+            <div>
+              <h3
+                style={
+                  sectionTitleNoMargin
+                }
+              >
+                Despesas
+              </h3>
+
+              <div
+                style={muted}
+              >
+                Contas e gastos da
+                operação.
+              </div>
+            </div>
+
+            <button
+              style={btnExpense}
+              onClick={() =>
+                setModalDespesa(true)
+              }
+            >
+              + Nova despesa
+            </button>
+          </div>
+
+          <div style={lista}>
+            {despesasFiltradas.map(
+              despesa => (
+                <div
+                  key={despesa.id}
+                  className="financeiro-row"
+                  style={financeiroRow}
+                >
+                  <div>
+                    <strong>
+                      {
+                        despesa.descricao
+                      }
+                    </strong>
+
+                    <div
+                      style={muted}
+                    >
+                      {
+                        despesa.categoria
+                      }
+
+                      {despesa.recorrente &&
+                        " • Recorrente"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Competência
+                    </span>
+
+                    {
+                      dataBR(
+                        despesa.dataCompetencia
+                      )
+                    }
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Pagamento
+                    </span>
+
+                    {
+                      dataBR(
+                        despesa.dataPagamento
+                      )
+                    }
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Status
+                    </span>
+
+                    <StatusBadge
+                      status={
+                        despesa.status
+                      }
+                    />
+                  </div>
+
+                  <div
+                    style={
+                      rowValorDespesa
+                    }
+                  >
+                    {moeda(
+                      despesa.valor
+                    )}
+                  </div>
+
+                  <button
+                    style={
+                      deleteBtn
+                    }
+                    disabled={
+                      despesa.status ===
+                      "CANCELADA"
+                    }
+                    onClick={() =>
+                      cancelarDespesa(
+                        despesa
+                      )
+                    }
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )
+            )}
+
+            {despesasFiltradas.length ===
+              0 && (
+              <div
+                style={emptyText}
+              >
+                Nenhuma despesa
+                encontrada.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          FIADO
+      ========================= */}
+
+      {aba === "fiado" && (
+        <div style={section}>
+          <div style={sectionHeader}>
+            <div>
+              <h3
+                style={
+                  sectionTitleNoMargin
+                }
+              >
+                Valores a receber
+              </h3>
+
+              <div
+                style={muted}
+              >
+                Vendas realizadas no
+                fiado que ainda possuem
+                saldo pendente.
+              </div>
+            </div>
+
+            <div
+              style={fiadoTotal}
+            >
+              {moeda(
+                totalAReceber
+              )}
+            </div>
+          </div>
+
+          <div style={lista}>
+            {fiado
+              .filter(item => {
+                if (
+                  filtroMes ===
+                  "todos"
+                ) {
+                  return true
+                }
+
+                return (
+                  mesDaData(
+                    item.compra.criadoem
+                  ) === filtroMes
+                )
+              })
+              .map(item => (
+                <div
+                  key={
+                    item.compra.id
+                  }
+                  className="financeiro-row"
+                  style={fiadoRow}
+                >
+                  <div>
+                    <strong>
+                      {
+                        item.compra
+                          .cliente
+                      }
+                    </strong>
+
+                    <div
+                      style={muted}
+                    >
+                      {
+                        item.compra
+                          .cpf
+                      }
+                    </div>
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Venda
+                    </span>
+
+                    {
+                      dataBR(
+                        item.compra
+                          .criadoem
+                      )
+                    }
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Valor original
+                    </span>
+
+                    <strong>
+                      {moeda(
+                        item.compra
+                          .valor
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Recebido
+                    </span>
+
+                    <span
+                      style={
+                        recebidoStyle
+                      }
+                    >
+                      {moeda(
+                        item.recebido
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span
+                      style={infoLabel}
+                    >
+                      Pendente
+                    </span>
+
+                    <strong
+                      style={
+                        pendenteStyle
+                      }
+                    >
+                      {moeda(
+                        item.pendente
+                      )}
+                    </strong>
+                  </div>
+
+                  <button
+                    style={btnSmall}
+                    onClick={() =>
+                      abrirPagamentoFiado(
+                        item
+                      )
+                    }
+                  >
+                    Receber
+                  </button>
+                </div>
+              ))}
+
+            {fiado.filter(item => {
+              if (
+                filtroMes ===
+                "todos"
+              ) {
+                return true
+              }
+
+              return (
+                mesDaData(
+                  item.compra.criadoem
+                ) === filtroMes
+              )
+            }).length === 0 && (
+              <div
+                style={emptyText}
+              >
+                Nenhum valor pendente.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          MODAL RECEITA
+      ========================= */}
+
+      {modalReceita && (
+        <Modal
+          titulo="Nova receita"
+          subtitulo="Cadastre uma entrada financeira."
+          onClose={() =>
+            setModalReceita(false)
+          }
+        >
+          <label style={fieldLabel}>
+            Descrição
+          </label>
+
+          <input
+            style={input}
+            placeholder="Ex.: receita extra"
+            value={
+              descricaoReceita
+            }
+            onChange={e =>
+              setDescricaoReceita(
+                e.target.value
+              )
+            }
+          />
+
+          <label style={fieldLabel}>
+            Tipo
+          </label>
+
+          <select
+            style={input}
+            value={tipoReceita}
+            onChange={e =>
+              setTipoReceita(
+                e.target.value as Receita["tipo"]
+              )
+            }
+          >
+            <option value="OUTRA_RECEITA">
+              Outra receita
+            </option>
+
+            <option value="OUTROS">
+              Outros
+            </option>
+          </select>
+
+          <label style={fieldLabel}>
+            Valor
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            style={input}
+            value={
+              valorReceita || ""
+            }
+            onChange={e =>
+              setValorReceita(
+                Number(
+                  e.target.value
+                )
+              )
+            }
+          />
+
+          <label style={fieldLabel}>
+            Observação
+          </label>
+
+          <textarea
+            style={textarea}
+            placeholder="Opcional"
+            value={
+              observacaoReceita
+            }
+            onChange={e =>
+              setObservacaoReceita(
+                e.target.value
+              )
+            }
+          />
+
+          <div style={resumo}>
+            Receita:{" "}
+            <strong>
+              {moeda(
+                valorReceita
+              )}
+            </strong>
+          </div>
+
+          <button
+            style={btnPrimary}
+            onClick={
+              criarReceita
+            }
+          >
+            Cadastrar receita
+          </button>
+        </Modal>
+      )}
+
+      {/* =========================
+          MODAL DESPESA
+      ========================= */}
+
+      {modalDespesa && (
+        <Modal
+          titulo="Nova despesa"
+          subtitulo="Registre um gasto da operação."
+          onClose={() =>
+            setModalDespesa(false)
+          }
+        >
+          <label style={fieldLabel}>
+            Descrição
+          </label>
+
+          <input
+            style={input}
+            placeholder="Ex.: aluguel"
+            value={
+              descricaoDespesa
+            }
+            onChange={e =>
+              setDescricaoDespesa(
+                e.target.value
+              )
+            }
+          />
+
+          <label style={fieldLabel}>
+            Categoria
+          </label>
+
+          <select
+            style={input}
+            value={
+              categoriaDespesa
+            }
+            onChange={e =>
+              setCategoriaDespesa(
+                e.target.value
+              )
+            }
+          >
+            {categoriasDespesas.map(
+              categoria => (
+                <option
+                  key={categoria}
+                  value={categoria}
+                >
+                  {categoria}
+                </option>
+              )
+            )}
+          </select>
+
+          <label style={fieldLabel}>
+            Valor
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            style={input}
+            value={
+              valorDespesa || ""
+            }
+            onChange={e =>
+              setValorDespesa(
+                Number(
+                  e.target.value
+                )
+              )
+            }
+          />
+
+          <label style={fieldLabel}>
+            Data de competência
+          </label>
+
+          <input
+            type="date"
+            style={input}
+            value={
+              dataCompetenciaDespesa
+            }
+            onChange={e =>
+              setDataCompetenciaDespesa(
+                e.target.value
+              )
+            }
+          />
+
+          <label style={fieldLabel}>
+            Status
+          </label>
+
+          <select
+            style={input}
+            value={
+              statusDespesa
+            }
+            onChange={e =>
+              setStatusDespesa(
+                e.target.value as Despesa["status"]
+              )
+            }
+          >
+            <option value="PAGA">
+              Paga
+            </option>
+
+            <option value="PENDENTE">
+              Pendente
+            </option>
+          </select>
+
+          {statusDespesa ===
+            "PAGA" && (
+            <>
+              <label
+                style={fieldLabel}
+              >
+                Data de pagamento
+              </label>
+
+              <input
+                type="date"
+                style={input}
+                value={
+                  dataPagamentoDespesa
+                }
+                onChange={e =>
+                  setDataPagamentoDespesa(
+                    e.target.value
+                  )
+                }
+              />
+            </>
+          )}
+
+          <label
+            style={checkboxLabel}
+          >
             <input
-              className="financeiro-busca"
-              placeholder="Buscar cliente do fiado..."
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
+              type="checkbox"
+              checked={
+                despesaRecorrente
+              }
+              onChange={e =>
+                setDespesaRecorrente(
+                  e.target.checked
+                )
+              }
+            />
+
+            Despesa recorrente
+          </label>
+
+          <label style={fieldLabel}>
+            Observação
+          </label>
+
+          <textarea
+            style={textarea}
+            placeholder="Opcional"
+            value={
+              observacaoDespesa
+            }
+            onChange={e =>
+              setObservacaoDespesa(
+                e.target.value
+              )
+            }
+          />
+
+          <div style={resumo}>
+            Despesa:{" "}
+            <strong>
+              {moeda(
+                valorDespesa
+              )}
+            </strong>
+          </div>
+
+          <button
+            style={btnExpensePrimary}
+            onClick={
+              criarDespesa
+            }
+          >
+            Cadastrar despesa
+          </button>
+        </Modal>
+      )}
+
+      {/* =========================
+          MODAL PAGAMENTO FIADO
+      ========================= */}
+
+      {modalFiado &&
+        fiadoSelecionado && (
+          <Modal
+            titulo="Receber fiado"
+            subtitulo={`Venda de ${
+              fiadoSelecionado
+                .compra.cliente ||
+              "cliente"
+            }`}
+            onClose={() => {
+              setModalFiado(false)
+              setFiadoSelecionado(
+                null
+              )
+            }}
+          >
+            <div
+              style={
+                clienteSelecionado
+              }
+            >
+              <div>
+                <strong>
+                  {
+                    fiadoSelecionado
+                      .compra
+                      .cliente
+                  }
+                </strong>
+
+                <div
+                  style={muted}
+                >
+                  {
+                    fiadoSelecionado
+                      .compra
+                      .cpf
+                  }
+                </div>
+              </div>
+
+              <div
+                style={
+                  clientePontos
+                }
+              >
+                Venda:{" "}
+                {moeda(
+                  fiadoSelecionado
+                    .compra
+                    .valor
+                )}
+              </div>
+            </div>
+
+            <div style={resumo}>
+              <div>
+                Já recebido:{" "}
+                <strong>
+                  {moeda(
+                    fiadoSelecionado
+                      .recebido
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                Pendente:{" "}
+                <strong>
+                  {moeda(
+                    fiadoSelecionado
+                      .pendente
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <label style={fieldLabel}>
+              Valor recebido
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              max={
+                fiadoSelecionado
+                  .pendente
+              }
+              step="0.01"
               style={input}
-            />
-          </div>
-
-          <div className="financeiro-tabela-wrapper">
-            <table className="financeiro-tabela">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Data Compra</th>
-                  <th>Valor Total</th>
-                  <th>Já Pago</th>
-                  <th>Pendente</th>
-                  <th style={{ textAlign: "right" }}>Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fiadoFiltrado.length > 0 ? (
-                  fiadoFiltrado.map(f => (
-                    <tr key={f.id}>
-                      <td><strong>{f.clienteNome}</strong></td>
-                      <td>{formatarData(f.data)}</td>
-                      <td>{moeda(f.valorTotal)}</td>
-                      <td style={{ color: "#15803d" }}>{moeda(f.valorRecebido)}</td>
-                      <td style={{ color: "#b45309", fontWeight: "bold" }}>{moeda(f.valorPendente)}</td>
-                      <td style={{ textAlign: "right" }}>
-                        <button
-                          style={primaryBtnSm}
-                          onClick={() => setReceberFiadoModal(f)}
-                        >
-                          Abater / Receber
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: "center", color: "#888" }}>
-                      Nenhum valor pendente no fiado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: NOVA RECEITA */}
-      {novaReceitaModal && (
-        <div style={overlay} onClick={fecharModais}>
-          <div style={modal} onClick={e => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h2 style={modalTitle}>Nova Receita</h2>
-              <button style={closeBtn} onClick={fecharModais}>×</button>
-            </div>
-
-            <input
-              style={inputSpacing}
-              placeholder="Descrição (ex: Venda de Balcão, Serviços)"
-              value={formReceita.descricao || ""}
-              onChange={e => setFormReceita({ ...formReceita, descricao: e.target.value })}
+              value={
+                valorPagamentoFiado ||
+                ""
+              }
+              onChange={e =>
+                setValorPagamentoFiado(
+                  Number(
+                    e.target.value
+                  )
+                )
+              }
             />
 
-            <input
-              style={inputSpacing}
-              type="number"
-              placeholder="Valor (R$)"
-              value={formReceita.valor || ""}
-              onChange={e => setFormReceita({ ...formReceita, valor: Number(e.target.value) })}
-            />
-
-            <input
-              style={inputSpacing}
-              placeholder="Categoria (ex: Vendas, Serviços, Extra)"
-              value={formReceita.categoria || ""}
-              onChange={e => setFormReceita({ ...formReceita, categoria: e.target.value })}
-            />
-
-            <input
-              style={inputSpacing}
-              type="date"
-              value={formReceita.data || ""}
-              onChange={e => setFormReceita({ ...formReceita, data: e.target.value })}
-            />
-
-            <select
-              style={inputSpacing}
-              value={formReceita.status || "RECEBIDA"}
-              onChange={e => setFormReceita({ ...formReceita, status: e.target.value as any })}
+            <button
+              style={btnPrimary}
+              onClick={
+                registrarPagamentoFiado
+              }
             >
-              <option value="RECEBIDA">Recebida</option>
-              <option value="PENDENTE">Pendente</option>
-            </select>
-
-            <div style={modalActions}>
-              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
-              <button style={primaryBtn} onClick={criarReceita}>Salvar Receita</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: NOVA DESPESA */}
-      {novaDespesaModal && (
-        <div style={overlay} onClick={fecharModais}>
-          <div style={modal} onClick={e => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h2 style={modalTitle}>Nova Despesa</h2>
-              <button style={closeBtn} onClick={fecharModais}>×</button>
-            </div>
-
-            <input
-              style={inputSpacing}
-              placeholder="Descrição (ex: Aluguel, Luz, Fornecedores)"
-              value={formDespesa.descricao || ""}
-              onChange={e => setFormDespesa({ ...formDespesa, descricao: e.target.value })}
-            />
-
-            <input
-              style={inputSpacing}
-              type="number"
-              placeholder="Valor (R$)"
-              value={formDespesa.valor || ""}
-              onChange={e => setFormDespesa({ ...formDespesa, valor: Number(e.target.value) })}
-            />
-
-            <input
-              style={inputSpacing}
-              placeholder="Categoria (ex: Operacional, Fixo, Variável)"
-              value={formDespesa.categoria || ""}
-              onChange={e => setFormDespesa({ ...formDespesa, categoria: e.target.value })}
-            />
-
-            <input
-              style={inputSpacing}
-              type="date"
-              value={formDespesa.data || ""}
-              onChange={e => setFormDespesa({ ...formDespesa, data: e.target.value })}
-            />
-
-            <select
-              style={inputSpacing}
-              value={formDespesa.status || "PAGO"}
-              onChange={e => setFormDespesa({ ...formDespesa, status: e.target.value as any })}
-            >
-              <option value="PAGO">Pago</option>
-              <option value="PENDENTE">Pendente</option>
-            </select>
-
-            <div style={modalActions}>
-              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
-              <button style={{ ...primaryBtn, background: "#b91c1c" }} onClick={criarDespesa}>
-                Salvar Despesa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ABATER FIADO */}
-      {receberFiadoModal && (
-        <div style={overlay} onClick={fecharModais}>
-          <div style={modal} onClick={e => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h2 style={modalTitle}>Abater Fiado</h2>
-              <button style={closeBtn} onClick={fecharModais}>×</button>
-            </div>
-
-            <p style={{ fontSize: 14, color: "#555", marginBottom: 15 }}>
-              Cliente: <strong>{receberFiadoModal.clienteNome}</strong><br />
-              Valor pendente atual: <strong style={{ color: "#b45309" }}>{moeda(receberFiadoModal.valorPendente)}</strong>
-            </p>
-
-            <input
-              style={inputSpacing}
-              type="number"
-              placeholder="Valor a receber/abater (R$)"
-              value={valorAbater}
-              onChange={e => setValorAbater(e.target.value)}
-            />
-
-            <div style={modalActions}>
-              <button style={secondaryBtn} onClick={fecharModais}>Cancelar</button>
-              <button style={primaryBtn} onClick={abaterFiado}>Confirmar Recebimento</button>
-            </div>
-          </div>
-        </div>
-      )}
+              Registrar pagamento
+            </button>
+          </Modal>
+        )}
     </div>
   )
 }
 
-// --- ESTILOS IDÊNTICOS AO COMPONENTE DE CLIENTES (CSS IN LINE) ---
+/*
+ * =========================
+ * COMPONENTES
+ * =========================
+ */
 
-const container: React.CSSProperties = {
-  maxWidth: 1100,
-  margin: "0 auto",
-  padding: "20px 16px",
-  fontFamily: "Inter, system-ui, sans-serif",
-  color: "#111"
+function Dash({
+  label,
+  value
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div style={dash}>
+      <div style={dashLabel}>
+        {label}
+      </div>
+
+      <strong style={dashValue}>
+        {value}
+      </strong>
+    </div>
+  )
 }
 
-const header: React.CSSProperties = {
+function ResumoLinha({
+  label,
+  valor,
+  destaque = false
+}: {
+  label: string
+  valor: string
+  destaque?: boolean
+}) {
+  return (
+    <div
+      style={{
+        ...resumoLinha,
+        ...(destaque
+          ? resumoLinhaDestaque
+          : {})
+      }}
+    >
+      <span>{label}</span>
+
+      <strong>{valor}</strong>
+    </div>
+  )
+}
+
+function StatusBadge({
+  status
+}: {
+  status: string
+}) {
+  const cancelado =
+    status ===
+    "CANCELADA"
+
+  const pendente =
+    status ===
+      "PENDENTE"
+
+  return (
+    <span
+      style={{
+        ...statusBadge,
+        ...(cancelado
+          ? statusCancelado
+          : pendente
+          ? statusPendente
+          : statusRecebido)
+      }}
+    >
+      {status ===
+      "RECEBIDA"
+        ? "Recebida"
+        : status ===
+          "PAGA"
+        ? "Paga"
+        : status ===
+          "PENDENTE"
+        ? "Pendente"
+        : "Cancelada"}
+    </span>
+  )
+}
+
+function Modal({
+  titulo,
+  subtitulo,
+  children,
+  onClose
+}: {
+  titulo: string
+  subtitulo?: string
+  children: React.ReactNode
+  onClose: () => void
+}) {
+  return (
+    <div
+      style={overlay}
+      onClick={onClose}
+    >
+      <div
+        style={modalCard}
+        onClick={e =>
+          e.stopPropagation()
+        }
+      >
+        <div
+          style={modalHeader}
+        >
+          <div>
+            <h2
+              style={{
+                margin: 0
+              }}
+            >
+              {titulo}
+            </h2>
+
+            {subtitulo && (
+              <div
+                style={muted}
+              >
+                {subtitulo}
+              </div>
+            )}
+          </div>
+
+          <button
+            style={closeBtn}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function tipoReceitaLabel(
+  tipo: Receita["tipo"]
+) {
+  switch (tipo) {
+    case "VENDA":
+      return "Venda"
+
+    case "PAGAMENTO_FIADO":
+      return "Pagamento de fiado"
+
+    case "OUTRA_RECEITA":
+      return "Outra receita"
+
+    default:
+      return "Outros"
+  }
+}
+
+/*
+ * =========================
+ * ESTILOS
+ * =========================
+ */
+
+const container = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: "100%",
+  padding: 40,
+  background: "#f6f6f7",
+  fontFamily: "Inter",
+  overflowX: "hidden" as const,
+  boxSizing: "border-box" as const
+}
+
+const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 25
+  gap: 16,
+  marginBottom: 20,
+  flexWrap: "wrap" as const
 }
 
-const title: React.CSSProperties = {
-  fontSize: 32,
-  fontWeight: 700,
-  margin: 0
+const title = {
+  fontSize: 30,
+  margin: 0,
+  fontWeight: 600
 }
 
-const input: React.CSSProperties = {
-  padding: "10px 14px",
+const subtitle = {
+  marginTop: 5,
+  color: "#888",
+  fontSize: 13
+}
+
+const headerButtons = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap" as const
+}
+
+const btnSmall = {
+  padding: "11px 18px",
+  borderRadius: 10,
+  border: "none",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const btnSecondary = {
+  padding: "11px 18px",
+  borderRadius: 10,
+  border: "1px solid #eadfbf",
+  background: "#fff",
+  color: "#80691f",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const dashGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(170px,1fr))",
+  gap: 12,
+  marginBottom: 20,
+  width: "100%"
+}
+
+const dash = {
+  background: "#fff",
+  padding: 18,
+  borderRadius: 14,
+  minWidth: 0,
+  overflow: "hidden" as const,
+  border: "1px solid #eeeeee",
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,0.025)"
+}
+
+const dashLabel = {
+  color: "#777",
+  fontSize: 13,
+  marginBottom: 5
+}
+
+const dashValue = {
+  fontSize: 22,
+  display: "block",
+  wordBreak: "break-word" as const
+}
+
+const filtrosBar = {
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto",
+  gap: 10,
+  marginBottom: 20,
+  width: "100%",
+  minWidth: 0
+}
+
+const inputFiltro = {
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "100%",
+  padding: 12,
   borderRadius: 10,
   border: "1px solid #ddd",
+  background: "#fff",
   fontSize: 14,
   outline: "none",
-  background: "#fff"
+  boxSizing: "border-box" as const
 }
 
-const select: React.CSSProperties = {
-  ...input,
-  cursor: "pointer"
+const selectFiltro = {
+  ...inputFiltro
 }
 
-const inputSpacing: React.CSSProperties = {
-  ...input,
-  width: "100%",
-  boxSizing: "border-box",
-  marginBottom: 12
-}
-
-const primaryBtn: React.CSSProperties = {
-  background: "#111",
-  color: "#fff",
-  border: "none",
-  padding: "10px 18px",
+const refreshBtn = {
+  padding: "11px 16px",
   borderRadius: 10,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontSize: 14,
-  transition: "opacity 0.2s"
-}
-
-const primaryBtnSm: React.CSSProperties = {
-  ...primaryBtn,
-  padding: "6px 12px",
-  fontSize: 12
-}
-
-const secondaryBtn: React.CSSProperties = {
-  background: "#f3f0e6",
-  color: "#333",
-  border: "1px solid #eee6d2",
-  padding: "10px 18px",
-  borderRadius: 10,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontSize: 14
-}
-
-const card: React.CSSProperties = {
+  border: "1px solid #ddd",
   background: "#fff",
-  borderRadius: 16,
-  padding: 18,
-  border: "1px solid #eae6db",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.02)",
+  color: "#555",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const tabs = {
   display: "flex",
-  flexDirection: "column",
-  justifyContent: "space-between"
+  gap: 5,
+  background: "#fff",
+  borderRadius: 12,
+  padding: 5,
+  marginBottom: 20,
+  border: "1px solid #eee",
+  overflowX: "auto" as const
 }
 
-const cardSmall: React.CSSProperties = {
-  ...card,
-  padding: 14,
-  borderRadius: 12
+const tab = {
+  border: "none",
+  background: "transparent",
+  padding: "10px 15px",
+  borderRadius: 9,
+  color: "#777",
+  cursor: "pointer",
+  fontWeight: 500,
+  whiteSpace: "nowrap" as const
 }
 
-const cardValue: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 700,
-  margin: "8px 0"
+const tabAtiva = {
+  ...tab,
+  background: "#faf8f1",
+  color: "#80691f",
+  fontWeight: 600
 }
 
-const mutedSmall: React.CSSProperties = {
-  fontSize: 13,
-  color: "#666"
+const tabBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 19,
+  height: 19,
+  marginLeft: 6,
+  padding: "0 5px",
+  borderRadius: 10,
+  background: "#d4af37",
+  color: "#fff",
+  fontSize: 10,
+  fontWeight: 700
 }
 
-const mutedExtraSmall: React.CSSProperties = {
-  fontSize: 11,
-  color: "#888"
-}
-
-const sectionBox: React.CSSProperties = {
-  background: "#fcfbf7",
-  border: "1px solid #eee6d2",
-  borderRadius: 16,
+const section = {
+  width: "100%",
+  minWidth: 0,
+  background: "#fff",
   padding: 20,
-  marginTop: 10,
-  marginBottom: 20
+  borderRadius: 16,
+  marginBottom: 20,
+  overflow: "hidden" as const,
+  boxSizing: "border-box" as const
 }
 
-const sectionBoxTitle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 700,
-  marginTop: 0,
-  marginBottom: 15,
-  color: "#222"
-}
-
-const dreRow: React.CSSProperties = {
+const sectionHeader = {
   display: "flex",
   justifyContent: "space-between",
-  padding: "8px 0",
+  alignItems: "center",
+  gap: 15,
+  marginBottom: 16,
+  flexWrap: "wrap" as const
+}
+
+const sectionTitle = {
+  marginTop: 0,
+  marginBottom: 16,
+  fontSize: 18
+}
+
+const sectionTitleNoMargin = {
+  margin: 0,
+  fontSize: 18
+}
+
+const resumoGrid = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 0
+}
+
+const resumoLinha = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 15,
+  padding: "13px 0",
+  borderBottom: "1px solid #eee",
   fontSize: 14
 }
 
-const tagVenda: React.CSSProperties = {
-  marginLeft: 8,
-  background: "#e0f2fe",
-  color: "#0369a1",
-  fontSize: 10,
-  padding: "2px 6px",
-  borderRadius: 4,
-  fontWeight: "bold"
+const resumoLinhaDestaque = {
+  color: "#80691f",
+  fontSize: 15
 }
 
-const btnExcluirTabela: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  color: "#b91c1c",
+const lista = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 10,
+  width: "100%",
+  minWidth: 0
+}
+
+const financeiroRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(180px,2fr) minmax(110px,1fr) minmax(110px,1fr) minmax(100px,1fr) minmax(100px,1fr) auto",
+  gap: 15,
+  padding: 15,
+  borderRadius: 12,
+  background: "#f9f9f9",
+  alignItems: "center",
+  minWidth: 0,
+  boxSizing: "border-box" as const
+}
+
+const fiadoRow = {
+  ...financeiroRow,
+  background: "#faf8f1",
+  border: "1px solid #eee6c9"
+}
+
+const movimentoRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 15,
+  padding: "13px 0",
+  borderBottom: "1px solid #eee",
+  minWidth: 0
+}
+
+const infoLabel = {
+  display: "block",
+  color: "#999",
+  fontSize: 11,
+  marginBottom: 3
+}
+
+const muted = {
+  fontSize: 12,
+  color: "#888",
+  marginTop: 3
+}
+
+const emptyText = {
+  color: "#888",
+  fontSize: 14,
+  padding: 10
+}
+
+const valorReceitaStyle = {
+  color: "#6d8d50",
+  whiteSpace: "nowrap" as const
+}
+
+const valorDespesaStyle = {
+  color: "#c45a5a",
+  whiteSpace: "nowrap" as const
+}
+
+const rowValorReceita = {
+  color: "#6d8d50",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const rowValorDespesa = {
+  color: "#c45a5a",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const fiadoTotal = {
+  padding: "9px 13px",
+  borderRadius: 9,
+  background: "#faf8f1",
+  color: "#80691f",
+  fontWeight: 700,
+  whiteSpace: "nowrap" as const
+}
+
+const recebidoStyle = {
+  color: "#6d8d50",
+  fontWeight: 600
+}
+
+const pendenteStyle = {
+  color: "#c45a5a"
+}
+
+const statusBadge = {
+  display: "inline-block",
+  padding: "5px 8px",
+  borderRadius: 7,
+  fontSize: 10,
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const statusRecebido = {
+  background: "#edf5e7",
+  color: "#66834e"
+}
+
+const statusPendente = {
+  background: "#fff6d6",
+  color: "#9b7b2f"
+}
+
+const statusCancelado = {
+  background: "#fff0f0",
+  color: "#c45a5a"
+}
+
+const deleteBtn = {
+  padding: "8px 11px",
+  borderRadius: 8,
+  border: "1px solid #efcaca",
+  background: "#fff5f5",
+  color: "#c45a5a",
   cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const btnExpense = {
+  padding: "11px 18px",
+  borderRadius: 10,
+  border: "1px solid #efcaca",
+  background: "#fff5f5",
+  color: "#c45a5a",
+  cursor: "pointer",
+  fontWeight: 600,
+  whiteSpace: "nowrap" as const
+}
+
+const overlay = {
+  position: "fixed" as const,
+  inset: 0,
+  background: "rgba(0,0,0,0.4)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 2000,
+  overflowY: "auto" as const,
+  boxSizing: "border-box" as const
+}
+
+const modalCard = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 16,
+  width: "100%",
+  maxWidth: 480,
+  maxHeight: "90vh",
+  overflowY: "auto" as const,
+  overflowX: "hidden" as const,
+  boxSizing: "border-box" as const
+}
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 15,
+  marginBottom: 10
+}
+
+const closeBtn = {
+  width: 34,
+  height: 34,
+  border: "none",
+  background: "#f5f5f5",
+  borderRadius: "50%",
+  cursor: "pointer",
+  fontSize: 22,
+  lineHeight: 1,
+  color: "#666",
+  flexShrink: 0
+}
+
+const fieldLabel = {
+  display: "block",
+  marginTop: 12,
+  marginBottom: 4,
+  color: "#555",
   fontSize: 12,
   fontWeight: 600
 }
 
-const overlay: React.CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  background: "rgba(0, 0, 0, 0.4)",
+const input = {
+  width: "100%",
+  minWidth: 0,
+  padding: 10,
+  marginTop: 6,
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "#fff",
+  boxSizing: "border-box" as const,
+  outline: "none"
+}
+
+const textarea = {
+  ...input,
+  minHeight: 80,
+  resize: "vertical" as const,
+  fontFamily: "inherit"
+}
+
+const checkboxLabel = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "center",
-  zIndex: 999,
-  padding: 16
+  gap: 8,
+  marginTop: 14,
+  fontSize: 13,
+  color: "#555",
+  cursor: "pointer"
 }
 
-const modal: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 20,
-  padding: 24,
+const resumo = {
+  marginTop: 12,
+  padding: 13,
+  background: "#faf8f1",
+  borderRadius: 10,
+  lineHeight: 1.8,
+  fontSize: 13
+}
+
+const btnPrimary = {
   width: "100%",
-  maxWidth: 460,
-  boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
-  maxHeight: "90vh",
-  overflowY: "auto"
+  marginTop: 12,
+  padding: 13,
+  borderRadius: 10,
+  border: "none",
+  background:
+    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  cursor: "pointer",
+  fontWeight: 600
 }
 
-const modalHeader: React.CSSProperties = {
+const btnExpensePrimary = {
+  ...btnPrimary,
+  background:
+    "linear-gradient(90deg,#c45a5a,#e58a8a)",
+  color: "#fff"
+}
+
+const clienteSelecionado = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 18
-}
-
-const modalTitle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-  margin: 0
-}
-
-const closeBtn: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  fontSize: 24,
-  cursor: "pointer",
-  color: "#888"
-}
-
-const modalActions: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
   gap: 10,
-  marginTop: 18
+  padding: 12,
+  marginTop: 12,
+  borderRadius: 10,
+  background: "#faf8f1",
+  flexWrap: "wrap" as const
 }
+
+const clientePontos = {
+  color: "#9b7b2f",
+  fontSize: 12,
+  fontWeight: 600
+}
+
