@@ -1635,8 +1635,10 @@ export default function Produtos() {
                             >
                               <button
                                 style={
-                                  secondaryButton
+                                  iconActionButton
                                 }
+                                title="Abrir produto"
+                                aria-label="Abrir produto"
                                 onClick={() => {
                                   setProdutoSelecionado(
                                     produto.id
@@ -1646,35 +1648,37 @@ export default function Produtos() {
                                   )
                                 }}
                               >
-                                Abrir
+                                <EyeIcon />
                               </button>
 
                               <button
                                 style={
-                                  secondaryButton
+                                  iconActionButton
                                 }
+                                title="Editar produto"
+                                aria-label="Editar produto"
                                 onClick={() =>
                                   abrirEditarProduto(
                                     produto
                                   )
                                 }
                               >
-                                Editar
+                                <PencilIcon />
                               </button>
 
                               <button
                                 style={
-                                  secondaryButton
+                                  iconActionButton
                                 }
+                                title={produto.ativo ? "Inativar produto" : "Ativar produto"}
+                                aria-label={produto.ativo ? "Inativar produto" : "Ativar produto"}
                                 onClick={() =>
                                   alterarStatusProduto(
                                     produto
                                   )
                                 }
                               >
-                                {produto.ativo
-                                  ? "Inativar"
-                                  : "Ativar"}
+                                <BlockIcon />
                               </button>
 
                               <button
@@ -1685,7 +1689,7 @@ export default function Produtos() {
                                   )
                                 }
                               >
-                                Excluir
+                                <TrashIcon />
                               </button>
                             </div>
                           </td>
@@ -1845,7 +1849,7 @@ export default function Produtos() {
                             )
                           }}
                         >
-                          Ver produto
+                          <EyeIcon />
                         </button>
 
                         <button
@@ -1858,7 +1862,7 @@ export default function Produtos() {
                             )
                           }
                         >
-                          Editar
+                          <PencilIcon />
                         </button>
 
                         <button
@@ -1869,7 +1873,7 @@ export default function Produtos() {
                             )
                           }
                         >
-                          Excluir
+                          <TrashIcon />
                         </button>
                       </div>
                     </div>
@@ -4258,6 +4262,44 @@ const stockBadge = {
   fontWeight: 600
 }
 
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function BlockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.5 5.5 13 13" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  )
+}
+
 const actionButtons = {
   display: "flex",
   gap: 5,
@@ -4443,6 +4485,46 @@ const dangerSmall = {
     "9px 12px",
   fontSize: 12
 }
+const iconActionButton = {
+  ...secondaryButton,
+  width: 38,
+  height: 38,
+  padding: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
+}
+
+const iconDangerButton = {
+  ...dangerButton,
+  width: 38,
+  height: 38,
+  padding: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
+}
+
+const iconSmallButton = {
+  ...secondarySmall,
+  width: 36,
+  height: 36,
+  padding: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
+}
+
+const iconDangerSmall = {
+  ...dangerSmall,
+  width: 36,
+  height: 36,
+  padding: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
+}
+
 
 const mobileVariantTitle = {
   display: "flex",
