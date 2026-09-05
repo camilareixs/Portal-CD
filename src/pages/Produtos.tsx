@@ -830,29 +830,6 @@ export default function Produtos() {
     await carregarDados()
   }
 
-  async function alterarStatusVariante(
-    variante: Variante
-  ) {
-    const { error } = await supabase
-      .from("produtoVariantes")
-      .update({
-        ativo: !variante.ativo,
-        atualizadoem:
-          new Date().toISOString()
-      })
-      .eq("id", variante.id)
-
-    if (error) {
-      console.error(error)
-      alert(
-        "Erro ao alterar status da variante."
-      )
-      return
-    }
-
-    await carregarDados()
-  }
-
   function abrirEstoque(
     variante: Variante
   ) {
@@ -4346,7 +4323,6 @@ const mobilePriceGrid = {
     "1px solid #eee9df"
 }
 
-const mobileProductInfoItem = {}
 
 const mobileActions = {
   display: "flex",
