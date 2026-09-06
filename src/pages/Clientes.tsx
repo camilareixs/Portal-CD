@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabase"
 
@@ -84,21 +83,11 @@ export default function Clientes({
         cidade: c.cidade || "",
         estado: c.estado || "",
         rua: c.rua || "",
-
-        // Banco usa criadoem
         criadoEm: c.criadoem || "",
-
-        // Banco usa cep
         CEP: c.cep || "",
-
-        // Banco usa complemento
         Complemento: c.complemento || "",
-
         cintura: c.cintura || "",
-
-        // Banco usa dataNascimento
         "Data de Nascimento": c.dataNascimento || "",
-
         tamanhoSaia: c.tamanhoSaia || "",
         tamanhoVestido: c.tamanhoVestido || "",
         tamanhoBlusa: c.tamanhoBlusa || "",
@@ -156,12 +145,9 @@ export default function Clientes({
         rua: form.rua || "",
         cidade: form.cidade || "",
         estado: form.estado || "",
-
-        // Nomes reais do banco
         cep: form.CEP || "",
         complemento: form.Complemento || "",
         dataNascimento: form["Data de Nascimento"] || "",
-
         cintura: form.cintura || "",
         tamanhoSaia: form.tamanhoSaia || "",
         tamanhoVestido: form.tamanhoVestido || "",
@@ -203,19 +189,12 @@ export default function Clientes({
           cidade: novo.cidade || "",
           estado: novo.estado || "",
           rua: novo.rua || "",
-
-          // Nomes reais do banco
           cep: novo.CEP || "",
           complemento: novo.Complemento || "",
           dataNascimento:
             novo["Data de Nascimento"] || "",
-
           cintura: novo.cintura || "",
           pontos: 0,
-
-          // O banco possui default now()
-          // Não precisamos informar criadoem manualmente.
-
           tamanhoSaia: novo.tamanhoSaia || "",
           tamanhoVestido: novo.tamanhoVestido || "",
           tamanhoBlusa: novo.tamanhoBlusa || "",
@@ -496,7 +475,7 @@ ${
 
   return (
     <div style={container}>
-      <style>{
+      <style>{`
         .clientes-filtros {
           display: flex;
           gap: 12px;
@@ -696,7 +675,7 @@ ${
             grid-column: auto;
           }
         }
-      }</style>
+      `}</style>
 
       {/* HEADER */}
 
@@ -1710,8 +1689,7 @@ ${
                   style={inputSpacing}
                   placeholder="Quadril"
                   value={
-                    novo.quadril ||
-                    ""
+                    novo.quadril || ""
                   }
                   onChange={e =>
                     setNovo({
