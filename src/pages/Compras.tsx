@@ -28,14 +28,6 @@ type Props = {
   } | null
 }
 
-/*
- * REGRA DO PROGRAMA DE FIDELIDADE
- *
- * 10 pontos = R$ 60,00 em cupom
- *
- * A geração dos pontos continua sendo:
- * R$ 150,00 em compras = 1 ponto
- */
 const VALOR_CUPOM = 60
 const PONTOS_POR_CUPOM = 10
 const VALOR_PARA_GERAR_PONTO = 150
