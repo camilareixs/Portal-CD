@@ -2,341 +2,489 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Cliente = {
-  id: string
-  nome: string
-  cpf: string
-  pontos: number
+id: string
+nome: string
+cpf: string
+pontos: number
 }
 
 type Compra = {
-  id: string
-  clienteid: string | null
-  cliente: string
-  cpf: string
-  valor: number
-  pagamento: string
-  parcelas: number
-  pontosgerados: number
-  criadoem: string
-  cupomusado: number
+id: string
+clienteid: string | null
+cliente: string
+cpf: string
+valor: number
+pagamento: string
+parcelas: number
+pontosgerados: number
+criadoem: string
+cupomusado: number
+status: string
 }
 
 type Props = {
-  compraSelecionada?: {
-    clienteid: string
-    cliente: string
-  } | null
+compraSelecionada?: {
+clienteid: string
+cliente: string
+} | null
 }
+
+/*
+
+* =========================
+* REGRAS DO PROGRAMA
+* =========================
+*
+* R$ 150,00 = 1 ponto
+* 10 pontos = R$ 60,00 em cupom
+  */
 
 const VALOR_CUPOM = 60
 const PONTOS_POR_CUPOM = 10
 const VALOR_PARA_GERAR_PONTO = 150
 
 function moeda(valor: number) {
-  return Number(valor || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  })
+return Number(valor || 0).toLocaleString("pt-BR", {
+style: "currency",
+currency: "BRL"
+})
 }
 
 export default function Compras({
-  compraSelecionada
+compraSelecionada
 }: Props) {
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [compras, setCompras] = useState<Compra[]>([])
+const [clientes, setClientes] = useState<Cliente[]>([])
+const [compras, setCompras] = useState<Compra[]>([])
 
-  const [modal, setModal] = useState(false)
-  const [modalInativos, setModalInativos] = useState(false)
-  const [modalReceita, setModalReceita] = useState(false)
+const [modal, setModal] = useState(false)
+const [modalInativos, setModalInativos] = useState(false)
+const [modalReceita, setModalReceita] = useState(false)
 
-  const [clienteSel, setClienteSel] =
-    useState<Cliente | null>(null)
+const [clienteSel, setClienteSel] =
+useState<Cliente | null>(null)
 
-  const [buscaCliente, setBuscaCliente] =
-    useState("")
+const [buscaCliente, setBuscaCliente] =
+useState("")
 
-  const [buscaVenda, setBuscaVenda] =
-    useState("")
+const [buscaVenda, setBuscaVenda] =
+useState("")
 
-  const [filtroMes, setFiltroMes] =
-    useState("todos")
+const [filtroMes, setFiltroMes] =
+useState("todos")
 
-  const [filtroPagamento, setFiltroPagamento] =
-    useState("todos")
+const [filtroPagamento, setFiltroPagamento] =
+useState("todos")
 
-  const [valor, setValor] = useState(0)
+const [valor, setValor] = useState(0)
 
-  const [pagamento, setPagamento] =
-    useState("Pix")
+const [pagamento, setPagamento] =
+useState("Pix")
 
-  const [parcelas, setParcelas] =
-    useState(1)
+const [parcelas, setParcelas] =
+useState(1)
 
-  const [usarCupom, setUsarCupom] =
-    useState(false)
+const [usarCupom, setUsarCupom] =
+useState(false)
 
-  const [quantidadeCupons, setQuantidadeCupons] =
-    useState(0)
+const [quantidadeCupons, setQuantidadeCupons] =
+useState(0)
 
-  const [valorReceita, setValorReceita] =
-    useState(0)
+const [valorReceita, setValorReceita] =
+useState(0)
 
-  const [descricaoReceita, setDescricaoReceita] =
-    useState("")
+const [descricaoReceita, setDescricaoReceita] =
+useState("")
 
-  const [excluindo, setExcluindo] =
-    useState<string | null>(null)
+const [excluindo, setExcluindo] =
+useState<string | null>(null)
 
-  /*
-   * =========================
-   * FETCH CLIENTES
-   * =========================
-   */
+/*
 
-  async function fetchClientes() {
-    const { data, error } = await supabase
-      .from("clientes")
-      .select("id,nome,cpf,pontos")
-      .order("nome")
+* =========================
+* FETCH CLIENTES
+* =========================
+  */
 
-    if (error) {
-      alert("Erro ao carregar clientes: " + error.message)
-      return
-    }
+async function fetchClientes() {
+const { data, error } = await supabase
+.from("clientes")
+.select("id,nome,cpf,pontos")
+.order("nome")
 
-    if (data) {
-      setClientes(
-        data.map((c: any) => ({
-          id: String(c.id),
-          nome: c.nome || "",
-          cpf: c.cpf || "",
-          pontos: Number(c.pontos || 0)
-        }))
-      )
-    }
+
+if (error) {
+  alert("Erro ao carregar clientes: " + error.message)
+  return
+}
+
+if (data) {
+  setClientes(
+    data.map((c: any) => ({
+      id: String(c.id),
+      nome: c.nome || "",
+      cpf: c.cpf || "",
+      pontos: Number(c.pontos || 0)
+    }))
+  )
+}
+
+
+}
+
+/*
+
+* =========================
+* FETCH COMPRAS
+* =========================
+  */
+
+async function fetchCompras() {
+const { data, error } = await supabase
+.from("compras")
+.select("*")
+.order("criadoem", {
+ascending: false
+})
+
+
+if (error) {
+  alert("Erro ao carregar compras: " + error.message)
+  return
+}
+
+if (data) {
+  setCompras(
+    data.map((c: any) => ({
+      id: String(c.id),
+
+      clienteid:
+        c.clienteid === null ||
+        c.clienteid === undefined
+          ? null
+          : String(c.clienteid),
+
+      cliente: c.cliente || "",
+
+      cpf: c.cpf || "",
+
+      valor: Number(c.valor || 0),
+
+      pagamento: c.pagamento || "",
+
+      parcelas: Number(c.parcelas || 1),
+
+      pontosgerados:
+        Number(c.pontosgerados || 0),
+
+      criadoem: c.criadoem || "",
+
+      cupomusado:
+        Number(c.cupomusado || 0),
+
+      status:
+        c.status || "CONCLUIDA"
+    }))
+  )
+}
+
+
+}
+
+/*
+
+* =========================
+* CARREGAMENTO INICIAL
+* =========================
+  */
+
+useEffect(() => {
+fetchClientes()
+fetchCompras()
+}, [])
+
+/*
+
+* =========================
+* CLIENTE VINDO DA PÁGINA
+* =========================
+  */
+
+useEffect(() => {
+if (
+compraSelecionada &&
+clientes.length > 0
+) {
+const cliente = clientes.find(
+c =>
+c.id ===
+compraSelecionada.clienteid
+)
+
+
+  if (cliente) {
+    setClienteSel(cliente)
+    setModal(true)
   }
+}
 
-  /*
-   * =========================
-   * FETCH COMPRAS
-   * =========================
-   */
 
-  async function fetchCompras() {
-    const { data, error } = await supabase
-      .from("compras")
-      .select("*")
-      .order("criadoem", {
-        ascending: false
-      })
+}, [
+compraSelecionada,
+clientes
+])
 
-    if (error) {
-      alert("Erro ao carregar compras: " + error.message)
-      return
+/*
+
+* =========================
+* CLIENTES FILTRADOS
+* =========================
+  */
+
+const clientesFiltrados =
+clientes.filter(c =>
+c.nome
+.toLowerCase()
+.includes(
+buscaCliente.toLowerCase()
+)
+)
+
+/*
+
+* =========================
+* CUPONS
+* =========================
+  */
+
+const cuponsDisponiveis = clienteSel
+? Math.floor(
+clienteSel.pontos /
+PONTOS_POR_CUPOM
+)
+: 0
+
+const saldoCupom =
+cuponsDisponiveis *
+VALOR_CUPOM
+
+const valorCupom =
+usarCupom
+? Math.min(
+quantidadeCupons *
+VALOR_CUPOM,
+valor
+)
+: 0
+
+const valorRestante =
+Math.max(
+valor - valorCupom,
+0
+)
+
+/*
+
+* =========================
+* PONTOS GERADOS
+* =========================
+  */
+
+const pontosGerados =
+Math.min(
+Math.floor(
+valor /
+VALOR_PARA_GERAR_PONTO
+),
+PONTOS_POR_CUPOM
+)
+
+const pontosUsados =
+usarCupom
+? quantidadeCupons *
+PONTOS_POR_CUPOM
+: 0
+
+/*
+
+* =========================
+* REGISTRAR COMPRA
+* =========================
+  */
+
+async function registrarCompra() {
+if (!clienteSel) {
+alert("Selecione um cliente.")
+return
+}
+
+
+if (valor <= 0) {
+  alert("Digite um valor válido.")
+  return
+}
+
+if (
+  quantidadeCupons >
+  cuponsDisponiveis
+) {
+  alert(
+    "O cliente não possui cupons suficientes."
+  )
+  return
+}
+
+if (
+  usarCupom &&
+  quantidadeCupons <= 0
+) {
+  alert(
+    "Selecione a quantidade de cupons."
+  )
+  return
+}
+
+const pagamentoFinal =
+  valorCupom > 0
+    ? valorRestante > 0
+      ? `${pagamento} + Cupom`
+      : "Cupom"
+    : pagamento
+
+const novosPontos =
+  clienteSel.pontos -
+  pontosUsados +
+  pontosGerados
+
+if (novosPontos < 0) {
+  alert(
+    "Os pontos do cliente não podem ficar negativos."
+  )
+  return
+}
+
+/*
+ * =========================
+ * CRIA A COMPRA
+ * =========================
+ */
+
+const {
+  data: compraCriada,
+  error
+} = await supabase
+  .from("compras")
+  .insert([
+    {
+      clienteid:
+        clienteSel.id,
+
+      cliente:
+        clienteSel.nome,
+
+      cpf:
+        clienteSel.cpf,
+
+      valor,
+
+      pagamento:
+        pagamentoFinal,
+
+      parcelas,
+
+      pontosgerados:
+        pontosGerados,
+
+      cupomusado:
+        valorCupom,
+
+      criadoem:
+        new Date().toISOString(),
+
+      status:
+        "CONCLUIDA"
     }
-
-    if (data) {
-      setCompras(
-        data.map((c: any) => ({
-          id: String(c.id),
-
-          clienteid:
-            c.clienteid === null ||
-            c.clienteid === undefined
-              ? null
-              : String(c.clienteid),
-
-          cliente: c.cliente || "",
-
-          cpf: c.cpf || "",
-
-          valor: Number(c.valor || 0),
-
-          pagamento: c.pagamento || "",
-
-          parcelas: Number(c.parcelas || 1),
-
-          pontosgerados:
-            Number(c.pontosgerados || 0),
-
-          criadoem: c.criadoem || "",
-
-          cupomusado:
-            Number(c.cupomusado || 0)
-        }))
-      )
-    }
-  }
-
-  /*
-   * =========================
-   * CARREGAMENTO INICIAL
-   * =========================
-   */
-
-  useEffect(() => {
-    fetchClientes()
-    fetchCompras()
-  }, [])
-
-  /*
-   * =========================
-   * CLIENTE VINDO DA PÁGINA
-   * =========================
-   */
-
-  useEffect(() => {
-    if (
-      compraSelecionada &&
-      clientes.length > 0
-    ) {
-      const cliente = clientes.find(
-        c =>
-          c.id ===
-          compraSelecionada.clienteid
-      )
-
-      if (cliente) {
-        setClienteSel(cliente)
-        setModal(true)
-      }
-    }
-  }, [
-    compraSelecionada,
-    clientes
   ])
+  .select()
+  .single()
 
-  /*
-   * =========================
-   * CLIENTES FILTRADOS
-   * =========================
-   */
+if (error) {
+  alert(
+    "Erro ao registrar compra: " +
+      error.message
+  )
+  return
+}
 
-  const clientesFiltrados =
-    clientes.filter(c =>
-      c.nome
-        .toLowerCase()
-        .includes(
-          buscaCliente.toLowerCase()
-        )
+/*
+ * =========================
+ * ATUALIZA PONTOS
+ * =========================
+ */
+
+const {
+  error: erroCliente
+} = await supabase
+  .from("clientes")
+  .update({
+    pontos:
+      novosPontos
+  })
+  .eq(
+    "id",
+    clienteSel.id
+  )
+
+if (erroCliente) {
+  await supabase
+    .from("compras")
+    .delete()
+    .eq(
+      "id",
+      compraCriada.id
     )
 
-  /*
-   * =========================
-   * CUPONS
-   * =========================
-   */
+  alert(
+    "Erro ao atualizar os pontos do cliente: " +
+      erroCliente.message
+  )
 
-  const cuponsDisponiveis = clienteSel
-    ? Math.floor(
-        clienteSel.pontos /
-          PONTOS_POR_CUPOM
-      )
-    : 0
+  return
+}
 
-  const saldoCupom =
-    cuponsDisponiveis *
-    VALOR_CUPOM
+/*
+ * =========================
+ * REGISTRAR CUPONS
+ * =========================
+ */
 
-  const valorCupom =
-    usarCupom
-      ? Math.min(
-          quantidadeCupons *
-            VALOR_CUPOM,
-          valor
-        )
-      : 0
-
-  const valorRestante =
-    Math.max(
-      valor - valorCupom,
-      0
+if (quantidadeCupons > 0) {
+  const {
+    count: cuponsAnteriores,
+    error: countError
+  } = await supabase
+    .from("trocas")
+    .select("*", {
+      count: "exact",
+      head: true
+    })
+    .eq(
+      "clienteid",
+      clienteSel.id
     )
 
-  /*
-   * R$ 150,00 = 1 ponto
-   */
-  const pontosGerados =
-    Math.floor(
-      valor /
-        VALOR_PARA_GERAR_PONTO
+  if (countError) {
+    alert(
+      "Compra salva, mas não foi possível registrar os cupons: " +
+        countError.message
     )
-
-  const pontosUsados =
-    usarCupom
-      ? quantidadeCupons *
-        PONTOS_POR_CUPOM
-      : 0
-
-  /*
-   * =========================
-   * REGISTRAR COMPRA
-   * =========================
-   */
-
-  async function registrarCompra() {
-    if (!clienteSel) {
-      alert("Selecione um cliente.")
-      return
-    }
-
-    if (valor <= 0) {
-      alert("Digite um valor válido.")
-      return
-    }
-
-    if (
-      quantidadeCupons >
-      cuponsDisponiveis
-    ) {
-      alert(
-        "O cliente não possui cupons suficientes."
-      )
-      return
-    }
-
-    if (
-      usarCupom &&
-      quantidadeCupons <= 0
-    ) {
-      alert(
-        "Selecione a quantidade de cupons."
-      )
-      return
-    }
-
-    const pagamentoFinal =
-      valorCupom > 0
-        ? valorRestante > 0
-          ? `${pagamento} + Cupom`
-          : "Cupom"
-        : pagamento
-
-    const novosPontos =
-      clienteSel.pontos -
-      pontosUsados +
-      pontosGerados
-
-    if (novosPontos < 0) {
-      alert(
-        "Os pontos do cliente não podem ficar negativos."
-      )
-      return
-    }
-
-    /*
-     * =========================
-     * CRIA A COMPRA
-     * =========================
-     */
-
-    const {
-      data: compraCriada,
-      error
-    } = await supabase
-      .from("compras")
-      .insert([
+  } else {
+    const trocas =
+      Array.from(
         {
+          length:
+            quantidadeCupons
+        },
+        (_, i) => ({
           clienteid:
             clienteSel.id,
 
@@ -346,2013 +494,2036 @@ export default function Compras({
           cpf:
             clienteSel.cpf,
 
-          valor,
+          compraid:
+            compraCriada.id,
 
-          pagamento:
-            pagamentoFinal,
-
-          parcelas,
-
-          pontosgerados:
-            pontosGerados,
-
-          cupomusado:
-            valorCupom,
-
-          criadoem:
-            new Date().toISOString()
-        }
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      alert(
-        "Erro ao registrar compra: " +
-          error.message
-      )
-      return
-    }
-
-    /*
-     * =========================
-     * ATUALIZA PONTOS
-     * =========================
-     */
-
-    const {
-      error: erroCliente
-    } = await supabase
-      .from("clientes")
-      .update({
-        pontos:
-          novosPontos
-      })
-      .eq(
-        "id",
-        clienteSel.id
-      )
-
-    if (erroCliente) {
-      /*
-       * Se a compra foi criada,
-       * mas os pontos falharam,
-       * tentamos remover a compra.
-       */
-      await supabase
-        .from("compras")
-        .delete()
-        .eq(
-          "id",
-          compraCriada.id
-        )
-
-      alert(
-        "Erro ao atualizar os pontos do cliente: " +
-          erroCliente.message
-      )
-
-      return
-    }
-
-    /*
-     * =========================
-     * REGISTRAR CUPONS UTILIZADOS
-     * =========================
-     */
-
-    if (quantidadeCupons > 0) {
-      const {
-        count: cuponsAnteriores,
-        error: countError
-      } = await supabase
-        .from("trocas")
-        .select("*", {
-          count: "exact",
-          head: true
-        })
-        .eq(
-          "clienteid",
-          clienteSel.id
-        )
-
-      if (countError) {
-        alert(
-          "Compra salva, mas não foi possível registrar os cupons: " +
-            countError.message
-        )
-      } else {
-        const trocas =
-          Array.from(
-            {
-              length:
-                quantidadeCupons
-            },
-            (_, i) => ({
-              clienteid:
-                clienteSel.id,
-
-              cliente:
-                clienteSel.nome,
-
-              cpf:
-                clienteSel.cpf,
-
-              compraid:
-                compraCriada.id,
-
-              cupomnumero:
-                (cuponsAnteriores || 0) +
-                i +
-                1,
-
-              valorcupom:
-                VALOR_CUPOM,
-
-              tipo:
-                "Cupom Fidelidade",
-
-              status:
-                "Concluído",
-
-              criadoem:
-                new Date().toISOString()
-            })
-          )
-
-        const {
-          error: erroTrocas
-        } = await supabase
-          .from("trocas")
-          .insert(trocas)
-
-        if (erroTrocas) {
-          alert(
-            "Compra salva, mas ocorreu um erro ao registrar os cupons: " +
-              erroTrocas.message
-          )
-        }
-      }
-    }
-
-    alert(
-      "Compra registrada com sucesso!"
-    )
-
-    fecharModalCompra()
-
-    await fetchClientes()
-    await fetchCompras()
-  }
-
-  /*
-   * =========================
-   * REGISTRAR RECEITA SEM VENDA
-   * =========================
-   */
-
-  async function registrarReceita() {
-    if (valorReceita <= 0) {
-      alert(
-        "Digite um valor válido para a receita."
-      )
-      return
-    }
-
-    if (
-      descricaoReceita.trim() === ""
-    ) {
-      alert(
-        "Digite uma descrição para a receita."
-      )
-      return
-    }
-
-    /*
-     * Como a tabela atual utiliza
-     * o campo "cliente" para exibição,
-     * a descrição é armazenada nele.
-     *
-     * A receita:
-     * - não possui cliente
-     * - não gera pontos
-     * - não utiliza cupom
-     */
-
-    const {
-      error
-    } = await supabase
-      .from("compras")
-      .insert([
-        {
-          clienteid:
-            null,
-
-          cliente:
-            descricaoReceita.trim(),
-
-          cpf:
-            "",
-
-          valor:
-            valorReceita,
-
-          pagamento:
-            "Receita",
-
-          parcelas:
+          cupomnumero:
+            (cuponsAnteriores || 0) +
+            i +
             1,
 
-          pontosgerados:
-            0,
+          valorcupom:
+            VALOR_CUPOM,
 
-          cupomusado:
-            0,
+          pontosUtilizados:
+            PONTOS_POR_CUPOM,
+
+          tipo:
+            "Cupom Fidelidade",
+
+          status:
+            "Concluído",
 
           criadoem:
             new Date().toISOString()
-        }
-      ])
-
-    if (error) {
-      alert(
-        "Erro ao cadastrar receita: " +
-          error.message
+        })
       )
-      return
-    }
-
-    alert(
-      "Receita cadastrada com sucesso!"
-    )
-
-    setModalReceita(false)
-
-    setValorReceita(0)
-
-    setDescricaoReceita("")
-
-    await fetchCompras()
-  }
-
-  /*
-   * =========================
-   * FECHAR MODAL COMPRA
-   * =========================
-   */
-
-  function fecharModalCompra() {
-    setModal(false)
-
-    setClienteSel(null)
-
-    setValor(0)
-
-    setPagamento("Pix")
-
-    setParcelas(1)
-
-    setUsarCupom(false)
-
-    setQuantidadeCupons(0)
-
-    setBuscaCliente("")
-  }
-
-  /*
-   * =========================
-   * EXCLUIR COMPRA / RECEITA
-   * =========================
-   */
-
-  async function excluirCompra(
-    compra: Compra
-  ) {
-    const ehReceita =
-      compra.pagamento ===
-      "Receita"
-
-    const confirmacao =
-      window.confirm(
-        ehReceita
-          ? `Tem certeza que deseja excluir esta receita?\n\nDescrição: ${
-              compra.cliente ||
-              "Sem descrição"
-            }\nValor: ${moeda(
-              compra.valor
-            )}\nData: ${new Date(
-              compra.criadoem
-            ).toLocaleDateString(
-              "pt-BR"
-            )}\n\nEssa ação não poderá ser desfeita.`
-          : `Tem certeza que deseja excluir esta venda?\n\nCliente: ${
-              compra.cliente ||
-              "Sem cliente"
-            }\nValor: ${moeda(
-              compra.valor
-            )}\nData: ${new Date(
-              compra.criadoem
-            ).toLocaleDateString(
-              "pt-BR"
-            )}\n\nOs pontos gerados serão estornados e os cupons utilizados serão devolvidos.\n\nEssa ação não poderá ser desfeita.`
-      )
-
-    if (!confirmacao) {
-      return
-    }
-
-    setExcluindo(compra.id)
-
-    /*
-     * =========================
-     * RECEITA
-     * =========================
-     *
-     * Receita não possui pontos
-     * nem cupons para estornar.
-     */
-
-    if (ehReceita) {
-      const {
-        error
-      } = await supabase
-        .from("compras")
-        .delete()
-        .eq(
-          "id",
-          compra.id
-        )
-
-      if (error) {
-        alert(
-          "Erro ao excluir receita: " +
-            error.message
-        )
-
-        setExcluindo(null)
-
-        return
-      }
-
-      alert(
-        "Receita excluída com sucesso!"
-      )
-
-      setExcluindo(null)
-
-      await fetchCompras()
-
-      return
-    }
-
-    /*
-     * =========================
-     * ENCONTRAR CLIENTE
-     * =========================
-     */
-
-    let clienteAtual =
-      compra.clienteid
-        ? clientes.find(
-            c =>
-              c.id ===
-              compra.clienteid
-          )
-        : null
-
-    /*
-     * Se o cliente não estiver
-     * carregado no estado, buscamos
-     * diretamente no Supabase.
-     */
-
-    if (
-      compra.clienteid &&
-      !clienteAtual
-    ) {
-      const {
-        data
-      } = await supabase
-        .from("clientes")
-        .select(
-          "id,nome,cpf,pontos"
-        )
-        .eq(
-          "id",
-          compra.clienteid
-        )
-        .single()
-
-      if (data) {
-        clienteAtual = {
-          id: String(data.id),
-          nome: data.nome || "",
-          cpf: data.cpf || "",
-          pontos:
-            Number(
-              data.pontos || 0
-            )
-        }
-      }
-    }
-
-    /*
-     * =========================
-     * CALCULAR ESTORNO
-     * =========================
-     */
-
-    let novosPontos =
-      clienteAtual
-        ? clienteAtual.pontos
-        : 0
-
-    if (clienteAtual) {
-      const cuponsUsados =
-        compra.cupomusado > 0
-          ? Math.ceil(
-              compra.cupomusado /
-                VALOR_CUPOM
-            )
-          : 0
-
-      const pontosADevolver =
-        cuponsUsados *
-        PONTOS_POR_CUPOM
-
-      novosPontos =
-        clienteAtual.pontos -
-        compra.pontosgerados +
-        pontosADevolver
-
-      if (novosPontos < 0) {
-        alert(
-          "Não foi possível excluir a venda porque os pontos atuais do cliente não permitem desfazer essa operação."
-        )
-
-        setExcluindo(null)
-
-        return
-      }
-    }
-
-    /*
-     * =========================
-     * EXCLUIR CUPONS RELACIONADOS
-     * =========================
-     */
 
     const {
       error: erroTrocas
     } = await supabase
       .from("trocas")
-      .delete()
-      .eq(
-        "compraid",
-        compra.id
-      )
+      .insert(trocas)
 
-    /*
-     * Se a tabela de trocas não
-     * existir, continuamos.
-     *
-     * Outros erros são informados.
-     */
-
-    if (
-      erroTrocas &&
-      !erroTrocas.message
-        .toLowerCase()
-        .includes("relation")
-    ) {
+    if (erroTrocas) {
       alert(
-        "Erro ao excluir os cupons relacionados: " +
+        "Compra salva, mas ocorreu um erro ao registrar os cupons: " +
           erroTrocas.message
       )
-
-      setExcluindo(null)
-
-      return
     }
+  }
+}
 
-    /*
-     * =========================
-     * EXCLUIR VENDA
-     * =========================
-     */
+alert(
+  "Compra registrada com sucesso!"
+)
 
-    const {
-      error: erroCompra
-    } = await supabase
-      .from("compras")
-      .delete()
-      .eq(
-        "id",
-        compra.id
-      )
+fecharModalCompra()
 
-    if (erroCompra) {
-      alert(
-        "Erro ao excluir venda: " +
-          erroCompra.message
-      )
+await fetchClientes()
+await fetchCompras()
 
-      setExcluindo(null)
 
-      return
+}
+
+/*
+
+* =========================
+* REGISTRAR RECEITA
+* =========================
+  */
+
+async function registrarReceita() {
+if (valorReceita <= 0) {
+alert(
+"Digite um valor válido para a receita."
+)
+return
+}
+
+
+if (
+  descricaoReceita.trim() === ""
+) {
+  alert(
+    "Digite uma descrição para a receita."
+  )
+  return
+}
+
+const {
+  error
+} = await supabase
+  .from("compras")
+  .insert([
+    {
+      clienteid:
+        null,
+
+      cliente:
+        descricaoReceita.trim(),
+
+      cpf:
+        "",
+
+      valor:
+        valorReceita,
+
+      pagamento:
+        "Receita",
+
+      parcelas:
+        1,
+
+      pontosgerados:
+        0,
+
+      cupomusado:
+        0,
+
+      criadoem:
+        new Date().toISOString(),
+
+      status:
+        "CONCLUIDA"
     }
+  ])
 
-    /*
-     * =========================
-     * ESTORNAR PONTOS
-     * =========================
-     */
+if (error) {
+  alert(
+    "Erro ao cadastrar receita: " +
+      error.message
+  )
+  return
+}
 
-    if (clienteAtual) {
-      const {
-        error: erroPontos
-      } = await supabase
-        .from("clientes")
-        .update({
-          pontos:
-            novosPontos
-        })
-        .eq(
-          "id",
-          clienteAtual.id
-        )
+alert(
+  "Receita cadastrada com sucesso!"
+)
 
-      if (erroPontos) {
-        alert(
-          "A venda foi excluída, mas ocorreu um erro ao estornar os pontos: " +
-            erroPontos.message
-        )
+setModalReceita(false)
 
-        setExcluindo(null)
+setValorReceita(0)
 
-        await fetchClientes()
-        await fetchCompras()
+setDescricaoReceita("")
 
-        return
-      }
-    }
+await fetchCompras()
 
+
+}
+
+/*
+
+* =========================
+* FECHAR MODAL
+* =========================
+  */
+
+function fecharModalCompra() {
+setModal(false)
+
+
+setClienteSel(null)
+
+setValor(0)
+
+setPagamento("Pix")
+
+setParcelas(1)
+
+setUsarCupom(false)
+
+setQuantidadeCupons(0)
+
+setBuscaCliente("")
+
+
+}
+
+/*
+
+* =========================
+* CANCELAR COMPRA
+* =========================
+  */
+
+async function excluirCompra(
+compra: Compra
+) {
+const ehReceita =
+compra.pagamento ===
+"Receita"
+
+
+if (compra.status === "CANCELADA") {
+  alert("Esta operação já foi cancelada.")
+  return
+}
+
+const confirmacao =
+  window.confirm(
+    ehReceita
+      ? `Tem certeza que deseja excluir esta receita?\n\nDescrição: ${
+          compra.cliente ||
+          "Sem descrição"
+        }\nValor: ${moeda(
+          compra.valor
+        )}\nData: ${new Date(
+          compra.criadoem
+        ).toLocaleDateString(
+          "pt-BR"
+        )}`
+      : `Tem certeza que deseja cancelar esta venda?\n\nCliente: ${
+          compra.cliente ||
+          "Sem cliente"
+        }\nValor: ${moeda(
+          compra.valor
+        )}\nData: ${new Date(
+          compra.criadoem
+        ).toLocaleDateString(
+          "pt-BR"
+        )}\n\nOs pontos gerados serão estornados e os cupons utilizados serão devolvidos.\n\nA venda permanecerá no histórico como cancelada.`
+  )
+
+if (!confirmacao) {
+  return
+}
+
+setExcluindo(compra.id)
+
+/*
+ * =========================
+ * RECEITA
+ * =========================
+ */
+
+if (ehReceita) {
+  const {
+    error
+  } = await supabase
+    .from("compras")
+    .delete()
+    .eq(
+      "id",
+      compra.id
+    )
+
+  if (error) {
     alert(
-      "Venda excluída com sucesso!"
+      "Erro ao excluir receita: " +
+        error.message
+    )
+
+    setExcluindo(null)
+
+    return
+  }
+
+  alert(
+    "Receita excluída com sucesso!"
+  )
+
+  setExcluindo(null)
+
+  await fetchCompras()
+
+  return
+}
+
+/*
+ * =========================
+ * ENCONTRAR CLIENTE
+ * =========================
+ */
+
+let clienteAtual =
+  compra.clienteid
+    ? clientes.find(
+        c =>
+          c.id ===
+          compra.clienteid
+      )
+    : null
+
+if (
+  compra.clienteid &&
+  !clienteAtual
+) {
+  const {
+    data
+  } = await supabase
+    .from("clientes")
+    .select(
+      "id,nome,cpf,pontos"
+    )
+    .eq(
+      "id",
+      compra.clienteid
+    )
+    .single()
+
+  if (data) {
+    clienteAtual = {
+      id: String(data.id),
+      nome: data.nome || "",
+      cpf: data.cpf || "",
+      pontos:
+        Number(
+          data.pontos || 0
+        )
+    }
+  }
+}
+
+/*
+ * =========================
+ * CALCULAR ESTORNO
+ * =========================
+ */
+
+let novosPontos =
+  clienteAtual
+    ? clienteAtual.pontos
+    : 0
+
+if (clienteAtual) {
+  const cuponsUsados =
+    compra.cupomusado > 0
+      ? Math.ceil(
+          compra.cupomusado /
+            VALOR_CUPOM
+        )
+      : 0
+
+  const pontosADevolver =
+    cuponsUsados *
+    PONTOS_POR_CUPOM
+
+  novosPontos =
+    clienteAtual.pontos -
+    compra.pontosgerados +
+    pontosADevolver
+
+  if (novosPontos < 0) {
+    alert(
+      "Não foi possível cancelar a venda porque os pontos atuais do cliente não permitem desfazer essa operação."
+    )
+
+    setExcluindo(null)
+
+    return
+  }
+}
+
+/*
+ * =========================
+ * CANCELAR VENDA NO BANCO
+ * =========================
+ *
+ * A função cancelarVenda:
+ * - devolve os produtos ao estoque
+ * - registra movimentações
+ * - mantém a venda
+ * - altera o status para CANCELADA
+ */
+
+const {
+  error: erroCancelamento
+} = await supabase.rpc(
+  "cancelarVenda",
+  {
+    p_compraid:
+      compra.id
+  }
+)
+
+if (erroCancelamento) {
+  alert(
+    "Erro ao cancelar venda: " +
+      erroCancelamento.message
+  )
+
+  setExcluindo(null)
+
+  return
+}
+
+/*
+ * =========================
+ * ESTORNAR PONTOS
+ * =========================
+ */
+
+if (clienteAtual) {
+  const {
+    error: erroPontos
+  } = await supabase
+    .from("clientes")
+    .update({
+      pontos:
+        novosPontos
+    })
+    .eq(
+      "id",
+      clienteAtual.id
+    )
+
+  if (erroPontos) {
+    alert(
+      "A venda foi cancelada, mas ocorreu um erro ao estornar os pontos: " +
+        erroPontos.message
     )
 
     setExcluindo(null)
 
     await fetchClientes()
     await fetchCompras()
+
+    return
   }
+}
 
-  /*
-   * =========================
-   * FILTROS
-   * =========================
-   */
+alert(
+  "Venda cancelada com sucesso!"
+)
 
-  const comprasFiltradas =
-    useMemo(() => {
-      return compras.filter(
-        compra => {
-          const busca =
-            buscaVenda
-              .toLowerCase()
-              .trim()
+setExcluindo(null)
 
-          const nomeMatch =
-            compra.cliente
-              .toLowerCase()
-              .includes(busca) ||
-            compra.cpf
-              .toLowerCase()
-              .includes(busca)
+await fetchClientes()
+await fetchCompras()
 
-          const data =
-            new Date(
-              compra.criadoem
-            )
 
-          const mesCompra =
-            String(
-              data.getMonth() + 1
-            ).padStart(
-              2,
-              "0"
-            )
+}
 
-          const mesMatch =
-            filtroMes ===
-              "todos" ||
-            filtroMes ===
-              mesCompra
+/*
 
-          const pagamentoMatch =
-            filtroPagamento ===
-              "todos" ||
-            compra.pagamento
-              .includes(
-                filtroPagamento
-              )
+* =========================
+* FILTROS
+* =========================
+  */
 
-          return (
-            nomeMatch &&
-            mesMatch &&
-            pagamentoMatch
-          )
-        }
-      )
-    }, [
-      compras,
-      buscaVenda,
-      filtroMes,
-      filtroPagamento
-    ])
+const comprasFiltradas =
+useMemo(() => {
+return compras.filter(
+compra => {
+/*
+* Canceladas não aparecem
+* no histórico operacional.
+*/
 
-  /*
-   * =========================
-   * FATURAMENTO POR MÊS
-   * =========================
-   */
 
-  const vendasPorMes =
-    useMemo(() => {
-      const mapa: Record<
-        string,
-        number
-      > = {}
-
-      compras.forEach(
-        compra => {
-          const data =
-            new Date(
-              compra.criadoem
-            )
-
-          const mes =
-            String(
-              data.getMonth() + 1
-            ).padStart(
-              2,
-              "0"
-            )
-
-          if (
-            filtroMes !==
-              "todos" &&
-            mes !==
-              filtroMes
-          ) {
-            return
-          }
-
-          const chave =
-            `${mes}/${data.getFullYear()}`
-
-          mapa[chave] =
-            (mapa[chave] || 0) +
-            compra.valor
-        }
-      )
-
-      return Object.entries(
-        mapa
-      ).sort(
-        (a, b) =>
-          b[0].localeCompare(
-            a[0]
-          )
-      )
-    }, [
-      compras,
-      filtroMes
-    ])
-
-  /*
-   * =========================
-   * CLIENTES INATIVOS
-   * =========================
-   */
-
-  const hoje = new Date()
-
-  const clientesInativos =
-    clientes.filter(c => {
-      const comprasCliente =
-        compras
-          .filter(
-            x =>
-              x.clienteid ===
-              c.id
-          )
-          .sort(
-            (a, b) =>
-              new Date(
-                b.criadoem
-              ).getTime() -
-              new Date(
-                a.criadoem
-              ).getTime()
-          )
-
-      const ultima =
-        comprasCliente[0]
-
-      if (!ultima) {
-        return true
+      if (
+        compra.status ===
+        "CANCELADA"
+      ) {
+        return false
       }
 
-      const dias =
-        (hoje.getTime() -
-          new Date(
-            ultima.criadoem
-          ).getTime()) /
-        86400000
+      const busca =
+        buscaVenda
+          .toLowerCase()
+          .trim()
 
-      return dias > 30
-    })
+      const nomeMatch =
+        compra.cliente
+          .toLowerCase()
+          .includes(busca) ||
+        compra.cpf
+          .toLowerCase()
+          .includes(busca)
 
-  function getUltimaCompra(
-    clienteId: string
-  ) {
-    return compras
-      .filter(
-        c =>
-          c.clienteid ===
-          clienteId
+      const data =
+        new Date(
+          compra.criadoem
+        )
+
+      const mesCompra =
+        String(
+          data.getMonth() + 1
+        ).padStart(
+          2,
+          "0"
+        )
+
+      const mesMatch =
+        filtroMes ===
+          "todos" ||
+        filtroMes ===
+          mesCompra
+
+      const pagamentoMatch =
+        filtroPagamento ===
+          "todos" ||
+        compra.pagamento
+          .includes(
+            filtroPagamento
+          )
+
+      return (
+        nomeMatch &&
+        mesMatch &&
+        pagamentoMatch
       )
-      .sort(
-        (a, b) =>
-          new Date(
-            b.criadoem
-          ).getTime() -
-          new Date(
-            a.criadoem
-          ).getTime()
-      )[0]
+    }
+  )
+}, [
+  compras,
+  buscaVenda,
+  filtroMes,
+  filtroPagamento
+])
+
+
+/*
+
+* =========================
+* FATURAMENTO POR MÊS
+* =========================
+  */
+
+const vendasPorMes =
+useMemo(() => {
+const mapa: Record<
+string,
+number
+> = {}
+
+
+  compras.forEach(
+    compra => {
+      if (
+        compra.status ===
+        "CANCELADA"
+      ) {
+        return
+      }
+
+      const data =
+        new Date(
+          compra.criadoem
+        )
+
+      const mes =
+        String(
+          data.getMonth() + 1
+        ).padStart(
+          2,
+          "0"
+        )
+
+      if (
+        filtroMes !==
+          "todos" &&
+        mes !==
+          filtroMes
+      ) {
+        return
+      }
+
+      const chave =
+        `${mes}/${data.getFullYear()}`
+
+      mapa[chave] =
+        (mapa[chave] || 0) +
+        compra.valor
+    }
+  )
+
+  return Object.entries(
+    mapa
+  ).sort(
+    (a, b) =>
+      b[0].localeCompare(
+        a[0]
+      )
+  )
+}, [
+  compras,
+  filtroMes
+])
+
+
+/*
+
+* =========================
+* CLIENTES INATIVOS
+* =========================
+  */
+
+const hoje = new Date()
+
+const clientesInativos =
+clientes.filter(c => {
+const comprasCliente =
+compras
+.filter(
+x =>
+x.clienteid ===
+c.id &&
+x.status !==
+"CANCELADA" &&
+x.pagamento !==
+"Receita"
+)
+.sort(
+(a, b) =>
+new Date(
+b.criadoem
+).getTime() -
+new Date(
+a.criadoem
+).getTime()
+)
+
+
+  const ultima =
+    comprasCliente[0]
+
+  if (!ultima) {
+    return true
   }
 
-  /*
-   * =========================
-   * RENDER
-   * =========================
-   */
+  const dias =
+    (hoje.getTime() -
+      new Date(
+        ultima.criadoem
+      ).getTime()) /
+    86400000
 
-  return (
-    <div className="container" style={container}>
-      <style>
-        {`
-          @media (max-width: 900px) {
-            .compras-filtros {
-              grid-template-columns: 1fr 1fr !important;
-            }
+  return dias > 30
+})
 
-            .compras-filtros input {
-              grid-column: 1 / -1;
-            }
 
-            .compra-card {
-              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
-              gap: 14px !important;
-              position: relative;
-            }
+function getUltimaCompra(
+clienteId: string
+) {
+return compras
+.filter(
+c =>
+c.clienteid ===
+clienteId &&
+c.status !==
+"CANCELADA" &&
+c.pagamento !==
+"Receita"
+)
+.sort(
+(a, b) =>
+new Date(
+b.criadoem
+).getTime() -
+new Date(
+a.criadoem
+).getTime()
+)[0]
+}
 
-            .compra-card > div:first-child {
-              grid-column: 1 / -1;
-              padding-right: 70px;
-            }
+/*
 
-            .compra-card > div:nth-child(5) {
-              position: absolute;
-              top: 14px;
-              right: 14px;
-            }
-          }
+* =========================
+* RENDER
+* =========================
+  */
 
-          @media (max-width: 600px) {
-            .compras-container {
-              padding: 14px !important;
-            }
+return ( <div
+   className="container"
+   style={container}
+ > <style>
+{
+* {
+box-sizing: border-box;
+}
 
-            .header {
-              align-items: flex-start !important;
-              gap: 12px !important;
-            }
 
-            .header-buttons {
-              width: 100%;
-              display: grid !important;
-              grid-template-columns: 1fr 1fr;
-              gap: 8px !important;
-            }
+      .container {
+        width: 100%;
+      }
 
-            .header-buttons button {
-              width: 100%;
-              min-width: 0;
-            }
+      .dash {
+        width: 100%;
+      }
 
-            .dashGrid {
-              grid-template-columns: 1fr 1fr !important;
-            }
+      .dashLabel {
+        display: block;
+      }
 
-            .dashGrid > :first-child {
-              grid-column: 1 / -1;
-            }
+      .dashValue {
+        display: block;
+      }
 
-            .compras-filtros {
-              grid-template-columns: 1fr !important;
-            }
+      .mesGrid {
+        width: 100%;
+      }
 
-            .compras-filtros input {
-              grid-column: auto;
-            }
+      .section {
+        width: 100%;
+      }
 
-            .compra-card {
-              grid-template-columns: 1fr 1fr !important;
-              padding: 15px !important;
-              gap: 13px !important;
-            }
+      .compras-filtros {
+        width: 100%;
+      }
 
-            .compra-card > div:first-child {
-              padding-right: 58px;
-            }
+      .compra-card {
+        width: 100%;
+      }
 
-            .compra-card > div:nth-child(5) {
-              top: 12px;
-              right: 12px;
-            }
+      .compra-card > div {
+        min-width: 0;
+      }
 
-            .compra-card > div:nth-child(2),
-            .compra-card > div:nth-child(3),
-            .compra-card > div:nth-child(4) {
-              background: #fff;
-              border: 1px solid #eeeeee;
-              border-radius: 10px;
-              padding: 10px;
-            }
+      .listaCompras {
+        width: 100%;
+      }
 
-            .deleteBtn {
-              padding: 7px 9px !important;
-              font-size: 11px !important;
-            }
+      .modalCard {
+        width: 100%;
+      }
 
-            .section {
-              padding: 15px !important;
-            }
+      .input,
+      .compras-filtros input,
+      .compras-filtros select {
+        font-family: inherit;
+      }
 
-            .mesGrid {
-              grid-template-columns: 1fr 1fr !important;
-            }
+      button,
+      input,
+      select {
+        -webkit-tap-highlight-color: transparent;
+      }
 
-            .mesValor {
-              font-size: 13px;
-            }
+      button {
+        touch-action: manipulation;
+      }
 
-            .modalCard {
-              width: calc(100vw - 20px) !important;
-              max-width: none !important;
-              max-height: calc(100vh - 20px) !important;
-              padding: 16px !important;
-              border-radius: 14px !important;
-            }
+      @media (max-width: 900px) {
+        .container {
+          padding: 24px !important;
+        }
 
-            .clienteGrid {
-              grid-template-columns: 1fr 1fr !important;
-              max-height: 180px !important;
-            }
+        .compras-filtros {
+          grid-template-columns: 1fr 1fr !important;
+        }
 
-            .clienteCard {
-              padding: 10px !important;
-            }
+        .compras-filtros input {
+          grid-column: 1 / -1 !important;
+        }
 
-            .clienteSelecionado {
-              align-items: flex-start !important;
-              flex-direction: column;
-              gap: 5px !important;
-            }
+        .compra-card {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+      }
 
-            .cupomBox {
-              align-items: flex-start !important;
-              flex-direction: column;
-            }
+      @media (max-width: 600px) {
+        /*
+         * =========================
+         * CONTAINER
+         * =========================
+         */
 
-            .cupomLabel {
-              width: 100%;
-              justify-content: space-between;
-              padding-top: 5px;
-            }
+        .container {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          padding: 10px !important;
+          overflow-x: hidden !important;
+        }
 
-            .resumo {
-              font-size: 12px !important;
-              line-height: 1.7 !important;
-            }
-          }
+        /*
+         * =========================
+         * AVISO
+         * =========================
+         */
 
-          @media (max-width: 380px) {
-            .container {
-              padding: 12px !important;
-            }
+        .notifBar {
+          width: 100% !important;
+          margin-bottom: 10px !important;
+          padding: 11px 12px !important;
+          border-radius: 11px !important;
+          font-size: 12px !important;
+        }
 
-            .title {
-              font-size: 24px !important;
-            }
+        /*
+         * =========================
+         * CABEÇALHO
+         * =========================
+         */
 
-            .dashGrid {
-              grid-template-columns: 1fr !important;
-            }
+        .header {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          gap: 10px !important;
+          margin-bottom: 12px !important;
+        }
 
-            .dashGrid > :first-child {
-              grid-column: auto;
-            }
+        .title {
+          font-size: 25px !important;
+          line-height: 1.15 !important;
+        }
 
-            .mesGrid,
-            .clienteGrid {
-              grid-template-columns: 1fr !important;
-            }
+        .header-buttons {
+          width: 100% !important;
+          display: grid !important;
+          grid-template-columns: 1fr 1fr !important;
+          gap: 7px !important;
+        }
 
-            .compra-card {
-              grid-template-columns: 1fr !important;
-            }
+        .header-buttons button {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 11px 6px !important;
+          font-size: 12px !important;
+        }
 
-            .compra-card > div:first-child {
-              grid-column: auto;
-            }
+        /*
+         * =========================
+         * DASHBOARD
+         * =========================
+         */
 
-            .compra-card > div:nth-child(2),
-            .compra-card > div:nth-child(3),
-            .compra-card > div:nth-child(4) {
-              grid-column: 1 / -1;
-            }
-          }
-        `}
-      </style>
+        .dashGrid {
+          width: 100% !important;
+          display: grid !important;
+          grid-template-columns: 1fr 1fr !important;
+          gap: 7px !important;
+          margin-bottom: 10px !important;
+        }
 
-      {/* =========================
-          CLIENTES INATIVOS
-      ========================= */}
+        .dashGrid > div:first-child {
+          grid-column: 1 / -1 !important;
+        }
 
-      {clientesInativos.length > 0 && (
-        <div style={notifBar}>
-          <span>
-            🔔{" "}
-            {clientesInativos.length}{" "}
-            clientes inativos
-          </span>
+        .dash {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 14px !important;
+          border-radius: 12px !important;
+          min-height: 78px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: center !important;
+        }
 
-          <button
-            style={notifBtn}
-            onClick={() =>
-              setModalInativos(true)
-            }
-          >
-            Ver
-          </button>
+        .dashLabel {
+          font-size: 11px !important;
+          margin-bottom: 5px !important;
+          color: #777 !important;
+        }
+
+        .dashValue {
+          font-size: 20px !important;
+          line-height: 1.15 !important;
+          word-break: break-word !important;
+        }
+
+        /*
+         * =========================
+         * SEÇÕES
+         * =========================
+         */
+
+        .section {
+          width: 100% !important;
+          padding: 14px !important;
+          margin-bottom: 10px !important;
+          border-radius: 13px !important;
+        }
+
+        .section h3 {
+          font-size: 16px !important;
+          margin-top: 0 !important;
+          margin-bottom: 12px !important;
+        }
+
+        /*
+         * =========================
+         * FATURAMENTO POR MÊS
+         * =========================
+         */
+
+        .mesGrid {
+          display: flex !important;
+          width: 100% !important;
+          gap: 7px !important;
+          overflow-x: auto !important;
+          padding-bottom: 4px !important;
+          scrollbar-width: thin;
+        }
+
+        .mesCard {
+          flex: 0 0 132px !important;
+          width: 132px !important;
+          min-width: 132px !important;
+          padding: 12px !important;
+          border-radius: 10px !important;
+        }
+
+        .mesCard strong {
+          font-size: 11px !important;
+        }
+
+        .mesValor {
+          font-size: 12px !important;
+          margin-top: 5px !important;
+          white-space: nowrap !important;
+        }
+
+        /*
+         * =========================
+         * FILTROS
+         * =========================
+         */
+
+        .compras-filtros {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 7px !important;
+          margin-bottom: 10px !important;
+        }
+
+        .compras-filtros input,
+        .compras-filtros select {
+          width: 100% !important;
+          min-width: 0 !important;
+          height: 43px !important;
+          margin: 0 !important;
+          padding: 10px 11px !important;
+          font-size: 13px !important;
+          border-radius: 9px !important;
+        }
+
+        /*
+         * =========================
+         * HISTÓRICO
+         * =========================
+         */
+
+        .listaCompras {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 8px !important;
+        }
+
+        .compra-card {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: stretch !important;
+          gap: 0 !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          border-radius: 13px !important;
+          background: #f9f9f9 !important;
+          overflow: hidden !important;
+          position: relative !important;
+        }
+
+        /*
+         * CLIENTE
+         */
+
+        .compra-card > div:first-child {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 15px 68px 13px 15px !important;
+          border-bottom: 1px solid #eeeeee !important;
+          background: #f9f9f9 !important;
+        }
+
+        .compra-card > div:first-child strong {
+          display: block !important;
+          max-width: 100% !important;
+          font-size: 15px !important;
+          line-height: 1.3 !important;
+          word-break: break-word !important;
+        }
+
+        .compra-card > div:first-child .muted {
+          margin-top: 4px !important;
+        }
+
+        /*
+         * VALOR
+         */
+
+        .compra-card > div:nth-child(2) {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 12px 15px !important;
+          border-bottom: 1px solid #eeeeee !important;
+          background: #f9f9f9 !important;
+        }
+
+        .compra-card > div:nth-child(2) strong {
+          font-size: 15px !important;
+        }
+
+        /*
+         * PAGAMENTO
+         */
+
+        .compra-card > div:nth-child(3) {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 12px 15px !important;
+          border-bottom: 1px solid #eeeeee !important;
+          background: #f9f9f9 !important;
+        }
+
+        /*
+         * FIDELIDADE
+         */
+
+        .compra-card > div:nth-child(4) {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 12px 15px !important;
+          background: #f9f9f9 !important;
+        }
+
+        /*
+         * BOTÃO
+         */
+
+        .compra-card > div:nth-child(5) {
+          position: absolute !important;
+          top: 11px !important;
+          right: 11px !important;
+          width: auto !important;
+          min-width: 0 !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: transparent !important;
+          border: none !important;
+        }
+
+        .deleteBtn {
+          padding: 6px 8px !important;
+          border-radius: 7px !important;
+          font-size: 10px !important;
+          line-height: 1 !important;
+        }
+
+        /*
+         * =========================
+         * MODAIS
+         * =========================
+         */
+
+        .modalCard {
+          width: calc(100vw - 20px) !important;
+          max-width: none !important;
+          max-height: calc(100vh - 20px) !important;
+          padding: 15px !important;
+          border-radius: 14px !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+        }
+
+        .modalHeader {
+          width: 100% !important;
+          margin-bottom: 9px !important;
+        }
+
+        .modalCard h2 {
+          font-size: 20px !important;
+        }
+
+        .modalCard h3 {
+          font-size: 18px !important;
+        }
+
+        .closeBtn {
+          width: 32px !important;
+          height: 32px !important;
+          flex-shrink: 0 !important;
+        }
+
+        /*
+         * CLIENTES NO MODAL
+         */
+
+        .clienteGrid {
+          width: 100% !important;
+          display: grid !important;
+          grid-template-columns: 1fr !important;
+          gap: 6px !important;
+          max-height: 180px !important;
+          overflow-y: auto !important;
+        }
+
+        .clienteCard {
+          width: 100% !important;
+          min-width: 0 !important;
+          padding: 11px !important;
+          border-radius: 9px !important;
+        }
+
+        .clienteCard strong {
+          display: block !important;
+          font-size: 13px !important;
+          line-height: 1.3 !important;
+          word-break: break-word !important;
+        }
+
+        /*
+         * CLIENTE SELECIONADO
+         */
+
+        .clienteSelecionado {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          gap: 4px !important;
+          padding: 11px !important;
+          margin-top: 10px !important;
+        }
+
+        /*
+         * CUPOM
+         */
+
+        .cupomBox {
+          width: 100% !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          gap: 10px !important;
+          padding: 12px !important;
+          margin-top: 10px !important;
+        }
+
+        .cupomLabel {
+          width: 100% !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+        }
+
+        /*
+         * CAMPOS
+         */
+
+        .fieldLabel {
+          margin-top: 11px !important;
+          margin-bottom: 3px !important;
+          font-size: 11px !important;
+        }
+
+        .input {
+          width: 100% !important;
+          height: 43px !important;
+          margin-top: 5px !important;
+          padding: 10px !important;
+          font-size: 13px !important;
+        }
+
+        /*
+         * RESUMO
+         */
+
+        .resumo {
+          width: 100% !important;
+          padding: 11px !important;
+          margin-top: 10px !important;
+          font-size: 12px !important;
+          line-height: 1.75 !important;
+        }
+
+        /*
+         * BOTÃO PRINCIPAL
+         */
+
+        .btnPrimary {
+          width: 100% !important;
+          min-height: 44px !important;
+          padding: 12px !important;
+          margin-top: 10px !important;
+          font-size: 13px !important;
+        }
+      }
+
+      @media (max-width: 380px) {
+        .container {
+          padding: 8px !important;
+        }
+
+        .title {
+          font-size: 23px !important;
+        }
+
+        .header-buttons {
+          grid-template-columns: 1fr !important;
+        }
+
+        .dashGrid {
+          grid-template-columns: 1fr !important;
+        }
+
+        .dashGrid > div:first-child {
+          grid-column: auto !important;
+        }
+
+        .dash {
+          min-height: 70px !important;
+        }
+
+        .section {
+          padding: 12px !important;
+        }
+
+        .mesCard {
+          flex-basis: 125px !important;
+          min-width: 125px !important;
+          width: 125px !important;
+        }
+
+        .compra-card > div:first-child {
+          padding-right: 62px !important;
+        }
+      }
+    }
+  </style>
+
+  {/* =========================
+      CLIENTES INATIVOS
+  ========================= */}
+
+  {clientesInativos.length > 0 && (
+    <div
+      className="notifBar"
+      style={notifBar}
+    >
+      <span>
+        {clientesInativos.length}{" "}
+        clientes inativos
+      </span>
+
+      <button
+        style={notifBtn}
+        onClick={() =>
+          setModalInativos(true)
+        }
+      >
+        Ver
+      </button>
+    </div>
+  )}
+
+  {/* =========================
+      CABEÇALHO
+  ========================= */}
+
+  <div
+    className="header"
+    style={header}
+  >
+    <h1
+      className="title"
+      style={title}
+    >
+      Compras
+    </h1>
+
+    <div
+      className="header-buttons"
+      style={headerButtons}
+    >
+      <button
+        style={btnSecondary}
+        onClick={() =>
+          setModalReceita(true)
+        }
+      >
+        Nova receita
+      </button>
+
+      <button
+        style={btnSmall}
+        onClick={() =>
+          setModal(true)
+        }
+      >
+        Nova compra
+      </button>
+    </div>
+  </div>
+
+  {/* =========================
+      DASHBOARD
+  ========================= */}
+
+  <div
+    className="dashGrid"
+    style={dashGrid}
+  >
+    <Dash
+      className="dash-faturamento"
+      label="Faturamento"
+      value={moeda(
+        comprasFiltradas.reduce(
+          (total, compra) =>
+            total +
+            compra.valor,
+          0
+        )
+      )}
+    />
+
+    <Dash
+      label="Vendas"
+      value={
+        comprasFiltradas.length
+      }
+    />
+
+    <Dash
+      label="Clientes"
+      value={
+        new Set(
+          comprasFiltradas
+            .filter(
+              c =>
+                c.clienteid
+            )
+            .map(
+              c =>
+                c.clienteid
+            )
+        ).size
+      }
+    />
+  </div>
+
+  {/* =========================
+      FATURAMENTO POR MÊS
+  ========================= */}
+
+  <div
+    className="section"
+    style={section}
+  >
+    <h3 style={sectionTitle}>
+      Faturamento por mês
+    </h3>
+
+    <div
+      className="mesGrid"
+      style={mesGrid}
+    >
+      {vendasPorMes.length ===
+        0 && (
+        <div
+          style={emptyText}
+        >
+          Nenhuma venda
+          encontrada.
         </div>
       )}
 
-      {/* =========================
-          CABEÇALHO
-      ========================= */}
-
-      <div className="header" style={header}>
-        <h1 className="title" style={title}>
-          Compras
-        </h1>
-
-        <div
-          className="header-buttons"
-          style={headerButtons}
-        >
-          <button
-            style={btnSecondary}
-            onClick={() =>
-              setModalReceita(true)
-            }
+      {vendasPorMes.map(
+        ([mes, total]) => (
+          <div
+            key={mes}
+            className="mesCard"
+            style={mesCard}
           >
-            Nova receita
-          </button>
+            <strong>
+              {mes}
+            </strong>
 
-          <button
-            style={btnSmall}
-            onClick={() =>
-              setModal(true)
-            }
-          >
-            Nova compra
-          </button>
-        </div>
-      </div>
-
-      {/* =========================
-          DASHBOARD
-      ========================= */}
-
-      <div className="dashGrid" style={dashGrid}>
-        <Dash
-          className="dash-faturamento"
-          label="Faturamento"
-          value={moeda(
-            comprasFiltradas.reduce(
-              (total, compra) =>
-                total +
-                compra.valor,
-              0
-            )
-          )}
-        />
-
-        <Dash
-          label="Vendas"
-          value={
-            comprasFiltradas.length
-          }
-        />
-
-        <Dash
-          label="Clientes"
-          value={
-            new Set(
-              comprasFiltradas
-                .filter(
-                  c =>
-                    c.clienteid
-                )
-                .map(
-                  c =>
-                    c.clienteid
-                )
-            ).size
-          }
-        />
-      </div>
-
-      {/* =========================
-          FATURAMENTO POR MÊS
-      ========================= */}
-
-      <div className="section" style={section}>
-        <h3 style={sectionTitle}>
-          Faturamento por mês
-        </h3>
-
-        <div className="mesGrid" style={mesGrid}>
-          {vendasPorMes.length ===
-            0 && (
             <div
-              style={emptyText}
+              className="mesValor"
+              style={mesValor}
             >
-              Nenhuma venda
-              encontrada.
+              {moeda(
+                Number(total)
+              )}
             </div>
-          )}
+          </div>
+        )
+      )}
+    </div>
+  </div>
 
-          {vendasPorMes.map(
-            ([mes, total]) => (
-              <div
-                key={mes}
-                style={mesCard}
-              >
-                <strong>
-                  {mes}
-                </strong>
+  {/* =========================
+      FILTROS
+  ========================= */}
 
+  <div
+    className="compras-filtros"
+    style={filtrosBar}
+  >
+    <input
+      placeholder="Buscar por cliente ou CPF"
+      value={buscaVenda}
+      onChange={e =>
+        setBuscaVenda(
+          e.target.value
+        )
+      }
+      style={inputFiltro}
+    />
+
+    <select
+      value={filtroMes}
+      onChange={e =>
+        setFiltroMes(
+          e.target.value
+        )
+      }
+      style={selectFiltro}
+    >
+      <option value="todos">
+        Todos os meses
+      </option>
+
+      <option value="01">
+        Janeiro
+      </option>
+
+      <option value="02">
+        Fevereiro
+      </option>
+
+      <option value="03">
+        Março
+      </option>
+
+      <option value="04">
+        Abril
+      </option>
+
+      <option value="05">
+        Maio
+      </option>
+
+      <option value="06">
+        Junho
+      </option>
+
+      <option value="07">
+        Julho
+      </option>
+
+      <option value="08">
+        Agosto
+      </option>
+
+      <option value="09">
+        Setembro
+      </option>
+
+      <option value="10">
+        Outubro
+      </option>
+
+      <option value="11">
+        Novembro
+      </option>
+
+      <option value="12">
+        Dezembro
+      </option>
+    </select>
+
+    <select
+      value={
+        filtroPagamento
+      }
+      onChange={e =>
+        setFiltroPagamento(
+          e.target.value
+        )
+      }
+      style={selectFiltro}
+    >
+      <option value="todos">
+        Todos pagamentos
+      </option>
+
+      <option value="Pix">
+        Pix
+      </option>
+
+      <option value="Dinheiro">
+        Dinheiro
+      </option>
+
+      <option value="Cartão">
+        Cartão
+      </option>
+
+      <option value="Cupom">
+        Cupom
+      </option>
+
+      <option value="Em aberto">
+        Em aberto (Fiado)
+      </option>
+
+      <option value="Receita">
+        Receita
+      </option>
+    </select>
+  </div>
+
+  {/* =========================
+      HISTÓRICO
+  ========================= */}
+
+  <div
+    className="section"
+    style={section}
+  >
+    <h3 style={sectionTitle}>
+      Histórico de vendas
+    </h3>
+
+    <div
+      className="listaCompras"
+      style={listaCompras}
+    >
+      {comprasFiltradas.length ===
+        0 && (
+        <div
+          style={emptyText}
+        >
+          Nenhuma venda
+          encontrada.
+        </div>
+      )}
+
+      {comprasFiltradas.map(
+        compra => (
+          <div
+            key={compra.id}
+            className="compra-card"
+            style={compraCard}
+          >
+            {/* CLIENTE / RECEITA */}
+
+            <div
+              style={
+                compraCliente
+              }
+            >
+              <strong>
+                {compra.pagamento ===
+                "Receita"
+                  ? "Receita"
+                  : compra.cliente ||
+                    "Sem cliente"}
+              </strong>
+
+              {compra.pagamento ===
+                "Receita" ? (
                 <div
-                  style={mesValor}
+                  style={muted}
                 >
-                  {moeda(
-                    Number(total)
-                  )}
-                </div>
-              </div>
-            )
-          )}
-        </div>
-      </div>
-
-      {/* =========================
-          FILTROS
-      ========================= */}
-
-      <div
-        className="compras-filtros"
-        style={filtrosBar}
-      >
-        <input
-          placeholder="Buscar por cliente ou CPF"
-          value={buscaVenda}
-          onChange={e =>
-            setBuscaVenda(
-              e.target.value
-            )
-          }
-          style={inputFiltro}
-        />
-
-        <select
-          value={filtroMes}
-          onChange={e =>
-            setFiltroMes(
-              e.target.value
-            )
-          }
-          style={selectFiltro}
-        >
-          <option value="todos">
-            Todos os meses
-          </option>
-
-          <option value="01">
-            Janeiro
-          </option>
-
-          <option value="02">
-            Fevereiro
-          </option>
-
-          <option value="03">
-            Março
-          </option>
-
-          <option value="04">
-            Abril
-          </option>
-
-          <option value="05">
-            Maio
-          </option>
-
-          <option value="06">
-            Junho
-          </option>
-
-          <option value="07">
-            Julho
-          </option>
-
-          <option value="08">
-            Agosto
-          </option>
-
-          <option value="09">
-            Setembro
-          </option>
-
-          <option value="10">
-            Outubro
-          </option>
-
-          <option value="11">
-            Novembro
-          </option>
-
-          <option value="12">
-            Dezembro
-          </option>
-        </select>
-
-        <select
-          value={
-            filtroPagamento
-          }
-          onChange={e =>
-            setFiltroPagamento(
-              e.target.value
-            )
-          }
-          style={selectFiltro}
-        >
-          <option value="todos">
-            Todos pagamentos
-          </option>
-
-          <option value="Pix">
-            Pix
-          </option>
-
-          <option value="Dinheiro">
-            Dinheiro
-          </option>
-
-          <option value="Cartão">
-            Cartão
-          </option>
-
-          <option value="Cupom">
-            Cupom
-          </option>
-
-          <option value="Em aberto">
-            Em aberto (Fiado)
-          </option>
-
-          <option value="Receita">
-            Receita
-          </option>
-        </select>
-      </div>
-
-      {/* =========================
-          HISTÓRICO
-      ========================= */}
-
-      <div className="section" style={section}>
-        <h3 style={sectionTitle}>
-          Histórico de vendas
-        </h3>
-
-        <div
-          style={listaCompras}
-        >
-          {comprasFiltradas.length ===
-            0 && (
-            <div
-              style={emptyText}
-            >
-              Nenhuma venda
-              encontrada.
-            </div>
-          )}
-
-          {comprasFiltradas.map(
-            compra => (
-              <div
-                key={compra.id}
-                className="compra-card"
-                style={compraCard}
-              >
-                {/* CLIENTE / RECEITA */}
-
-                <div
-                  style={
-                    compraCliente
+                  {
+                    compra.cliente
                   }
-                >
-                  <strong>
-                    {compra.pagamento ===
-                    "Receita"
-                      ? "Receita"
-                      : compra.cliente ||
-                        "Sem cliente"}
-                  </strong>
-
-                  {compra.pagamento ===
-                    "Receita" ? (
-                    <div
-                      style={muted}
-                    >
-                      {
-                        compra.cliente
-                      }
-                    </div>
-                  ) : (
-                    compra.cpf && (
-                      <div
-                        style={muted}
-                      >
-                        {
-                          compra.cpf
-                        }
-                      </div>
-                    )
-                  )}
-
-                  {compra.pagamento ===
-                    "Receita" && (
-                    <span
-                      style={
-                        receitaBadge
-                      }
-                    >
-                      Receita
-                    </span>
-                  )}
                 </div>
-
-                {/* VALOR */}
-
-                <div
-                  style={compraInfo}
-                >
-                  <span
-                    style={
-                      infoLabel
-                    }
-                  >
-                    Valor
-                  </span>
-
-                  <strong>
-                    {moeda(
-                      compra.valor
-                    )}
-                  </strong>
-
+              ) : (
+                compra.cpf && (
                   <div
                     style={muted}
                   >
-                    {new Date(
-                      compra.criadoem
-                    ).toLocaleDateString(
-                      "pt-BR"
-                    )}
-                  </div>
-                </div>
-
-                {/* PAGAMENTO */}
-
-                <div
-                  style={compraInfo}
-                >
-                  <span
-                    style={
-                      infoLabel
+                    {
+                      compra.cpf
                     }
-                  >
-                    Pagamento
-                  </span>
-
-                  <div>
-                    {compra.pagamento ===
-                    "Em aberto"
-                      ? "Em aberto (Fiado)"
-                      : compra.pagamento}
                   </div>
+                )
+              )}
 
-                  {compra.pagamento !==
-                    "Receita" && (
-                    <div
-                      style={muted}
-                    >
-                      {compra.parcelas}x
-                    </div>
-                  )}
-                </div>
-
-                {/* PONTOS */}
-
-                <div
-                  style={compraInfo}
-                >
-                  <span
-                    style={
-                      infoLabel
-                    }
-                  >
-                    Fidelidade
-                  </span>
-
-                  {compra.pagamento ===
-                  "Receita" ? (
-                    <div
-                      style={muted}
-                    >
-                      Sem pontos
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        style={pontos}
-                      >
-                        {compra.pontosgerados >
-                        0
-                          ? `+${compra.pontosgerados} pts`
-                          : "Sem pontos"}
-                      </div>
-
-                      {compra.cupomusado >
-                        0 && (
-                        <div
-                          style={muted}
-                        >
-                          Cupom:{" "}
-                          {moeda(
-                            compra.cupomusado
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* EXCLUIR */}
-
-                <div
+              {compra.pagamento ===
+                "Receita" && (
+                <span
                   style={
-                    deleteContainer
+                    receitaBadge
                   }
                 >
-                  <button
-                    type="button"
-                    style={
-                      deleteBtn
-                    }
-                    disabled={
-                      excluindo ===
-                      compra.id
-                    }
-                    onClick={() =>
-                      excluirCompra(
-                        compra
-                      )
-                    }
-                  >
-                    {excluindo ===
-                    compra.id
-                      ? "Excluindo..."
-                      : "Excluir"}
-                  </button>
-                </div>
-              </div>
-            )
-          )}
-        </div>
-      </div>
+                  Receita
+                </span>
+              )}
+            </div>
 
-      {/* =========================
-          MODAL NOVA COMPRA
-      ========================= */}
+            {/* VALOR */}
 
-      {modal && (
-        <div
-          style={overlay}
-          onClick={
-            fecharModalCompra
-          }
-        >
-          <div
-            style={modalCard}
-            onClick={e =>
-              e.stopPropagation()
-            }
-          >
             <div
-              style={
-                modalHeader
-              }
+              style={compraInfo}
             >
-              <h2
-                style={{
-                  margin: 0
-                }}
-              >
-                Nova compra
-              </h2>
-
-              <button
-                style={closeBtn}
-                onClick={
-                  fecharModalCompra
+              <span
+                style={
+                  infoLabel
                 }
               >
-                ×
+                Valor
+              </span>
+
+              <strong>
+                {moeda(
+                  compra.valor
+                )}
+              </strong>
+
+              <div
+                style={muted}
+              >
+                {new Date(
+                  compra.criadoem
+                ).toLocaleDateString(
+                  "pt-BR"
+                )}
+              </div>
+            </div>
+
+            {/* PAGAMENTO */}
+
+            <div
+              style={compraInfo}
+            >
+              <span
+                style={
+                  infoLabel
+                }
+              >
+                Pagamento
+              </span>
+
+              <div>
+                {compra.pagamento ===
+                "Em aberto"
+                  ? "Em aberto (Fiado)"
+                  : compra.pagamento}
+              </div>
+
+              {compra.pagamento !==
+                "Receita" && (
+                <div
+                  style={muted}
+                >
+                  {compra.parcelas}x
+                </div>
+              )}
+            </div>
+
+            {/* PONTOS */}
+
+            <div
+              style={compraInfo}
+            >
+              <span
+                style={
+                  infoLabel
+                }
+              >
+                Fidelidade
+              </span>
+
+              {compra.pagamento ===
+              "Receita" ? (
+                <div
+                  style={muted}
+                >
+                  Sem pontos
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={pontos}
+                  >
+                    {compra.pontosgerados >
+                    0
+                      ? `+${compra.pontosgerados} pts`
+                      : "Sem pontos"}
+                  </div>
+
+                  {compra.cupomusado >
+                    0 && (
+                    <div
+                      style={muted}
+                    >
+                      Cupom:{" "}
+                      {moeda(
+                        compra.cupomusado
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* CANCELAR */}
+
+            <div
+              style={
+                deleteContainer
+              }
+            >
+              <button
+                type="button"
+                className="deleteBtn"
+                style={
+                  deleteBtn
+                }
+                disabled={
+                  excluindo ===
+                  compra.id
+                }
+                onClick={() =>
+                  excluirCompra(
+                    compra
+                  )
+                }
+              >
+                {excluindo ===
+                compra.id
+                  ? "Cancelando..."
+                  : "Cancelar"}
               </button>
             </div>
-
-            {/* BUSCAR CLIENTE */}
-
-            <input
-              placeholder="Buscar cliente"
-              value={
-                buscaCliente
-              }
-              onChange={e =>
-                setBuscaCliente(
-                  e.target.value
-                )
-              }
-              style={input}
-            />
-
-            <div
-              style={
-                clienteGrid
-              }
-            >
-              {clientesFiltrados.map(
-                c => (
-                  <div
-                    key={c.id}
-                    style={{
-                      ...clienteCard,
-                      border:
-                        clienteSel?.id ===
-                        c.id
-                          ? "2px solid #d4af37"
-                          : "1px solid #eee"
-                    }}
-                    onClick={() =>
-                      setClienteSel(
-                        c
-                      )
-                    }
-                  >
-                    <strong>
-                      {c.nome}
-                    </strong>
-
-                    <div
-                      style={
-                        muted
-                      }
-                    >
-                      {c.pontos}{" "}
-                      pontos
-                    </div>
-                  </div>
-                )
-              )}
-
-              {clientesFiltrados.length ===
-                0 && (
-                <div
-                  style={
-                    emptyText
-                  }
-                >
-                  Nenhum cliente
-                  encontrado.
-                </div>
-              )}
-            </div>
-
-            {/* CLIENTE SELECIONADO */}
-
-            {clienteSel && (
-              <>
-                <div
-                  style={
-                    clienteSelecionado
-                  }
-                >
-                  <strong>
-                    {
-                      clienteSel.nome
-                    }
-                  </strong>
-
-                  <span
-                    style={
-                      clientePontos
-                    }
-                  >
-                    {
-                      clienteSel.pontos
-                    }{" "}
-                    pontos
-                  </span>
-                </div>
-
-                {/* CUPONS */}
-
-                <div
-                  style={
-                    cupomBox
-                  }
-                >
-                  <div>
-                    <strong>
-                      Programa de
-                      fidelidade
-                    </strong>
-
-                    <div
-                      style={
-                        muted
-                      }
-                    >
-                      {
-                        cuponsDisponiveis
-                      }{" "}
-                      cupons disponíveis
-                      {" • "}
-                      crédito de{" "}
-                      {moeda(
-                        saldoCupom
-                      )}
-                    </div>
-
-                    <div
-                      style={
-                        cupomRegra
-                      }
-                    >
-                      10 pontos =
-                      R$ 60,00
-                    </div>
-                  </div>
-
-                  {cuponsDisponiveis >
-                    0 && (
-                    <label
-                      style={
-                        cupomLabel
-                      }
-                    >
-                      <span>
-                        Usar cupom
-                      </span>
-
-                      <input
-                        type="checkbox"
-                        checked={
-                          usarCupom
-                        }
-                        onChange={e => {
-                          const ativo =
-                            e.target
-                              .checked
-
-                          setUsarCupom(
-                            ativo
-                          )
-
-                          if (!ativo) {
-                            setQuantidadeCupons(
-                              0
-                            )
-                          } else if (
-                            quantidadeCupons ===
-                            0
-                          ) {
-                            setQuantidadeCupons(
-                              1
-                            )
-                          }
-                        }}
-                      />
-                    </label>
-                  )}
-                </div>
-
-                {/* QUANTIDADE DE CUPONS */}
-
-                {usarCupom &&
-                  cuponsDisponiveis >
-                    0 && (
-                    <div
-                      style={
-                        cupomQuantidadeBox
-                      }
-                    >
-                      <label
-                        style={
-                          fieldLabel
-                        }
-                      >
-                        Quantidade de
-                        cupons
-                      </label>
-
-                      <select
-                        style={input}
-                        value={
-                          quantidadeCupons
-                        }
-                        onChange={e =>
-                          setQuantidadeCupons(
-                            Number(
-                              e.target
-                                .value
-                            )
-                          )
-                        }
-                      >
-                        {Array.from(
-                          {
-                            length:
-                              cuponsDisponiveis
-                          },
-                          (
-                            _,
-                            index
-                          ) => {
-                            const quantidade =
-                              index +
-                              1
-
-                            return (
-                              <option
-                                key={
-                                  quantidade
-                                }
-                                value={
-                                  quantidade
-                                }
-                              >
-                                {
-                                  quantidade
-                                }{" "}
-                                {quantidade ===
-                                1
-                                  ? "cupom"
-                                  : "cupons"}{" "}
-                                —{" "}
-                                {moeda(
-                                  quantidade *
-                                    VALOR_CUPOM
-                                )}
-                              </option>
-                            )
-                          }
-                        )}
-                      </select>
-                    </div>
-                  )}
-
-                {/* VALOR */}
-
-                <label
-                  style={
-                    fieldLabel
-                  }
-                >
-                  Valor da compra
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="R$ 0,00"
-                  style={input}
-                  value={
-                    valor || ""
-                  }
-                  onChange={e =>
-                    setValor(
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  }
-                />
-
-                {/* PAGAMENTO */}
-
-                <label
-                  style={
-                    fieldLabel
-                  }
-                >
-                  Forma de pagamento
-                </label>
-
-                <select
-                  style={input}
-                  value={
-                    pagamento
-                  }
-                  onChange={e =>
-                    setPagamento(
-                      e.target.value
-                    )
-                  }
-                >
-                  <option value="Pix">
-                    Pix
-                  </option>
-
-                  <option value="Dinheiro">
-                    Dinheiro
-                  </option>
-
-                  <option value="Cartão">
-                    Cartão
-                  </option>
-
-                  <option value="Em aberto">
-                    Em aberto (Fiado)
-                  </option>
-                </select>
-
-                {/* PARCELAS */}
-
-                {pagamento ===
-                  "Cartão" && (
-                  <>
-                    <label
-                      style={
-                        fieldLabel
-                      }
-                    >
-                      Parcelas
-                    </label>
-
-                    <select
-                      style={input}
-                      value={
-                        parcelas
-                      }
-                      onChange={e =>
-                        setParcelas(
-                          Number(
-                            e.target
-                              .value
-                          )
-                        )
-                      }
-                    >
-                      <option
-                        value={1}
-                      >
-                        1x
-                      </option>
-
-                      <option
-                        value={2}
-                      >
-                        2x
-                      </option>
-
-                      <option
-                        value={3}
-                      >
-                        3x
-                      </option>
-
-                      <option
-                        value={4}
-                      >
-                        4x
-                      </option>
-
-                      <option
-                        value={5}
-                      >
-                        5x
-                      </option>
-                    </select>
-                  </>
-                )}
-
-                {/* RESUMO */}
-
-                <div
-                  style={
-                    resumo
-                  }
-                >
-                  <div>
-                    Valor da compra:{" "}
-                    <strong>
-                      {moeda(
-                        valor
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    Cupom usado:{" "}
-                    <strong>
-                      {moeda(
-                        valorCupom
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    Valor a pagar:{" "}
-                    <strong>
-                      {moeda(
-                        valorRestante
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    Pontos gerados:{" "}
-                    <strong>
-                      {
-                        pontosGerados
-                      }
-                    </strong>
-                  </div>
-
-                  {usarCupom && (
-                    <div>
-                      Pontos utilizados:{" "}
-                      <strong>
-                        {
-                          pontosUsados
-                        }
-                      </strong>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  style={
-                    btnPrimary
-                  }
-                  onClick={
-                    registrarCompra
-                  }
-                >
-                  Finalizar compra
-                </button>
-              </>
-            )}
-
-            {!clienteSel && (
-              <div
-                style={
-                  escolhaCliente
-                }
-              >
-                Selecione um cliente
-                para continuar.
-              </div>
-            )}
           </div>
-        </div>
+        )
       )}
+    </div>
+  </div>
 
-      {/* =========================
-          MODAL RECEITA
-      ========================= */}
+  {/* =========================
+      MODAL NOVA COMPRA
+  ========================= */}
 
-      {modalReceita && (
+  {modal && (
+    <div
+      style={overlay}
+      onClick={
+        fecharModalCompra
+      }
+    >
+      <div
+        className="modalCard"
+        style={modalCard}
+        onClick={e =>
+          e.stopPropagation()
+        }
+      >
         <div
-          style={overlay}
-          onClick={() =>
-            setModalReceita(
-              false
-            )
+          className="modalHeader"
+          style={
+            modalHeader
           }
         >
-          <div
-            style={modalCard}
-            onClick={e =>
-              e.stopPropagation()
+          <h2
+            style={{
+              margin: 0
+            }}
+          >
+            Nova compra
+          </h2>
+
+          <button
+            className="closeBtn"
+            style={closeBtn}
+            onClick={
+              fecharModalCompra
             }
           >
-            <div
-              style={
-                modalHeader
-              }
-            >
-              <div>
-                <h2
-                  style={{
-                    margin: 0
-                  }}
-                >
-                  Nova receita
-                </h2>
+            ×
+          </button>
+        </div>
+
+        {/* BUSCAR CLIENTE */}
+
+        <input
+          placeholder="Buscar cliente"
+          value={
+            buscaCliente
+          }
+          onChange={e =>
+            setBuscaCliente(
+              e.target.value
+            )
+          }
+          style={input}
+        />
+
+        <div
+          className="clienteGrid"
+          style={
+            clienteGrid
+          }
+        >
+          {clientesFiltrados.map(
+            c => (
+              <div
+                key={c.id}
+                className="clienteCard"
+                style={{
+                  ...clienteCard,
+                  border:
+                    clienteSel?.id ===
+                    c.id
+                      ? "2px solid #d4af37"
+                      : "1px solid #eee"
+                }}
+                onClick={() =>
+                  setClienteSel(
+                    c
+                  )
+                }
+              >
+                <strong>
+                  {c.nome}
+                </strong>
 
                 <div
                   style={
                     muted
                   }
                 >
-                  Cadastre uma receita
-                  sem vincular a uma
-                  venda ou cliente.
+                  {c.pontos}{" "}
+                  pontos
+                </div>
+              </div>
+            )
+          )}
+
+          {clientesFiltrados.length ===
+            0 && (
+            <div
+              style={
+                emptyText
+              }
+            >
+              Nenhum cliente
+              encontrado.
+            </div>
+          )}
+        </div>
+
+        {/* CLIENTE SELECIONADO */}
+
+        {clienteSel && (
+          <>
+            <div
+              className="clienteSelecionado"
+              style={
+                clienteSelecionado
+              }
+            >
+              <strong>
+                {
+                  clienteSel.nome
+                }
+              </strong>
+
+              <span
+                style={
+                  clientePontos
+                }
+              >
+                {
+                  clienteSel.pontos
+                }{" "}
+                pontos
+              </span>
+            </div>
+
+            {/* CUPONS */}
+
+            <div
+              className="cupomBox"
+              style={
+                cupomBox
+              }
+            >
+              <div>
+                <strong>
+                  Programa de
+                  fidelidade
+                </strong>
+
+                <div
+                  style={
+                    muted
+                  }
+                >
+                  {
+                    cuponsDisponiveis
+                  }{" "}
+                  cupons disponíveis
+                  {" • "}
+                  crédito de{" "}
+                  {moeda(
+                    saldoCupom
+                  )}
+                </div>
+
+                <div
+                  style={
+                    cupomRegra
+                  }
+                >
+                  10 pontos =
+                  R$ 60,00
                 </div>
               </div>
 
-              <button
-                style={closeBtn}
-                onClick={() =>
-                  setModalReceita(
-                    false
-                  )
-                }
-              >
-                ×
-              </button>
+              {cuponsDisponiveis >
+                0 && (
+                <label
+                  style={
+                    cupomLabel
+                  }
+                >
+                  <span>
+                    Usar cupom
+                  </span>
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      usarCupom
+                    }
+                    onChange={e => {
+                      const ativo =
+                        e.target
+                          .checked
+
+                      setUsarCupom(
+                        ativo
+                      )
+
+                      if (!ativo) {
+                        setQuantidadeCupons(
+                          0
+                        )
+                      } else if (
+                        quantidadeCupons ===
+                        0
+                      ) {
+                        setQuantidadeCupons(
+                          1
+                        )
+                      }
+                    }}
+                  />
+                </label>
+              )}
             </div>
 
+            {/* QUANTIDADE DE CUPONS */}
+
+            {usarCupom &&
+              cuponsDisponiveis >
+                0 && (
+                <div
+                  style={
+                    cupomQuantidadeBox
+                  }
+                >
+                  <label
+                    className="fieldLabel"
+                    style={
+                      fieldLabel
+                    }
+                  >
+                    Quantidade de
+                    cupons
+                  </label>
+
+                  <select
+                    style={input}
+                    value={
+                      quantidadeCupons
+                    }
+                    onChange={e =>
+                      setQuantidadeCupons(
+                        Number(
+                          e.target
+                            .value
+                        )
+                      )
+                    }
+                  >
+                    {Array.from(
+                      {
+                        length:
+                          cuponsDisponiveis
+                      },
+                      (
+                        _,
+                        index
+                      ) => {
+                        const quantidade =
+                          index +
+                          1
+
+                        return (
+                          <option
+                            key={
+                              quantidade
+                            }
+                            value={
+                              quantidade
+                            }
+                          >
+                            {
+                              quantidade
+                            }{" "}
+                            {quantidade ===
+                            1
+                              ? "cupom"
+                              : "cupons"}{" "}
+                            —{" "}
+                            {moeda(
+                              quantidade *
+                                VALOR_CUPOM
+                            )}
+                          </option>
+                        )
+                      }
+                    )}
+                  </select>
+                </div>
+              )}
+
+            {/* VALOR */}
+
             <label
+              className="fieldLabel"
               style={
                 fieldLabel
               }
             >
-              Descrição
-            </label>
-
-            <input
-              type="text"
-              placeholder="Ex.: receita extra"
-              value={
-                descricaoReceita
-              }
-              onChange={e =>
-                setDescricaoReceita(
-                  e.target.value
-                )
-              }
-              style={input}
-            />
-
-            <label
-              style={
-                fieldLabel
-              }
-            >
-              Valor da receita
+              Valor da compra
             </label>
 
             <input
@@ -2360,668 +2531,978 @@ export default function Compras({
               min="0"
               step="0.01"
               placeholder="R$ 0,00"
+              className="input"
+              style={input}
               value={
-                valorReceita || ""
+                valor || ""
               }
               onChange={e =>
-                setValorReceita(
+                setValor(
                   Number(
                     e.target.value
                   )
                 )
               }
-              style={input}
             />
 
+            {/* PAGAMENTO */}
+
+            <label
+              className="fieldLabel"
+              style={
+                fieldLabel
+              }
+            >
+              Forma de pagamento
+            </label>
+
+            <select
+              className="input"
+              style={input}
+              value={
+                pagamento
+              }
+              onChange={e =>
+                setPagamento(
+                  e.target.value
+                )
+              }
+            >
+              <option value="Pix">
+                Pix
+              </option>
+
+              <option value="Dinheiro">
+                Dinheiro
+              </option>
+
+              <option value="Cartão">
+                Cartão
+              </option>
+
+              <option value="Em aberto">
+                Em aberto (Fiado)
+              </option>
+            </select>
+
+            {/* PARCELAS */}
+
+            {pagamento ===
+              "Cartão" && (
+              <>
+                <label
+                  className="fieldLabel"
+                  style={
+                    fieldLabel
+                  }
+                >
+                  Parcelas
+                </label>
+
+                <select
+                  className="input"
+                  style={input}
+                  value={
+                    parcelas
+                  }
+                  onChange={e =>
+                    setParcelas(
+                      Number(
+                        e.target
+                          .value
+                      )
+                    )
+                  }
+                >
+                  <option
+                    value={1}
+                  >
+                    1x
+                  </option>
+
+                  <option
+                    value={2}
+                  >
+                    2x
+                  </option>
+
+                  <option
+                    value={3}
+                  >
+                    3x
+                  </option>
+
+                  <option
+                    value={4}
+                  >
+                    4x
+                  </option>
+
+                  <option
+                    value={5}
+                  >
+                    5x
+                  </option>
+                </select>
+              </>
+            )}
+
+            {/* RESUMO */}
+
             <div
+              className="resumo"
               style={
                 resumo
               }
             >
-              Receita:{" "}
-              <strong>
-                {moeda(
-                  valorReceita
-                )}
-              </strong>
+              <div>
+                Valor da compra:{" "}
+                <strong>
+                  {moeda(
+                    valor
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                Cupom usado:{" "}
+                <strong>
+                  {moeda(
+                    valorCupom
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                Valor a pagar:{" "}
+                <strong>
+                  {moeda(
+                    valorRestante
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                Pontos gerados:{" "}
+                <strong>
+                  {
+                    pontosGerados
+                  }
+                </strong>
+              </div>
+
+              {usarCupom && (
+                <div>
+                  Pontos utilizados:{" "}
+                  <strong>
+                    {
+                      pontosUsados
+                    }
+                  </strong>
+                </div>
+              )}
             </div>
 
             <button
+              className="btnPrimary"
               style={
                 btnPrimary
               }
               onClick={
-                registrarReceita
+                registrarCompra
               }
             >
-              Cadastrar receita
+              Finalizar compra
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
 
-      {/* =========================
-          MODAL INATIVOS
-      ========================= */}
-
-      {modalInativos && (
-        <div
-          style={overlay}
-          onClick={() =>
-            setModalInativos(
-              false
-            )
-          }
-        >
+        {!clienteSel && (
           <div
-            style={modalCard}
-            onClick={e =>
-              e.stopPropagation()
+            style={
+              escolhaCliente
             }
           >
-            <div
-              style={
-                modalHeader
-              }
-            >
-              <h3
-                style={{
-                  margin: 0
-                }}
-              >
-                Clientes inativos
-              </h3>
-
-              <button
-                style={closeBtn}
-                onClick={() =>
-                  setModalInativos(
-                    false
-                  )
-                }
-              >
-                ×
-              </button>
-            </div>
-
-            {clientesInativos.map(
-              c => {
-                const ult =
-                  getUltimaCompra(
-                    c.id
-                  )
-
-                return (
-                  <div
-                    key={c.id}
-                    style={
-                      inativoRow
-                    }
-                  >
-                    <strong>
-                      {c.nome}
-                    </strong>
-
-                    <div
-                      style={
-                        muted
-                      }
-                    >
-                      Última compra:{" "}
-                      {ult
-                        ? new Date(
-                            ult.criadoem
-                          ).toLocaleDateString(
-                            "pt-BR"
-                          )
-                        : "Nunca"}
-                    </div>
-                  </div>
-                )
-              }
-            )}
+            Selecione um cliente
+            para continuar.
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  )
-}
+  )}
 
-/*
- * =========================
- * COMPONENTE DASH
- * =========================
- */
+  {/* =========================
+      MODAL RECEITA
+  ========================= */}
 
-function Dash({
-  label,
-  value,
-  className = ""
-}: {
-  label: string
-  value: string | number
-  className?: string
-}) {
-  return (
+  {modalReceita && (
     <div
-      className={className}
-      style={dash}
+      style={overlay}
+      onClick={() =>
+        setModalReceita(
+          false
+        )
+      }
     >
       <div
-        style={dashLabel}
+        className="modalCard"
+        style={modalCard}
+        onClick={e =>
+          e.stopPropagation()
+        }
       >
-        {label}
-      </div>
+        <div
+          className="modalHeader"
+          style={
+            modalHeader
+          }
+        >
+          <div>
+            <h2
+              style={{
+                margin: 0
+              }}
+            >
+              Nova receita
+            </h2>
 
-      <strong
-        style={dashValue}
-      >
-        {value}
-      </strong>
+            <div
+              style={
+                muted
+              }
+            >
+              Cadastre uma receita
+              sem vincular a uma
+              venda ou cliente.
+            </div>
+          </div>
+
+          <button
+            className="closeBtn"
+            style={closeBtn}
+            onClick={() =>
+              setModalReceita(
+                false
+              )
+            }
+          >
+            ×
+          </button>
+        </div>
+
+        <label
+          className="fieldLabel"
+          style={
+            fieldLabel
+          }
+        >
+          Descrição
+        </label>
+
+        <input
+          type="text"
+          placeholder="Ex.: receita extra"
+          value={
+            descricaoReceita
+          }
+          onChange={e =>
+            setDescricaoReceita(
+              e.target.value
+            )
+          }
+          className="input"
+          style={input}
+        />
+
+        <label
+          className="fieldLabel"
+          style={
+            fieldLabel
+          }
+        >
+          Valor da receita
+        </label>
+
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="R$ 0,00"
+          value={
+            valorReceita || ""
+          }
+          onChange={e =>
+            setValorReceita(
+              Number(
+                e.target.value
+              )
+            )
+          }
+          className="input"
+          style={input}
+        />
+
+        <div
+          className="resumo"
+          style={
+            resumo
+          }
+        >
+          Receita:{" "}
+          <strong>
+            {moeda(
+              valorReceita
+            )}
+          </strong>
+        </div>
+
+        <button
+          className="btnPrimary"
+          style={
+            btnPrimary
+          }
+          onClick={
+            registrarReceita
+          }
+        >
+          Cadastrar receita
+        </button>
+      </div>
     </div>
-  )
+  )}
+
+  {/* =========================
+      MODAL INATIVOS
+  ========================= */}
+
+  {modalInativos && (
+    <div
+      style={overlay}
+      onClick={() =>
+        setModalInativos(
+          false
+        )
+      }
+    >
+      <div
+        className="modalCard"
+        style={modalCard}
+        onClick={e =>
+          e.stopPropagation()
+        }
+      >
+        <div
+          className="modalHeader"
+          style={
+            modalHeader
+          }
+        >
+          <h3
+            style={{
+              margin: 0
+            }}
+          >
+            Clientes inativos
+          </h3>
+
+          <button
+            className="closeBtn"
+            style={closeBtn}
+            onClick={() =>
+              setModalInativos(
+                false
+              )
+            }
+          >
+            ×
+          </button>
+        </div>
+
+        {clientesInativos.map(
+          c => {
+            const ult =
+              getUltimaCompra(
+                c.id
+              )
+
+            return (
+              <div
+                key={c.id}
+                style={
+                  inativoRow
+                }
+              >
+                <strong>
+                  {c.nome}
+                </strong>
+
+                <div
+                  style={
+                    muted
+                  }
+                >
+                  Última compra:{" "}
+                  {ult
+                    ? new Date(
+                        ult.criadoem
+                      ).toLocaleDateString(
+                        "pt-BR"
+                      )
+                    : "Nunca"}
+                </div>
+              </div>
+            )
+          }
+        )}
+      </div>
+    </div>
+  )}
+</div>
+
+
+)
 }
 
 /*
- * =========================
- * ESTILOS
- * =========================
- */
+
+* =========================
+* COMPONENTE DASH
+* =========================
+  */
+
+function Dash({
+label,
+value,
+className = ""
+}: {
+label: string
+value: string | number
+className?: string
+}) {
+return (
+<div
+className={`dash ${className}`}
+style={dash}
+> <div
+     className="dashLabel"
+     style={dashLabel}
+   >
+{label} </div>
+
+
+  <strong
+    className="dashValue"
+    style={dashValue}
+  >
+    {value}
+  </strong>
+</div>
+
+
+)
+}
+
+/*
+
+* =========================
+* ESTILOS
+* =========================
+  */
 
 const container = {
-  width: "100%",
-  minWidth: 0,
-  minHeight: "100%",
-  padding: 40,
-  background: "#f6f6f7",
-  fontFamily: "Inter",
-  overflowX:
-    "hidden" as const,
-  boxSizing:
-    "border-box" as const
+width: "100%",
+minWidth: 0,
+minHeight: "100%",
+padding: 40,
+background: "#f6f6f7",
+fontFamily: "Inter",
+overflowX:
+"hidden" as const,
+boxSizing:
+"border-box" as const
 }
 
 const section = {
-  width: "100%",
-  minWidth: 0,
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  marginBottom: 20,
-  overflow:
-    "hidden" as const,
-  boxSizing:
-    "border-box" as const
+width: "100%",
+minWidth: 0,
+background: "#fff",
+padding: 20,
+borderRadius: 16,
+marginBottom: 20,
+overflow:
+"hidden" as const,
+boxSizing:
+"border-box" as const
 }
 
 const sectionTitle = {
-  marginTop: 0,
-  marginBottom: 16,
-  fontSize: 18
+marginTop: 0,
+marginBottom: 16,
+fontSize: 18
 }
 
 const notifBar = {
-  width: "100%",
-  background: "#fff6d6",
-  padding:
-    "12px 16px",
-  borderRadius: 12,
-  marginBottom: 16,
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  gap: 10,
-  fontSize: 13,
-  flexWrap:
-    "wrap" as const,
-  boxSizing:
-    "border-box" as const
+width: "100%",
+background: "#fff6d6",
+padding:
+"12px 16px",
+borderRadius: 12,
+marginBottom: 16,
+display: "flex",
+justifyContent:
+"space-between",
+alignItems: "center",
+gap: 10,
+fontSize: 13,
+flexWrap:
+"wrap" as const,
+boxSizing:
+"border-box" as const
 }
 
 const notifBtn = {
-  border: "none",
-  background:
-    "transparent",
-  color: "#b8962e",
-  cursor: "pointer",
-  fontWeight: 600
+border: "none",
+background:
+"transparent",
+color: "#b8962e",
+cursor: "pointer",
+fontWeight: 600
 }
 
 const header = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  gap: 16,
-  marginBottom: 20,
-  flexWrap:
-    "wrap" as const
+display: "flex",
+justifyContent:
+"space-between",
+alignItems: "center",
+gap: 16,
+marginBottom: 20,
+flexWrap:
+"wrap" as const
 }
 
 const headerButtons = {
-  display: "flex",
-  gap: 10,
-  flexWrap:
-    "wrap" as const
+display: "flex",
+gap: 10,
+flexWrap:
+"wrap" as const
 }
 
 const title = {
-  fontSize: 30,
-  margin: 0,
-  fontWeight: 600
+fontSize: 30,
+margin: 0,
+fontWeight: 600
 }
 
 const btnSmall = {
-  padding:
-    "11px 18px",
-  borderRadius: 10,
-  border: "none",
-  background:
-    "linear-gradient(90deg,#d4af37,#f6e27a)",
-  cursor: "pointer",
-  fontWeight: 600,
-  whiteSpace:
-    "nowrap" as const
+padding:
+"11px 18px",
+borderRadius: 10,
+border: "none",
+background:
+"linear-gradient(90deg,#d4af37,#f6e27a)",
+cursor: "pointer",
+fontWeight: 600,
+whiteSpace:
+"nowrap" as const
 }
 
 const btnSecondary = {
-  padding:
-    "11px 18px",
-  borderRadius: 10,
-  border:
-    "1px solid #eadfbf",
-  background: "#fff",
-  color: "#80691f",
-  cursor: "pointer",
-  fontWeight: 600,
-  whiteSpace:
-    "nowrap" as const
+padding:
+"11px 18px",
+borderRadius: 10,
+border:
+"1px solid #eadfbf",
+background: "#fff",
+color: "#80691f",
+cursor: "pointer",
+fontWeight: 600,
+whiteSpace:
+"nowrap" as const
 }
 
 const dashGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(180px,1fr))",
-  gap: 12,
-  marginBottom: 20,
-  width: "100%"
+display: "grid",
+gridTemplateColumns:
+"repeat(auto-fit,minmax(180px,1fr))",
+gap: 12,
+marginBottom: 20,
+width: "100%"
 }
 
 const dash = {
-  background: "#fff",
-  padding: 18,
-  borderRadius: 14,
-  minWidth: 0,
-  overflow:
-    "hidden" as const,
-  border:
-    "1px solid #eeeeee",
-  boxShadow:
-    "0 3px 12px rgba(0,0,0,0.025)"
+background: "#fff",
+padding: 18,
+borderRadius: 14,
+minWidth: 0,
+overflow:
+"hidden" as const,
+border:
+"1px solid #eeeeee",
+boxShadow:
+"0 3px 12px rgba(0,0,0,0.025)"
 }
 
 const dashLabel = {
-  color: "#777",
-  fontSize: 13,
-  marginBottom: 5
+color: "#777",
+fontSize: 13,
+marginBottom: 5
 }
 
 const dashValue = {
-  fontSize: 24,
-  display: "block",
-  wordBreak:
-    "break-word" as const
+fontSize: 24,
+display: "block",
+wordBreak:
+"break-word" as const
 }
 
 const mesGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(120px,1fr))",
-  gap: 10,
-  width: "100%"
+display: "grid",
+gridTemplateColumns:
+"repeat(auto-fit,minmax(120px,1fr))",
+gap: 10,
+width: "100%"
 }
 
 const mesCard = {
-  background: "#f9f9f9",
-  padding: 14,
-  borderRadius: 12,
-  minWidth: 0,
-  overflow:
-    "hidden" as const
+background: "#f9f9f9",
+padding: 14,
+borderRadius: 12,
+minWidth: 0,
+overflow:
+"hidden" as const
 }
 
 const mesValor = {
-  marginTop: 5,
-  fontWeight: 600,
-  wordBreak:
-    "break-word" as const
+marginTop: 5,
+fontWeight: 600,
+wordBreak:
+"break-word" as const
 }
 
 const emptyText = {
-  color: "#888",
-  fontSize: 14,
-  padding: 10
+color: "#888",
+fontSize: 14,
+padding: 10
 }
 
 const filtrosBar = {
-  display: "grid",
-  gridTemplateColumns:
-    "minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)",
-  gap: 10,
-  marginBottom: 20,
-  width: "100%",
-  minWidth: 0
+display: "grid",
+gridTemplateColumns:
+"minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)",
+gap: 10,
+marginBottom: 20,
+width: "100%",
+minWidth: 0
 }
 
 const inputFiltro = {
-  width: "100%",
-  minWidth: 0,
-  maxWidth: "100%",
-  padding: 12,
-  borderRadius: 10,
-  border:
-    "1px solid #ddd",
-  background: "#fff",
-  fontSize: 14,
-  outline: "none",
-  boxSizing:
-    "border-box" as const
+width: "100%",
+minWidth: 0,
+maxWidth: "100%",
+padding: 12,
+borderRadius: 10,
+border:
+"1px solid #ddd",
+background: "#fff",
+fontSize: 14,
+outline: "none",
+boxSizing:
+"border-box" as const
 }
 
 const selectFiltro = {
-  width: "100%",
-  minWidth: 0,
-  maxWidth: "100%",
-  padding: 12,
-  borderRadius: 10,
-  border:
-    "1px solid #ddd",
-  background: "#fff",
-  fontSize: 14,
-  outline: "none",
-  boxSizing:
-    "border-box" as const
+width: "100%",
+minWidth: 0,
+maxWidth: "100%",
+padding: 12,
+borderRadius: 10,
+border:
+"1px solid #ddd",
+background: "#fff",
+fontSize: 14,
+outline: "none",
+boxSizing:
+"border-box" as const
 }
 
 const listaCompras = {
-  display: "flex",
-  flexDirection:
-    "column" as const,
-  gap: 10,
-  width: "100%",
-  minWidth: 0
+display: "flex",
+flexDirection:
+"column" as const,
+gap: 10,
+width: "100%",
+minWidth: 0
 }
 
 const compraCard = {
-  display: "grid",
-  gridTemplateColumns:
-    "minmax(160px,2fr) minmax(120px,1fr) minmax(110px,1fr) minmax(110px,1fr) auto",
-  gap: 18,
-  padding: 16,
-  borderRadius: 12,
-  background: "#f9f9f9",
-  alignItems: "center",
-  minWidth: 0,
-  width: "100%",
-  overflow:
-    "hidden" as const,
-  boxSizing:
-    "border-box" as const
+display: "grid",
+gridTemplateColumns:
+"minmax(160px,2fr) minmax(120px,1fr) minmax(110px,1fr) minmax(110px,1fr) auto",
+gap: 18,
+padding: 16,
+borderRadius: 12,
+background: "#f9f9f9",
+alignItems: "center",
+minWidth: 0,
+width: "100%",
+overflow:
+"hidden" as const,
+boxSizing:
+"border-box" as const
 }
 
 const compraCliente = {
-  minWidth: 0,
-  overflow: "hidden",
-  wordBreak:
-    "break-word" as const
+minWidth: 0,
+overflow: "hidden",
+wordBreak:
+"break-word" as const
 }
 
 const compraInfo = {
-  minWidth: 0,
-  overflow: "hidden",
-  wordBreak:
-    "break-word" as const
+minWidth: 0,
+overflow: "hidden",
+wordBreak:
+"break-word" as const
 }
 
 const infoLabel = {
-  display: "block",
-  color: "#999",
-  fontSize: 11,
-  marginBottom: 3
+display: "block",
+color: "#999",
+fontSize: 11,
+marginBottom: 3
 }
 
 const pontos = {
-  fontWeight: 600,
-  color: "#b08d3c"
+fontWeight: 600,
+color: "#b08d3c"
 }
 
 const receitaBadge = {
-  display: "inline-block",
-  marginTop: 6,
-  padding:
-    "3px 7px",
-  borderRadius: 6,
-  background: "#eee",
-  color: "#777",
-  fontSize: 10,
-  fontWeight: 600
+display: "inline-block",
+marginTop: 6,
+padding:
+"3px 7px",
+borderRadius: 6,
+background: "#eee",
+color: "#777",
+fontSize: 10,
+fontWeight: 600
 }
 
 const deleteContainer = {
-  display: "flex",
-  justifyContent:
-    "flex-end",
-  alignItems: "center"
+display: "flex",
+justifyContent:
+"flex-end",
+alignItems: "center"
 }
 
 const deleteBtn = {
-  padding:
-    "8px 11px",
-  borderRadius: 8,
-  border:
-    "1px solid #efcaca",
-  background: "#fff5f5",
-  color: "#c45a5a",
-  cursor: "pointer",
-  fontSize: 12,
-  fontWeight: 600,
-  whiteSpace:
-    "nowrap" as const
+padding:
+"8px 11px",
+borderRadius: 8,
+border:
+"1px solid #efcaca",
+background: "#fff5f5",
+color: "#c45a5a",
+cursor: "pointer",
+fontSize: 12,
+fontWeight: 600,
+whiteSpace:
+"nowrap" as const
 }
 
 const overlay = {
-  position: "fixed" as const,
-  inset: 0,
-  background:
-    "rgba(0,0,0,0.4)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent:
-    "center",
-  padding: 16,
-  zIndex: 2000,
-  overflowY:
-    "auto" as const,
-  boxSizing:
-    "border-box" as const
+position: "fixed" as const,
+inset: 0,
+background:
+"rgba(0,0,0,0.4)",
+display: "flex",
+alignItems: "center",
+justifyContent:
+"center",
+padding: 16,
+zIndex: 2000,
+overflowY:
+"auto" as const,
+boxSizing:
+"border-box" as const
 }
 
 const modalCard = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  width: "100%",
-  maxWidth: 480,
-  maxHeight: "90vh",
-  overflowY:
-    "auto" as const,
-  overflowX:
-    "hidden" as const,
-  boxSizing:
-    "border-box" as const
+background: "#fff",
+padding: 20,
+borderRadius: 16,
+width: "100%",
+maxWidth: 480,
+maxHeight: "90vh",
+overflowY:
+"auto" as const,
+overflowX:
+"hidden" as const,
+boxSizing:
+"border-box" as const
 }
 
 const modalHeader = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems:
-    "flex-start",
-  gap: 15,
-  marginBottom: 10
+display: "flex",
+justifyContent:
+"space-between",
+alignItems:
+"flex-start",
+gap: 15,
+marginBottom: 10
 }
 
 const closeBtn = {
-  width: 34,
-  height: 34,
-  border: "none",
-  background: "#f5f5f5",
-  borderRadius: "50%",
-  cursor: "pointer",
-  fontSize: 22,
-  lineHeight: 1,
-  color: "#666",
-  flexShrink: 0
+width: 34,
+height: 34,
+border: "none",
+background: "#f5f5f5",
+borderRadius: "50%",
+cursor: "pointer",
+fontSize: 22,
+lineHeight: 1,
+color: "#666",
+flexShrink: 0
 }
 
 const clienteGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(130px,1fr))",
-  gap: 8,
-  marginTop: 10,
-  maxHeight: 190,
-  overflowY:
-    "auto" as const
+display: "grid",
+gridTemplateColumns:
+"repeat(auto-fit,minmax(130px,1fr))",
+gap: 8,
+marginTop: 10,
+maxHeight: 190,
+overflowY:
+"auto" as const
 }
 
 const clienteCard = {
-  padding: 12,
-  borderRadius: 10,
-  cursor: "pointer",
-  background: "#fff",
-  wordBreak:
-    "break-word" as const
+padding: 12,
+borderRadius: 10,
+cursor: "pointer",
+background: "#fff",
+wordBreak:
+"break-word" as const
 }
 
 const clienteSelecionado = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  gap: 10,
-  padding: 12,
-  marginTop: 12,
-  borderRadius: 10,
-  background: "#faf8f1",
-  flexWrap:
-    "wrap" as const
+display: "flex",
+justifyContent:
+"space-between",
+alignItems: "center",
+gap: 10,
+padding: 12,
+marginTop: 12,
+borderRadius: 10,
+background: "#faf8f1",
+flexWrap:
+"wrap" as const
 }
 
 const clientePontos = {
-  color: "#9b7b2f",
-  fontSize: 12,
-  fontWeight: 600
+color: "#9b7b2f",
+fontSize: 12,
+fontWeight: 600
 }
 
 const cupomBox = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  gap: 12,
-  marginTop: 12,
-  padding: 13,
-  borderRadius: 12,
-  background: "#faf8f1",
-  border:
-    "1px solid #eee6c9",
-  flexWrap:
-    "wrap" as const
+display: "flex",
+justifyContent:
+"space-between",
+alignItems: "center",
+gap: 12,
+marginTop: 12,
+padding: 13,
+borderRadius: 12,
+background: "#faf8f1",
+border:
+"1px solid #eee6c9",
+flexWrap:
+"wrap" as const
 }
 
 const cupomRegra = {
-  marginTop: 5,
-  color: "#9b7b2f",
-  fontSize: 11,
-  fontWeight: 600
+marginTop: 5,
+color: "#9b7b2f",
+fontSize: 11,
+fontWeight: 600
 }
 
 const cupomQuantidadeBox = {
-  marginTop: 10
+marginTop: 10
 }
 
 const cupomLabel = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  cursor: "pointer"
+display: "flex",
+alignItems: "center",
+gap: 6,
+cursor: "pointer"
 }
 
 const fieldLabel = {
-  display: "block",
-  marginTop: 12,
-  marginBottom: 4,
-  color: "#555",
-  fontSize: 12,
-  fontWeight: 600
+display: "block",
+marginTop: 12,
+marginBottom: 4,
+color: "#555",
+fontSize: 12,
+fontWeight: 600
 }
 
 const resumo = {
-  marginTop: 12,
-  padding: 13,
-  background: "#faf8f1",
-  borderRadius: 10,
-  lineHeight: 1.8,
-  fontSize: 13
+marginTop: 12,
+padding: 13,
+background: "#faf8f1",
+borderRadius: 10,
+lineHeight: 1.8,
+fontSize: 13
 }
 
 const btnPrimary = {
-  width: "100%",
-  marginTop: 12,
-  padding: 13,
-  borderRadius: 10,
-  border: "none",
-  background:
-    "linear-gradient(90deg,#d4af37,#f6e27a)",
-  cursor: "pointer",
-  fontWeight: 600
+width: "100%",
+marginTop: 12,
+padding: 13,
+borderRadius: 10,
+border: "none",
+background:
+"linear-gradient(90deg,#d4af37,#f6e27a)",
+cursor: "pointer",
+fontWeight: 600
 }
 
 const escolhaCliente = {
-  marginTop: 15,
-  padding: 15,
-  background: "#fafafa",
-  borderRadius: 10,
-  color: "#888",
-  textAlign:
-    "center" as const,
-  fontSize: 13
+marginTop: 15,
+padding: 15,
+background: "#fafafa",
+borderRadius: 10,
+color: "#888",
+textAlign:
+"center" as const,
+fontSize: 13
 }
 
 const inativoRow = {
-  padding: 12,
-  borderBottom:
-    "1px solid #eee"
+padding: 12,
+borderBottom:
+"1px solid #eee"
 }
 
 const input = {
-  width: "100%",
-  minWidth: 0,
-  padding: 10,
-  marginTop: 6,
-  borderRadius: 10,
-  border:
-    "1px solid #ddd",
-  background: "#fff",
-  boxSizing:
-    "border-box" as const,
-  outline: "none"
+width: "100%",
+minWidth: 0,
+padding: 10,
+marginTop: 6,
+borderRadius: 10,
+border:
+"1px solid #ddd",
+background: "#fff",
+boxSizing:
+"border-box" as const,
+outline: "none"
 }
 
 const muted = {
-  fontSize: 12,
-  color: "#888",
-  marginTop: 3
+fontSize: 12,
+color: "#888",
+marginTop: 3
 }
