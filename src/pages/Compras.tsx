@@ -8,18 +8,6 @@ type Cliente = {
   pontos: number
 }
 
-type Variante = {
-  id: string
-  produtoId: string
-  produtoNome: string
-  sku: string
-  precoVenda: number
-  custoUnitario: number
-  estoqueAtual: number
-  cor: string
-  tamanho: string
-}
-
 type Compra = {
   id: string
   clienteid: string | null
@@ -64,7 +52,6 @@ export default function Compras({
 }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
-  const [variantes, setVariantes] = useState<Variante[]>([])
 
   const [modal, setModal] = useState(false)
   const [modalInativos, setModalInativos] = useState(false)
@@ -86,12 +73,6 @@ export default function Compras({
     useState("todos")
 
   const [valor, setValor] = useState(0)
-
-  const [varianteSel, setVarianteSel] =
-    useState<Variante | null>(null)
-
-  const [quantidade, setQuantidade] =
-    useState(1)
 
   const [pagamento, setPagamento] =
     useState("Pix")
@@ -138,51 +119,6 @@ export default function Compras({
           nome: c.nome || "",
           cpf: c.cpf || "",
           pontos: Number(c.pontos || 0)
-        }))
-      )
-    }
-  }
-
-  /*
-   * =========================
-   * FETCH PRODUTOS / VARIANTES
-   * =========================
-   */
-
-  async function fetchVariantes() {
-    const { data, error } = await supabase
-      .from("produtoVariantes")
-      .select(`
-        id,
-        produtoId,
-        sku,
-        precoVenda,
-        custoUnitario,
-        estoqueAtual,
-        cor,
-        tamanho,
-        produtos(nome)
-      `)
-      .eq("ativo", true)
-      .order("produtoId")
-
-    if (error) {
-      alert("Erro ao carregar produtos: " + error.message)
-      return
-    }
-
-    if (data) {
-      setVariantes(
-        data.map((v: any) => ({
-          id: String(v.id),
-          produtoId: String(v.produtoId),
-          produtoNome: v.produtos?.nome || "Produto",
-          sku: v.sku || "",
-          precoVenda: Number(v.precoVenda || 0),
-          custoUnitario: Number(v.custoUnitario || 0),
-          estoqueAtual: Number(v.estoqueAtual || 0),
-          cor: v.cor || "",
-          tamanho: v.tamanho || ""
         }))
       )
     }
@@ -249,7 +185,6 @@ export default function Compras({
   useEffect(() => {
     fetchClientes()
     fetchCompras()
-    fetchVariantes()
   }, [])
 
   /*
@@ -329,13 +264,14 @@ export default function Compras({
   /*
    * R$ 150,00 = 1 ponto
    */
-  const pontosGerados = Math.min(
-    PONTOS_POR_CUPOM,
-    Math.floor(
-      valor /
-        VALOR_PARA_GERAR_PONTO
+  const pontosGerados =
+    Math.min(
+      PONTOS_POR_CUPOM,
+      Math.floor(
+        valor /
+          VALOR_PARA_GERAR_PONTO
+      )
     )
-  )
 
   const pontosUsados =
     usarCupom
@@ -355,28 +291,8 @@ export default function Compras({
       return
     }
 
-    if (!varianteSel) {
-      alert("Selecione um produto.")
-      return
-    }
-
-    if (quantidade <= 0) {
-      alert("Digite uma quantidade válida.")
-      return
-    }
-
-    if (quantidade > varianteSel.estoqueAtual) {
-      alert(
-        `Estoque insuficiente. Disponível: ${varianteSel.estoqueAtual} unidade(s).`
-      )
-      return
-    }
-
-    const valorCompra =
-      varianteSel.precoVenda * quantidade
-
-    if (valorCompra <= 0) {
-      alert("O produto selecionado não possui preço de venda válido.")
+    if (valor <= 0) {
+      alert("Digite um valor válido.")
       return
     }
 
@@ -441,7 +357,7 @@ export default function Compras({
           cpf:
             clienteSel.cpf,
 
-          valor: valorCompra,
+          valor,
 
           pagamento:
             pagamentoFinal,
@@ -461,185 +377,10 @@ export default function Compras({
       .select()
       .single()
 
-    if (error || !compraCriada) {
+    if (error) {
       alert(
         "Erro ao registrar compra: " +
-          (error?.message || "Compra não criada.")
-      )
-      return
-    }
-
-    /*
-     * =========================
-     * REGISTRA ITEM DA VENDA
-     * =========================
-     */
-
-    const {
-      error: erroItem
-    } = await supabase
-      .from("vendaItens")
-      .insert([
-        {
-          compraId:
-            compraCriada.id,
-
-          varianteId:
-            varianteSel.id,
-
-          quantidade,
-
-          precoUnitario:
-            varianteSel.precoVenda,
-
-          custoUnitario:
-            varianteSel.custoUnitario,
-
-          desconto:
-            0
-        }
-      ])
-
-    if (erroItem) {
-      await supabase
-        .from("compras")
-        .delete()
-        .eq("id", compraCriada.id)
-
-      alert(
-        "Erro ao registrar o item da venda: " +
-          erroItem.message
-      )
-      return
-    }
-
-    /*
-     * =========================
-     * BAIXA NO ESTOQUE
-     * =========================
-     */
-
-    const novoEstoque =
-      varianteSel.estoqueAtual -
-      quantidade
-
-    const {
-      error: erroEstoque
-    } = await supabase
-      .from("produtoVariantes")
-      .update({
-        estoqueAtual:
-          novoEstoque,
-        atualizadoem:
-          new Date().toISOString()
-      })
-      .eq(
-        "id",
-        varianteSel.id
-      )
-
-    if (erroEstoque) {
-      await supabase
-        .from("vendaItens")
-        .delete()
-        .eq(
-          "compraId",
-          compraCriada.id
-        )
-
-      await supabase
-        .from("compras")
-        .delete()
-        .eq(
-          "id",
-          compraCriada.id
-        )
-
-      alert(
-        "Erro ao baixar o estoque: " +
-          erroEstoque.message
-      )
-      return
-    }
-
-    /*
-     * REGISTRA MOVIMENTAÇÃO DE ESTOQUE
-     */
-
-    const {
-      error: erroMovimentacao
-    } = await supabase
-      .from("estoqueMovimentacoes")
-      .insert([
-        {
-          varianteId:
-            varianteSel.id,
-
-          tipo:
-            "SAIDA",
-
-          quantidade,
-
-          custoUnitario:
-            varianteSel.custoUnitario,
-
-          saldoAnterior:
-            varianteSel.estoqueAtual,
-
-          saldoPosterior:
-            novoEstoque,
-
-          motivo:
-            "Venda",
-
-          origemTipo:
-            "COMPRA",
-
-          origemId:
-            compraCriada.id,
-
-          observacao:
-            `Venda para ${clienteSel.nome}`
-        }
-      ])
-
-    if (erroMovimentacao) {
-      /*
-       * Reverte a baixa se o histórico
-       * de estoque não puder ser salvo.
-       */
-      await supabase
-        .from("produtoVariantes")
-        .update({
-          estoqueAtual:
-            varianteSel.estoqueAtual,
-          atualizadoem:
-            new Date().toISOString()
-        })
-        .eq(
-          "id",
-          varianteSel.id
-        )
-
-      await supabase
-        .from("vendaItens")
-        .delete()
-        .eq(
-          "compraId",
-          compraCriada.id
-        )
-
-      await supabase
-        .from("compras")
-        .delete()
-        .eq(
-          "id",
-          compraCriada.id
-        )
-
-      alert(
-        "Erro ao registrar a movimentação de estoque: " +
-          erroMovimentacao.message
+          error.message
       )
       return
     }
@@ -665,38 +406,10 @@ export default function Compras({
 
     if (erroCliente) {
       /*
-       * Reverte estoque, item e compra
-       * caso a atualização da fidelidade falhe.
+       * Se a compra foi criada,
+       * mas os pontos falharam,
+       * tentamos remover a compra.
        */
-      await supabase
-        .from("produtoVariantes")
-        .update({
-          estoqueAtual:
-            varianteSel.estoqueAtual,
-          atualizadoem:
-            new Date().toISOString()
-        })
-        .eq(
-          "id",
-          varianteSel.id
-        )
-
-      await supabase
-        .from("estoqueMovimentacoes")
-        .delete()
-        .eq(
-          "origemId",
-          compraCriada.id
-        )
-
-      await supabase
-        .from("vendaItens")
-        .delete()
-        .eq(
-          "compraId",
-          compraCriada.id
-        )
-
       await supabase
         .from("compras")
         .delete()
@@ -767,9 +480,6 @@ export default function Compras({
               valorcupom:
                 VALOR_CUPOM,
 
-              pontosUtilizados:
-                PONTOS_POR_CUPOM,
-
               tipo:
                 "Cupom Fidelidade",
 
@@ -798,18 +508,6 @@ export default function Compras({
 
     alert(
       "Compra registrada com sucesso!"
-    )
-
-    setVariantes(
-      variantes.map(v =>
-        v.id === varianteSel.id
-          ? {
-              ...v,
-              estoqueAtual:
-                novoEstoque
-            }
-          : v
-      )
     )
 
     fecharModalCompra()
@@ -841,17 +539,7 @@ export default function Compras({
       return
     }
 
-    /*
-     * Como a tabela atual utiliza
-     * o campo "cliente" para exibição,
-     * a descrição é armazenada nele.
-     *
-     * A receita:
-     * - não possui cliente
-     * - não gera pontos
-     * - não utiliza cupom
-     */
-
+    
     const {
       error
     } = await supabase
@@ -921,10 +609,6 @@ export default function Compras({
 
     setValor(0)
 
-    setVarianteSel(null)
-
-    setQuantidade(1)
-
     setPagamento("Pix")
 
     setParcelas(1)
@@ -942,403 +626,52 @@ export default function Compras({
    * =========================
    */
 
-  async function excluirCompra(
-    compra: Compra
-  ) {
-    const confirmacao =
-      window.confirm(
-        `Tem certeza que deseja excluir esta venda?\n\nCliente: ${
-          compra.cliente ||
-          "Sem cliente"
-        }\nValor: ${moeda(
-          compra.valor
-        )}\nData: ${new Date(
-          compra.criadoem
-        ).toLocaleDateString(
-          "pt-BR"
-        )}\n\nO estoque será devolvido e os pontos/cupons serão estornados.\n\nEssa ação não poderá ser desfeita.`
-      )
+  async function excluirCompra(compra: Compra) {
+    const ehReceita = compra.pagamento === "Receita"
 
-    if (!confirmacao) {
-      return
-    }
+    const confirmacao = window.confirm(
+      ehReceita
+        ? `Tem certeza que deseja excluir esta receita?\n\nDescrição: ${compra.cliente || "Sem descrição"}\nValor: ${moeda(compra.valor)}\nData: ${new Date(compra.criadoem).toLocaleDateString("pt-BR")}\n\nEssa ação não poderá ser desfeita.`
+        : `Tem certeza que deseja excluir esta venda?\n\nCliente: ${compra.cliente || "Sem cliente"}\nValor: ${moeda(compra.valor)}\nData: ${new Date(compra.criadoem).toLocaleDateString("pt-BR")}\n\nOs pontos gerados serão estornados, os cupons utilizados serão devolvidos e o estoque será ajustado.\n\nEssa ação não poderá ser desfeita.`
+    )
+
+    if (!confirmacao) return
 
     setExcluindo(compra.id)
 
-    /*
-     * =========================
-     * BUSCAR CLIENTE
-     * =========================
-     */
+    if (ehReceita) {
+      const { error } = await supabase
+        .from("compras")
+        .delete()
+        .eq("id", compra.id)
 
-    let clienteAtual =
-      compra.clienteid
-        ? clientes.find(
-            c =>
-              c.id ===
-              compra.clienteid
-          )
-        : null
-
-    if (
-      compra.clienteid &&
-      !clienteAtual
-    ) {
-      const {
-        data
-      } = await supabase
-        .from("clientes")
-        .select(
-          "id,nome,cpf,pontos"
-        )
-        .eq(
-          "id",
-          compra.clienteid
-        )
-        .single()
-
-      if (data) {
-        clienteAtual = {
-          id: String(data.id),
-          nome: data.nome || "",
-          cpf: data.cpf || "",
-          pontos:
-            Number(
-              data.pontos || 0
-            )
-        }
-      }
-    }
-
-    /*
-     * =========================
-     * CALCULAR ESTORNO DE PONTOS
-     * =========================
-     */
-
-    let novosPontos =
-      clienteAtual
-        ? clienteAtual.pontos
-        : 0
-
-    if (clienteAtual) {
-      const cuponsUsados =
-        compra.cupomusado > 0
-          ? Math.ceil(
-              compra.cupomusado /
-                VALOR_CUPOM
-            )
-          : 0
-
-      const pontosADevolver =
-        cuponsUsados *
-        PONTOS_POR_CUPOM
-
-      novosPontos =
-        clienteAtual.pontos -
-        compra.pontosgerados +
-        pontosADevolver
-
-      if (novosPontos < 0) {
-        alert(
-          "Não foi possível excluir a venda porque os pontos atuais do cliente não permitem desfazer essa operação."
-        )
-
+      if (error) {
+        alert("Erro ao excluir receita: " + error.message)
         setExcluindo(null)
-
         return
       }
-    }
 
-    /*
-     * =========================
-     * BUSCAR ITENS DA VENDA
-     * =========================
-     */
-
-    const {
-      data: itens,
-      error: erroItens
-    } = await supabase
-      .from("vendaItens")
-      .select(
-        "id,varianteId,quantidade,custoUnitario"
-      )
-      .eq(
-        "compraId",
-        compra.id
-      )
-
-    if (erroItens) {
-      alert(
-        "Erro ao buscar os itens da venda: " +
-          erroItens.message
-      )
-
+      alert("Receita excluída com sucesso!")
       setExcluindo(null)
-
+      await fetchCompras()
       return
     }
 
-    /*
-     * =========================
-     * DEVOLVER ESTOQUE
-     * =========================
-     */
+    const { error } = await supabase.rpc("excluirVenda", {
+      p_compraid: compra.id
+    })
 
-    for (const item of itens || []) {
-      const {
-        data: variante,
-        error: erroVariante
-      } = await supabase
-        .from("produtoVariantes")
-        .select(
-          "id,estoqueAtual"
-        )
-        .eq(
-          "id",
-          item.varianteId
-        )
-        .single()
-
-      if (
-        erroVariante ||
-        !variante
-      ) {
-        alert(
-          "Não foi possível localizar um produto da venda. A exclusão foi interrompida para não deixar o estoque incorreto."
-        )
-
-        setExcluindo(null)
-
-        return
-      }
-
-      const saldoAnterior =
-        Number(
-          variante.estoqueAtual || 0
-        )
-
-      const saldoPosterior =
-        saldoAnterior +
-        Number(
-          item.quantidade || 0
-        )
-
-      const {
-        error: erroEstoque
-      } = await supabase
-        .from("produtoVariantes")
-        .update({
-          estoqueAtual:
-            saldoPosterior,
-          atualizadoem:
-            new Date().toISOString()
-        })
-        .eq(
-          "id",
-          item.varianteId
-        )
-
-      if (erroEstoque) {
-        alert(
-          "Erro ao devolver o produto ao estoque: " +
-            erroEstoque.message
-        )
-
-        setExcluindo(null)
-
-        return
-      }
-
-      const {
-        error: erroMov
-      } = await supabase
-        .from("estoqueMovimentacoes")
-        .insert([
-          {
-            varianteId:
-              item.varianteId,
-
-            tipo:
-              "DEVOLUCAO",
-
-            quantidade:
-              Number(
-                item.quantidade || 0
-              ),
-
-            custoUnitario:
-              Number(
-                item.custoUnitario || 0
-              ),
-
-            saldoAnterior,
-
-            saldoPosterior,
-
-            motivo:
-              "Exclusão de venda",
-
-            origemTipo:
-              "COMPRA",
-
-            origemId:
-              compra.id,
-
-            observacao:
-              `Estorno da venda de ${compra.cliente || "cliente"}`
-          }
-        ])
-
-      if (erroMov) {
-        /*
-         * Reverte a alteração do estoque
-         * se o histórico não puder ser salvo.
-         */
-        await supabase
-          .from("produtoVariantes")
-          .update({
-            estoqueAtual:
-              saldoAnterior,
-            atualizadoem:
-              new Date().toISOString()
-          })
-          .eq(
-            "id",
-            item.varianteId
-          )
-
-        alert(
-          "Erro ao registrar a devolução no estoque: " +
-            erroMov.message
-        )
-
-        setExcluindo(null)
-
-        return
-      }
-    }
-
-    /*
-     * =========================
-     * ESTORNAR PONTOS
-     * =========================
-     */
-
-    if (clienteAtual) {
-      const {
-        error: erroPontos
-      } = await supabase
-        .from("clientes")
-        .update({
-          pontos:
-            novosPontos
-        })
-        .eq(
-          "id",
-          clienteAtual.id
-        )
-
-      if (erroPontos) {
-        alert(
-          "O estoque foi devolvido, mas não foi possível estornar os pontos: " +
-            erroPontos.message
-        )
-
-        setExcluindo(null)
-
-        await fetchClientes()
-        await fetchCompras()
-
-        return
-      }
-    }
-
-    /*
-     * =========================
-     * EXCLUIR CUPONS E ITENS
-     * =========================
-     */
-
-    const {
-      error: erroTrocas
-    } = await supabase
-      .from("trocas")
-      .delete()
-      .eq(
-        "compraid",
-        compra.id
-      )
-
-    if (erroTrocas) {
-      alert(
-        "Erro ao excluir os cupons relacionados: " +
-          erroTrocas.message
-      )
-
+    if (error) {
+      alert("Erro ao excluir venda: " + error.message)
       setExcluindo(null)
-
       return
     }
 
-    const {
-      error: erroVendaItens
-    } = await supabase
-      .from("vendaItens")
-      .delete()
-      .eq(
-        "compraId",
-        compra.id
-      )
-
-    if (erroVendaItens) {
-      alert(
-        "Erro ao excluir os itens da venda: " +
-          erroVendaItens.message
-      )
-
-      setExcluindo(null)
-
-      return
-    }
-
-    /*
-     * =========================
-     * EXCLUIR COMPRA
-     * =========================
-     */
-
-    const {
-      error: erroCompra
-    } = await supabase
-      .from("compras")
-      .delete()
-      .eq(
-        "id",
-        compra.id
-      )
-
-    if (erroCompra) {
-      alert(
-        "Erro ao excluir venda: " +
-          erroCompra.message
-      )
-
-      setExcluindo(null)
-
-      return
-    }
-
-    alert(
-      "Venda excluída com sucesso!"
-    )
-
+    alert("Venda excluída com sucesso!")
     setExcluindo(null)
 
     await fetchClientes()
     await fetchCompras()
-    await fetchVariantes()
   }
 
   /*
@@ -1403,65 +736,6 @@ export default function Compras({
       buscaVenda,
       filtroMes,
       filtroPagamento
-    ])
-
-  /*
-   * =========================
-   * FATURAMENTO POR MÊS
-   * =========================
-   */
-
-  const vendasPorMes =
-    useMemo(() => {
-      const mapa: Record<
-        string,
-        number
-      > = {}
-
-      compras.forEach(
-        compra => {
-          const data =
-            new Date(
-              compra.criadoem
-            )
-
-          const mes =
-            String(
-              data.getMonth() + 1
-            ).padStart(
-              2,
-              "0"
-            )
-
-          if (
-            filtroMes !==
-              "todos" &&
-            mes !==
-              filtroMes
-          ) {
-            return
-          }
-
-          const chave =
-            `${mes}/${data.getFullYear()}`
-
-          mapa[chave] =
-            (mapa[chave] || 0) +
-            compra.valor
-        }
-      )
-
-      return Object.entries(
-        mapa
-      ).sort(
-        (a, b) =>
-          b[0].localeCompare(
-            a[0]
-          )
-      )
-    }, [
-      compras,
-      filtroMes
     ])
 
   /*
@@ -1535,249 +809,42 @@ export default function Compras({
    */
 
   return (
-    <div className="compras-page" style={container}>
+    <div style={container}>
       <style>
         {`
-          .compras-page {
-            width: 100%;
-            max-width: 100%;
-          }
-
           @media (max-width: 900px) {
-            .compras-page {
-              padding: 22px !important;
-            }
-
             .compras-filtros {
-              grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) !important;
-            }
-
-            .compras-filtros input {
-              grid-column: 1 / -1 !important;
+              grid-template-columns: 1fr !important;
             }
 
             .compra-card {
-              grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) auto !important;
-              gap: 10px !important;
-              padding: 12px !important;
+              grid-template-columns: 1fr 1fr !important;
             }
           }
 
           @media (max-width: 600px) {
-            .compras-page {
-              padding: 10px !important;
+            .compras-container {
+              padding: 18px !important;
             }
 
-            .compras-page > * {
-              max-width: 100% !important;
-            }
-
-            .header {
-              align-items: stretch !important;
-              gap: 10px !important;
-              margin-bottom: 12px !important;
-            }
-
-            .title {
-              font-size: 25px !important;
-            }
-
-            .header-buttons {
-              width: 100% !important;
-              display: grid !important;
+            .dash-grid {
               grid-template-columns: 1fr 1fr !important;
-              gap: 8px !important;
             }
 
-            .header-buttons button {
-              width: 100% !important;
-              min-width: 0 !important;
-              padding: 10px 7px !important;
-              font-size: 12px !important;
-            }
-
-            .dashGrid {
-              grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-              gap: 7px !important;
-              margin-bottom: 10px !important;
-            }
-
-            .dashGrid > div {
-              padding: 12px 9px !important;
-              border-radius: 11px !important;
-            }
-
-            .dashLabel {
-              font-size: 10px !important;
-              white-space: nowrap !important;
-              margin-bottom: 4px !important;
-            }
-
-            .dashValue {
-              font-size: 17px !important;
-              line-height: 1.15 !important;
-            }
-
-            .section {
-              padding: 13px !important;
-              border-radius: 13px !important;
-              margin-bottom: 10px !important;
-            }
-
-            .section h3 {
-              font-size: 15px !important;
-              margin-bottom: 10px !important;
-            }
-
-            .mesGrid {
-              display: flex !important;
-              overflow-x: auto !important;
-              gap: 7px !important;
-              padding-bottom: 2px !important;
-            }
-
-            .mesCard {
-              flex: 0 0 125px !important;
-              padding: 11px !important;
-            }
-
-            .mesValor {
-              font-size: 12px !important;
-            }
-
-            .compras-filtros {
-              display: grid !important;
-              grid-template-columns: 1fr 1fr !important;
-              gap: 7px !important;
-              margin-bottom: 10px !important;
-            }
-
-            .compras-filtros input {
-              grid-column: 1 / -1 !important;
-            }
-
-            .compras-filtros input,
-            .compras-filtros select {
-              height: 42px !important;
-              padding: 9px !important;
-              font-size: 13px !important;
-            }
-
-            .listaCompras {
-              gap: 8px !important;
+            .dash-faturamento {
+              grid-column: 1 / -1;
             }
 
             .compra-card {
-              display: grid !important;
-              grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-              gap: 0 !important;
-              padding: 0 !important;
-              border-radius: 12px !important;
-              position: relative !important;
-            }
-
-            .compra-card > div:first-child {
-              grid-column: 1 / -1 !important;
-              width: 100% !important;
-              padding: 13px 48px 10px 13px !important;
-              border-bottom: 1px solid #eeeeee !important;
-            }
-
-            .compra-card > div:nth-child(2),
-            .compra-card > div:nth-child(3),
-            .compra-card > div:nth-child(4) {
-              width: 100% !important;
-              padding: 10px 8px !important;
-              min-width: 0 !important;
-              border-bottom: none !important;
-              background: transparent !important;
-            }
-
-            .compra-card > div:nth-child(2) {
-              grid-column: 1 !important;
-            }
-
-            .compra-card > div:nth-child(3) {
-              grid-column: 2 !important;
-            }
-
-            .compra-card > div:nth-child(4) {
-              grid-column: 3 !important;
-            }
-
-            .compra-card > div:nth-child(2) strong,
-            .compra-card > div:nth-child(3) div,
-            .compra-card > div:nth-child(4) div {
-              font-size: 12px !important;
-            }
-
-            .compra-card > div:nth-child(2) .infoLabel,
-            .compra-card > div:nth-child(3) .infoLabel,
-            .compra-card > div:nth-child(4) .infoLabel {
-              font-size: 9px !important;
-              margin-bottom: 3px !important;
-            }
-
-            .compra-card > div:nth-child(5) {
-              position: absolute !important;
-              top: 9px !important;
-              right: 9px !important;
-              width: auto !important;
-              padding: 0 !important;
-              border: none !important;
-              background: transparent !important;
-            }
-
-            .deleteBtn {
-              padding: 6px 7px !important;
-              font-size: 9px !important;
-              border-radius: 6px !important;
-            }
-
-            .notifBar {
-              padding: 10px 12px !important;
-              margin-bottom: 10px !important;
-            }
-
-            .modalCard {
-              width: calc(100vw - 20px) !important;
-              max-height: calc(100vh - 20px) !important;
-              padding: 15px !important;
-              border-radius: 14px !important;
-            }
-
-            .clienteGrid {
               grid-template-columns: 1fr !important;
-              max-height: 170px !important;
-            }
-          }
-
-          @media (max-width: 420px) {
-            .compras-page {
-              padding: 8px !important;
-            }
-
-            .dashGrid {
-              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            }
-
-            .dashGrid > div:first-child {
-              grid-column: 1 / -1 !important;
-            }
-
-            .dashValue {
-              font-size: 19px !important;
             }
 
             .header-buttons {
-              grid-template-columns: 1fr 1fr !important;
+              width: 100%;
             }
 
-            .compra-card > div:nth-child(2),
-            .compra-card > div:nth-child(3),
-            .compra-card > div:nth-child(4) {
-              padding-left: 7px !important;
-              padding-right: 7px !important;
+            .header-buttons button {
+              flex: 1;
             }
           }
         `}
@@ -1843,7 +910,7 @@ export default function Compras({
           DASHBOARD
       ========================= */}
 
-      <div style={dashGrid}>
+      <div className="dash-grid" style={dashGrid}>
         <Dash
           className="dash-faturamento"
           label="Faturamento"
@@ -1880,49 +947,6 @@ export default function Compras({
             ).size
           }
         />
-      </div>
-
-      {/* =========================
-          FATURAMENTO POR MÊS
-      ========================= */}
-
-      <div style={section}>
-        <h3 style={sectionTitle}>
-          Faturamento por mês
-        </h3>
-
-        <div style={mesGrid}>
-          {vendasPorMes.length ===
-            0 && (
-            <div
-              style={emptyText}
-            >
-              Nenhuma venda
-              encontrada.
-            </div>
-          )}
-
-          {vendasPorMes.map(
-            ([mes, total]) => (
-              <div
-                key={mes}
-                style={mesCard}
-              >
-                <strong>
-                  {mes}
-                </strong>
-
-                <div
-                  style={mesValor}
-                >
-                  {moeda(
-                    Number(total)
-                  )}
-                </div>
-              </div>
-            )
-          )}
-        </div>
       </div>
 
       {/* =========================
@@ -2555,147 +1579,33 @@ export default function Compras({
                     </div>
                   )}
 
-                {/* PRODUTO */}
+                {/* VALOR */}
 
                 <label
                   style={
                     fieldLabel
                   }
                 >
-                  Produto
+                  Valor da compra
                 </label>
 
-                <select
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="R$ 0,00"
                   style={input}
                   value={
-                    varianteSel?.id || ""
+                    valor || ""
                   }
-                  onChange={e => {
-                    const variante =
-                      variantes.find(
-                        v =>
-                          v.id ===
-                          e.target.value
-                      ) || null
-
-                    setVarianteSel(
-                      variante
-                    )
-                    setQuantidade(1)
+                  onChange={e =>
                     setValor(
-                      variante
-                        ? variante.precoVenda
-                        : 0
+                      Number(
+                        e.target.value
+                      )
                     )
-                  }}
-                >
-                  <option value="">
-                    Selecione o produto
-                  </option>
-
-                  {variantes.map(
-                    v => (
-                      <option
-                        key={v.id}
-                        value={v.id}
-                        disabled={
-                          v.estoqueAtual <=
-                          0
-                        }
-                      >
-                        {v.produtoNome}
-                        {v.cor
-                          ? ` • ${v.cor}`
-                          : ""}
-                        {v.tamanho
-                          ? ` • ${v.tamanho}`
-                          : ""}
-                        {" — "}
-                        {moeda(
-                          v.precoVenda
-                        )}
-                        {" — estoque: "}
-                        {
-                          v.estoqueAtual
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-
-                {varianteSel && (
-                  <>
-                    <label
-                      style={
-                        fieldLabel
-                      }
-                    >
-                      Quantidade
-                    </label>
-
-                    <input
-                      type="number"
-                      min="1"
-                      max={
-                        varianteSel.estoqueAtual
-                      }
-                      step="1"
-                      style={input}
-                      value={
-                        quantidade
-                      }
-                      onChange={e => {
-                        const novaQuantidade =
-                          Math.max(
-                            1,
-                            Math.min(
-                              Number(
-                                e.target
-                                  .value
-                              ) || 1,
-                              varianteSel.estoqueAtual
-                            )
-                          )
-
-                        setQuantidade(
-                          novaQuantidade
-                        )
-
-                        setValor(
-                          varianteSel.precoVenda *
-                            novaQuantidade
-                        )
-                      }}
-                    />
-
-                    <div
-                      style={muted}
-                    >
-                      Preço unitário:{" "}
-                      {moeda(
-                        varianteSel.precoVenda
-                      )}{" "}
-                      • Estoque disponível:{" "}
-                      {
-                        varianteSel.estoqueAtual
-                      }
-                    </div>
-                  </>
-                )}
-
-                {/* VALOR */}
-
-                <div
-                  style={{
-                    ...resumo,
-                    marginTop: 12
-                  }}
-                >
-                  Valor da compra:{" "}
-                  <strong>
-                    {moeda(valor)}
-                  </strong>
-                </div>
+                  }
+                />
 
                 {/* PAGAMENTO */}
 
