@@ -1109,34 +1109,189 @@ export default function Compras({
    */
 
   return (
-    <div style={container}>
+    <div className="container" style={container}>
       <style>
         {`
           @media (max-width: 900px) {
             .compras-filtros {
-              grid-template-columns: 1fr !important;
+              grid-template-columns: 1fr 1fr !important;
+            }
+
+            .compras-filtros input {
+              grid-column: 1 / -1;
             }
 
             .compra-card {
-              grid-template-columns: 1fr 1fr !important;
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+              gap: 14px !important;
+              position: relative;
+            }
+
+            .compra-card > div:first-child {
+              grid-column: 1 / -1;
+              padding-right: 70px;
+            }
+
+            .compra-card > div:nth-child(5) {
+              position: absolute;
+              top: 14px;
+              right: 14px;
             }
           }
 
           @media (max-width: 600px) {
             .compras-container {
-              padding: 18px !important;
+              padding: 14px !important;
+            }
+
+            .header {
+              align-items: flex-start !important;
+              gap: 12px !important;
+            }
+
+            .header-buttons {
+              width: 100%;
+              display: grid !important;
+              grid-template-columns: 1fr 1fr;
+              gap: 8px !important;
+            }
+
+            .header-buttons button {
+              width: 100%;
+              min-width: 0;
+            }
+
+            .dashGrid {
+              grid-template-columns: 1fr 1fr !important;
+            }
+
+            .dashGrid > :first-child {
+              grid-column: 1 / -1;
+            }
+
+            .compras-filtros {
+              grid-template-columns: 1fr !important;
+            }
+
+            .compras-filtros input {
+              grid-column: auto;
+            }
+
+            .compra-card {
+              grid-template-columns: 1fr 1fr !important;
+              padding: 15px !important;
+              gap: 13px !important;
+            }
+
+            .compra-card > div:first-child {
+              padding-right: 58px;
+            }
+
+            .compra-card > div:nth-child(5) {
+              top: 12px;
+              right: 12px;
+            }
+
+            .compra-card > div:nth-child(2),
+            .compra-card > div:nth-child(3),
+            .compra-card > div:nth-child(4) {
+              background: #fff;
+              border: 1px solid #eeeeee;
+              border-radius: 10px;
+              padding: 10px;
+            }
+
+            .deleteBtn {
+              padding: 7px 9px !important;
+              font-size: 11px !important;
+            }
+
+            .section {
+              padding: 15px !important;
+            }
+
+            .mesGrid {
+              grid-template-columns: 1fr 1fr !important;
+            }
+
+            .mesValor {
+              font-size: 13px;
+            }
+
+            .modalCard {
+              width: calc(100vw - 20px) !important;
+              max-width: none !important;
+              max-height: calc(100vh - 20px) !important;
+              padding: 16px !important;
+              border-radius: 14px !important;
+            }
+
+            .clienteGrid {
+              grid-template-columns: 1fr 1fr !important;
+              max-height: 180px !important;
+            }
+
+            .clienteCard {
+              padding: 10px !important;
+            }
+
+            .clienteSelecionado {
+              align-items: flex-start !important;
+              flex-direction: column;
+              gap: 5px !important;
+            }
+
+            .cupomBox {
+              align-items: flex-start !important;
+              flex-direction: column;
+            }
+
+            .cupomLabel {
+              width: 100%;
+              justify-content: space-between;
+              padding-top: 5px;
+            }
+
+            .resumo {
+              font-size: 12px !important;
+              line-height: 1.7 !important;
+            }
+          }
+
+          @media (max-width: 380px) {
+            .container {
+              padding: 12px !important;
+            }
+
+            .title {
+              font-size: 24px !important;
+            }
+
+            .dashGrid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .dashGrid > :first-child {
+              grid-column: auto;
+            }
+
+            .mesGrid,
+            .clienteGrid {
+              grid-template-columns: 1fr !important;
             }
 
             .compra-card {
               grid-template-columns: 1fr !important;
             }
 
-            .header-buttons {
-              width: 100%;
+            .compra-card > div:first-child {
+              grid-column: auto;
             }
 
-            .header-buttons button {
-              flex: 1;
+            .compra-card > div:nth-child(2),
+            .compra-card > div:nth-child(3),
+            .compra-card > div:nth-child(4) {
+              grid-column: 1 / -1;
             }
           }
         `}
@@ -1169,8 +1324,8 @@ export default function Compras({
           CABEÇALHO
       ========================= */}
 
-      <div style={header}>
-        <h1 style={title}>
+      <div className="header" style={header}>
+        <h1 className="title" style={title}>
           Compras
         </h1>
 
@@ -1202,7 +1357,7 @@ export default function Compras({
           DASHBOARD
       ========================= */}
 
-      <div style={dashGrid}>
+      <div className="dashGrid" style={dashGrid}>
         <Dash
           className="dash-faturamento"
           label="Faturamento"
@@ -1245,12 +1400,12 @@ export default function Compras({
           FATURAMENTO POR MÊS
       ========================= */}
 
-      <div style={section}>
+      <div className="section" style={section}>
         <h3 style={sectionTitle}>
           Faturamento por mês
         </h3>
 
-        <div style={mesGrid}>
+        <div className="mesGrid" style={mesGrid}>
           {vendasPorMes.length ===
             0 && (
             <div
@@ -1410,7 +1565,7 @@ export default function Compras({
           HISTÓRICO
       ========================= */}
 
-      <div style={section}>
+      <div className="section" style={section}>
         <h3 style={sectionTitle}>
           Histórico de vendas
         </h3>
