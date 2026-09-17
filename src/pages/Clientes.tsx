@@ -20,6 +20,8 @@ type Cliente = {
   tamanhoBlusa?: string
   busto?: string
   quadril?: string
+  clienteRef: string
+  observacao: string
 }
 
 type Compra = {
@@ -51,6 +53,7 @@ export default function Clientes({
   const [selected, setSelected] = useState<Cliente | null>(null)
   const [editing, setEditing] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [cuponsAberto, setCuponsAberto] = useState(false)
 
   const [editarDados, setEditarDados] = useState(false)
   const [editarMedidas, setEditarMedidas] = useState(false)
@@ -92,7 +95,9 @@ export default function Clientes({
         tamanhoVestido: c.tamanhoVestido || "",
         tamanhoBlusa: c.tamanhoBlusa || "",
         busto: c.busto || "",
-        quadril: c.quadril || ""
+        quadril: c.quadril || "",
+        clienteRef: c.clienteRef || "",
+        observacao: c.observacao || ""
       }))
 
       setClientes(clientesFormatados)
@@ -147,7 +152,9 @@ export default function Clientes({
         estado: form.estado || "",
         cep: form.CEP || "",
         complemento: form.Complemento || "",
-        dataNascimento: form["Data de Nascimento"] || "",
+        dataNascimento: form["Data de Nascimento"] || null,
+        clienteRef: form.clienteRef || "",
+        observacao: form.observacao || "",
         cintura: form.cintura || "",
         tamanhoSaia: form.tamanhoSaia || "",
         tamanhoVestido: form.tamanhoVestido || "",
@@ -192,7 +199,9 @@ export default function Clientes({
           cep: novo.CEP || "",
           complemento: novo.Complemento || "",
           dataNascimento:
-            novo["Data de Nascimento"] || "",
+            novo["Data de Nascimento"] || null,
+          clienteRef: novo.clienteRef || "",
+          observacao: novo.observacao || "",
           cintura: novo.cintura || "",
           pontos: 0,
           tamanhoSaia: novo.tamanhoSaia || "",
@@ -324,6 +333,8 @@ CLIENTE
 Nome: ${cliente.nome}
 CPF: ${cliente.cpf || "-"}
 Celular: ${cliente.celular || "-"}
+Referência: ${cliente.clienteRef || "-"}
+Observação: ${cliente.observacao || "-"}
 Data de nascimento: ${
       cliente["Data de Nascimento"]
         ? formatarData(cliente["Data de Nascimento"])
@@ -445,6 +456,9 @@ ${
       c => !estadoFiltro || c.estado === estadoFiltro
     )
 
+  const totalClientes = clientes.length
+  const clientesComCupom = clientes.filter(c => c.pontos >= 10)
+
   function fecharModal() {
     setSelected(null)
     setCreating(false)
@@ -453,6 +467,7 @@ ${
     setEditarMedidas(false)
     setRelatorioAberto(false)
     setRelatorioTexto("")
+    setCuponsAberto(false)
   }
 
   function iniciarEdicaoDados() {
@@ -481,6 +496,76 @@ ${
           gap: 12px;
           margin-bottom: 30px;
           flex-wrap: wrap;
+        }
+
+        .clientes-dashboard {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 24px;
+        }
+
+        .clientes-dashboard-card {
+          background: #fff;
+          border: 1px solid #eee;
+          border-radius: 16px;
+          padding: 16px 18px;
+          box-sizing: border-box;
+        }
+
+        .clientes-dashboard-button {
+          width: 100%;
+          text-align: left;
+          cursor: pointer;
+          transition: 0.2s;
+        }
+
+        .clientes-dashboard-button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 22px rgba(0,0,0,0.06);
+        }
+
+        .clientes-dashboard-label {
+          font-size: 12px;
+          color: #888;
+          margin-bottom: 6px;
+        }
+
+        .clientes-dashboard-number {
+          font-size: 26px;
+          font-weight: 600;
+          color: #333;
+        }
+
+        .cupons-clientes-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-height: 55vh;
+          overflow-y: auto;
+        }
+
+        .cupons-cliente-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border: 1px solid #eee;
+          border-radius: 12px;
+          background: #fcfbf7;
+        }
+
+        .cupons-cliente-nome {
+          font-size: 14px;
+          font-weight: 500;
+          min-width: 0;
+        }
+
+        .cupons-cliente-pontos {
+          color: #b8962e;
+          font-size: 12px;
+          white-space: nowrap;
         }
 
         .clientes-busca {
@@ -542,6 +627,20 @@ ${
             padding: 9px 14px !important;
           }
 
+          .clientes-dashboard {
+            gap: 8px !important;
+            margin-bottom: 18px !important;
+          }
+
+          .clientes-dashboard-card {
+            padding: 13px !important;
+            border-radius: 14px !important;
+          }
+
+          .clientes-dashboard-number {
+            font-size: 22px !important;
+          }
+
           .clientes-filtros {
             display: grid !important;
             grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -590,7 +689,7 @@ ${
             font-size: 14px !important;
           }
 
-          .cliente-card-city {
+          .cliente-card-ref {
             font-size: 12px !important;
           }
 
@@ -702,6 +801,32 @@ ${
         </button>
       </div>
 
+      {/* MINI DASHBOARD */}
+
+      <div className="clientes-dashboard">
+        <div className="clientes-dashboard-card">
+          <div className="clientes-dashboard-label">
+            Total de clientes
+          </div>
+          <div className="clientes-dashboard-number">
+            {totalClientes}
+          </div>
+        </div>
+
+        <button
+          className="clientes-dashboard-card clientes-dashboard-button"
+          style={{ border: "1px solid #eee", background: "#fff" }}
+          onClick={() => setCuponsAberto(true)}
+        >
+          <div className="clientes-dashboard-label">
+            Clientes com cupom
+          </div>
+          <div className="clientes-dashboard-number">
+            {clientesComCupom.length}
+          </div>
+        </button>
+      </div>
+
       {/* FILTROS */}
 
       <div className="clientes-filtros">
@@ -801,13 +926,14 @@ ${
                 {c.nome}
               </div>
 
-              <div
-                className="cliente-card-city"
-                style={muted}
-              >
-                {c.cidade ||
-                  "Cidade não informada"}
-              </div>
+              {c.clienteRef && (
+                <div
+                  className="cliente-card-ref"
+                  style={muted}
+                >
+                  {c.clienteRef}
+                </div>
+              )}
 
               <div
                 className="cliente-card-coupon"
@@ -927,6 +1053,19 @@ ${
                   </div>
                 </div>
 
+                {selected.clienteRef && (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#888",
+                      marginTop: -8,
+                      marginBottom: 16
+                    }}
+                  >
+                    {selected.clienteRef}
+                  </div>
+                )}
+
                 {/* DADOS PESSOAIS */}
 
                 <div style={sectionHeader}>
@@ -958,6 +1097,18 @@ ${
                       selected.celular || "-"
                     }
                   />
+
+                  <Info
+                    label="Referência"
+                    value={selected.clienteRef || "-"}
+                  />
+
+                  <div className="cliente-info-full">
+                    <Info
+                      label="Observação"
+                      value={selected.observacao || "-"}
+                    />
+                  </div>
 
                   <Info
                     label="Data de nascimento"
@@ -1225,7 +1376,31 @@ ${
 
                     <input
                       style={inputSpacing}
-                      placeholder="Data de nascimento"
+                      placeholder="Referência"
+                      value={form.clienteRef || ""}
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          clienteRef: e.target.value
+                        })
+                      }
+                    />
+
+                    <textarea
+                      style={{ ...inputSpacing, minHeight: 80, resize: "vertical" as const }}
+                      placeholder="Observação"
+                      value={form.observacao || ""}
+                      onChange={e =>
+                        setForm({
+                          ...form,
+                          observacao: e.target.value
+                        })
+                      }
+                    />
+
+                    <input
+                      style={inputSpacing}
+                      placeholder="Data de nascimento (opcional)"
                       type="date"
                       value={
                         form[
@@ -1511,7 +1686,31 @@ ${
 
                 <input
                   style={inputSpacing}
-                  placeholder="Data de nascimento"
+                  placeholder="Referência"
+                  value={novo.clienteRef || ""}
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      clienteRef: e.target.value
+                    })
+                  }
+                />
+
+                <textarea
+                  style={{ ...inputSpacing, minHeight: 80, resize: "vertical" as const }}
+                  placeholder="Observação"
+                  value={novo.observacao || ""}
+                  onChange={e =>
+                    setNovo({
+                      ...novo,
+                      observacao: e.target.value
+                    })
+                  }
+                />
+
+                <input
+                  style={inputSpacing}
+                  placeholder="Data de nascimento (opcional)"
                   type="date"
                   value={
                     novo[
@@ -1715,6 +1914,86 @@ ${
                   </button>
                 </div>
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CLIENTES COM CUPOM */}
+
+      {cuponsAberto && (
+        <div
+          className="cliente-modal-overlay"
+          style={{ ...overlay, zIndex: 2900 }}
+          onClick={() => setCuponsAberto(false)}
+        >
+          <div
+            className="cliente-modal"
+            style={modal}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={modalHeader}>
+              <div>
+                <h2
+                  className="cliente-modal-title"
+                  style={modalTitle}
+                >
+                  Clientes com cupom
+                </h2>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#888",
+                    marginTop: 4
+                  }}
+                >
+                  Clientes com 10 pontos ou mais
+                </div>
+              </div>
+
+              <button
+                style={closeBtn}
+                onClick={() => setCuponsAberto(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            {clientesComCupom.length > 0 ? (
+              <div className="cupons-clientes-list">
+                {clientesComCupom
+                  .sort((a, b) => b.pontos - a.pontos)
+                  .map(cliente => (
+                    <button
+                      key={cliente.id}
+                      className="cupons-cliente-item"
+                      style={{ width: "100%", border: "1px solid #eee", cursor: "pointer", textAlign: "left" }}
+                      onClick={() => {
+                        setCuponsAberto(false)
+                        setSelected(cliente)
+                        setForm({ ...cliente })
+                      }}
+                    >
+                      <span className="cupons-cliente-nome">
+                        {cliente.nome}
+                      </span>
+                      <span className="cupons-cliente-pontos">
+                        {calc(cliente.pontos).cupons} cupom(ns) · {cliente.pontos} pts
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: "22px 10px",
+                  textAlign: "center",
+                  color: "#888",
+                  fontSize: 14
+                }}
+              >
+                Nenhum cliente possui cupom no momento.
+              </div>
             )}
           </div>
         </div>
