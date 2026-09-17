@@ -343,9 +343,6 @@ export default function Produtos() {
   const [modalEstoque, setModalEstoque] =
     useState(false)
 
-  const [modalInformacoes, setModalInformacoes] =
-    useState(false)
-
   const [produtoEditando, setProdutoEditando] =
     useState<Produto | null>(null)
 
@@ -363,6 +360,9 @@ const [salvando, setSalvando] = useState(false)
 
   const [novaOpcaoHex, setNovaOpcaoHex] =
     useState("#000000")
+
+  const [corSeletorAberto, setCorSeletorAberto] =
+    useState(false)
 
   const [isMobile, setIsMobile] =
     useState(false)
@@ -1473,7 +1473,7 @@ useEffect(() => {
         >
           <button
             style={infoButton}
-            onClick={() => setModalInformacoes(true)}
+            
             title="Entender códigos, SKU e precificação"
           >
             i
@@ -3307,76 +3307,119 @@ useEffect(() => {
                 </select>
               </Field>
 
-              <Field label="Cor / RGB / HEX">
-                <select
-                  value={
-                    formVariante.cor
-                  }
-                  onChange={e => {
-                    if (
-                      e.target
-                        .value ===
-                      "__novo__"
-                    ) {
-                      abrirNovaOpcao(
-                        "cor"
-                      )
-                      return
-                    }
+              <Field label="Cor">
+                <div style={colorSelectRow}>
+                  <select
+                    value={formVariante.cor}
+                    onChange={e => {
+                      if (e.target.value === "__novo__") {
+                        abrirNovaOpcao("cor")
+                        return
+                      }
 
-                    setFormVariante(
-                      prev => ({
+                      setFormVariante(prev => ({
                         ...prev,
-                        cor:
-                          e.target
-                            .value
-                      })
-                    )
-                  }}
-                  style={input}
-                >
-                  <option value="">
-                    Selecione
-                  </option>
+                        cor: e.target.value
+                      }))
+                      setCorSeletorAberto(false)
+                    }}
+                    style={input}
+                  >
+                    <option value="">Selecione uma cor</option>
 
-                  {cores.map(
-                    cor => (
-                      <option
-                        key={
-                          cor.nome
-                        }
-                        value={
-                          cor.nome
-                        }
-                      >
-                        {
-                          cor.nome
-                        }
+                    {formVariante.cor &&
+                      !cores.some(cor => cor.nome === formVariante.cor) && (
+                        <option value={formVariante.cor}>
+                          {formVariante.cor}
+                        </option>
+                      )}
+
+                    {cores.map(cor => (
+                      <option key={`${cor.nome}-${cor.hex}`} value={cor.nome}>
+                        {cor.nome}
                       </option>
-                    )
-                  )}
+                    ))}
 
-                  <option value="__novo__">
-                    + Adicionar nova
-                  </option>
-                </select>
+                    <option value="__novo__">+ Adicionar nova cor</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    style={colorExpandButton}
+                    onClick={() => setCorSeletorAberto(prev => !prev)}
+                  >
+                    {corSeletorAberto ? "Fechar cores" : "Escolher cor"}
+                  </button>
+                </div>
 
                 {formVariante.cor && (
-                  <CorPreview
-                    nome={formVariante.cor}
-                    cores={cores}
-                  />
+                  <CorPreview nome={formVariante.cor} cores={cores} />
                 )}
 
-                <PaletaCores
-                  cores={cores}
-                  selecionada={formVariante.cor}
-                  onSelecionar={hex => {
-                    const cor = cores.find(item => item.hex.toUpperCase() === hex.toUpperCase())
-                    if (cor) setFormVariante(prev => ({ ...prev, cor: cor.nome }))
-                  }}
-                  onNovaCor={() => abrirNovaOpcao("cor")}
-                />
+                {corSeletorAberto && (
+                  <div style={colorPickerPanel}>
+                    <div style={colorPickerTop}>
+                      <div>
+                        <strong style={colorPickerTitle}>Escolha o tom</strong>
+                        <span style={colorPickerHint}>
+                          Você pode escolher qualquer tom, sem depender de uma lista limitada.
+                        </span>
+                      </div>
+
+                      <label style={nativeColorButton}>
+                        <input
+                          type="color"
+                          value={
+                            /^#[0-9A-Fa-f]{6}$/.test(formVariante.cor)
+                              ? formVariante.cor
+                              : (encontrarCor(formVariante.cor, cores)?.hex ?? "#FF69B4")
+                          }
+                          onChange={e => {
+                            setFormVariante(prev => ({
+                              ...prev,
+                              cor: e.target.value.toUpperCase()
+                            }))
+                          }}
+                        />
+                        <span>Seletor RGB / HEX</span>
+                      </label>
+                    </div>
+
+                    <div style={quickColorsGrid}>
+                      {gerarPaletaCores().map(hex => (
+                        <button
+                          key={hex}
+                          type="button"
+                          title={hex}
+                          aria-label={`Escolher ${hex}`}
+                          onClick={() => {
+                            const corExistente = cores.find(
+                              cor => cor.hex.toUpperCase() === hex
+                            )
+
+                            setFormVariante(prev => ({
+                              ...prev,
+                              cor: corExistente?.nome ?? hex
+                            }))
+                            setCorSeletorAberto(false)
+                          }}
+                          style={{
+                            ...quickColor,
+                            background: hex,
+                            border:
+                              ((encontrarCor(formVariante.cor, cores)?.hex ?? formVariante.cor).toUpperCase() === hex)
+                                ? "2px solid #5b4a2f"
+                                : "1px solid rgba(0,0,0,.12)"
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    <span style={inputHint}>
+                      A grade oferece 120 tons rápidos. Para um tom específico, use o seletor RGB/HEX.
+                    </span>
+                  </div>
+                )}
               </Field>
 
               <Field label="Tamanho">
@@ -3481,103 +3524,92 @@ useEffect(() => {
                 <span style={inputHint}>Informe em reais. Ex.: 42,90.</span>
               </Field>
 
-              {/* PRECIFICAÇÃO ERP */}
-
               {(() => {
                 const custo = valorNumerico(formVariante.custoUnitario)
                 const sugerido = vendaSugerida(custo)
-                const preco = valorNumerico(formVariante.precoVenda)
-                const lucro = lucroUnitario(preco, custo)
-                const percentual = percentualSobreCusto(preco, custo)
 
                 return (
-                  <div style={pricingPanel}>
-                    <div style={pricingHeader}>
-                      <div>
-                        <strong style={pricingTitle}>Precificação</strong>
-                        <span style={pricingSubtitle}>Markup padrão da loja: {MARKUP_PADRAO.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x</span>
-                      </div>
-                      <button
-                        type="button"
-                        style={smallInfoButton}
-                        onClick={() => setModalInformacoes(true)}
-                        title="Como funciona a precificação"
-                      >
-                        ?
-                      </button>
+                  <Field label="Venda sugerida">
+                    <div style={suggestedPriceBox}>
+                      <strong>{moeda(sugerido)}</strong>
+                      <span>
+                        Custo × {MARKUP_PADRAO.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1
+                        })}
+                      </span>
                     </div>
-
-                    <div style={pricingGrid}>
-                      <div style={pricingItem}>
-                        <span>Preço de custo</span>
-                        <strong>{moeda(custo)}</strong>
-                      </div>
-
-                      <div style={pricingItem}>
-                        <span>Venda sugerida</span>
-                        <strong>{moeda(sugerido)}</strong>
-                        <small>Custo × 2,5</small>
-                      </div>
-
-                      <div style={pricingItem}>
-                        <span>Lucro unitário</span>
-                        <strong style={{ color: lucro >= 0 ? "#657b58" : "#a34e4e" }}>{moeda(lucro)}</strong>
-                      </div>
-
-                      <div style={pricingItem}>
-                        <span>Markup aplicado</span>
-                        <strong>{custo > 0 && preco > 0 ? `${(preco / custo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x` : "—"}</strong>
-                      </div>
-                    </div>
-
-                    <label style={markupCheck}>
-                      <input
-                        type="checkbox"
-                        checked={usarMarkupSugerido}
-                        onChange={e => {
-                          const marcado = e.target.checked
-                          setUsarMarkupSugerido(marcado)
-                          if (marcado && custo > 0) {
-                            setFormVariante(prev => ({
-                              ...prev,
-                              precoVenda: formatarMoedaInput(sugerido)
-                            }))
-                          }
-                        }}
-                      />
-                      <span>Usar markup sugerido (2,5x)</span>
-                    </label>
-
-                    <div style={pricingResult}>
-                      <span>Sobre o custo</span>
-                      <strong>{percentual === null ? "—" : `${percentual >= 0 ? "+" : ""}${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`}</strong>
-                    </div>
-                  </div>
+                  </Field>
                 )
               })()}
 
-              <Field label="Preço de venda">
-                <input
-                  value={formVariante.precoVenda}
-                  onChange={e => {
-                    setUsarMarkupSugerido(false)
-                    setFormVariante(prev => ({
-                      ...prev,
-                      precoVenda: e.target.value
-                    }))
-                  }}
-                  onBlur={() =>
-                    setFormVariante(prev => ({
-                      ...prev,
-                      precoVenda: formatarMoedaInput(prev.precoVenda)
-                    }))
-                  }
-                  style={input}
-                  placeholder="100,00"
-                  inputMode="decimal"
-                />
-                <span style={inputHint}>Você pode usar a venda sugerida ou informar outro valor em reais.</span>
-              </Field>
+              {(() => {
+                const custo = valorNumerico(formVariante.custoUnitario)
+                const preco = valorNumerico(formVariante.precoVenda)
+                const lucro = lucroUnitario(preco, custo)
+
+                return (
+                  <>
+                    <Field label="Venda escolhida">
+                      <input
+                        value={formVariante.precoVenda}
+                        onChange={e => {
+                          setUsarMarkupSugerido(false)
+                          setFormVariante(prev => ({
+                            ...prev,
+                            precoVenda: e.target.value
+                          }))
+                        }}
+                        onBlur={() =>
+                          setFormVariante(prev => ({
+                            ...prev,
+                            precoVenda: formatarMoedaInput(prev.precoVenda)
+                          }))
+                        }
+                        style={input}
+                        placeholder="100,00"
+                        inputMode="decimal"
+                      />
+
+                      <label style={markupCheck}>
+                        <input
+                          type="checkbox"
+                          checked={usarMarkupSugerido}
+                          onChange={e => {
+                            const marcado = e.target.checked
+                            setUsarMarkupSugerido(marcado)
+
+                            if (marcado && custo > 0) {
+                              setFormVariante(prev => ({
+                                ...prev,
+                                precoVenda: formatarMoedaInput(vendaSugerida(custo))
+                              }))
+                            }
+                          }}
+                        />
+                        <span>Usar markup sugerido (2,5x)</span>
+                      </label>
+                    </Field>
+
+                    <Field label="Lucro unitário">
+                      <div style={{
+                        ...profitBox,
+                        ...(lucro < 0 ? profitBoxNegative : {})
+                      }}>
+                        <strong>{moeda(lucro)}</strong>
+                        <span>
+                          {custo > 0 && preco > 0
+                            ? `${((preco / custo) * 100).toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                              })}% sobre o custo`
+                            : "Informe custo e venda"}
+                        </span>
+                      </div>
+                    </Field>
+                  </>
+                )
+              })()}
 
               <Field label="Estoque mínimo">
                 <input
@@ -3945,51 +3977,6 @@ useEffect(() => {
           </div>
         </div>
       )}
-      {/* MODAL INFORMAÇÕES ERP */}
-
-      {modalInformacoes && (
-        <div style={overlayModal}>
-          <div style={{ ...modal, maxWidth: isMobile ? "100%" : 620 }}>
-            <ModalHeader
-              title="Referências e precificação"
-              subtitle="Como os códigos e os valores funcionam no cadastro."
-              fechar={() => setModalInformacoes(false)}
-            />
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={infoCard}>
-                <strong>Código do produto</strong>
-                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas. No cadastro do produto, ele pode ser alterado quando necessário.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Código da variante</strong>
-                <p>É o código numérico gravado em <code>produtoVariantes.codigoVariante</code>. Ele identifica aquela combinação específica de cor e tamanho.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>SKU</strong>
-                <p>É a referência operacional da variante. Diferente dos códigos numéricos, o SKU é textual e permanece único no banco.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Markup 2,5x</strong>
-                <p>O sistema calcula a venda sugerida multiplicando o custo por 2,5. Exemplo: custo de R$ 40,00 → venda sugerida de R$ 100,00 → lucro unitário de R$ 60,00.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Venda escolhida</strong>
-                <p>O valor sugerido não é obrigatório. Se a opção “Usar markup sugerido” estiver desmarcada, você pode informar o preço que deseja praticar e o lucro é recalculado automaticamente.</p>
-              </div>
-            </div>
-
-            <div style={modalFooter}>
-              <button style={primaryButton} onClick={() => setModalInformacoes(false)}>Entendi</button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }
@@ -4075,6 +4062,57 @@ function CorPreview({
       <span>Cor cadastrada: <strong>{cor.nome}</strong> · {cor.hex}</span>
     </div>
   )
+}
+
+function gerarPaletaCores() {
+  const resultado: string[] = []
+  const matizes = Array.from({ length: 24 }, (_, i) => i * 15)
+  const luminosidades = [35, 45, 55, 65, 75]
+
+  for (const luminosidade of luminosidades) {
+    for (const matiz of matizes) {
+      const s = 0.85
+      const l = luminosidade / 100
+      const h = matiz / 60
+      const c = (1 - Math.abs(2 * l - 1)) * s
+      const x = c * (1 - Math.abs((h % 2) - 1))
+      const m = l - c / 2
+
+      let r = 0
+      let g = 0
+      let b = 0
+
+      if (matiz < 60) {
+        r = c
+        g = x
+      } else if (matiz < 120) {
+        r = x
+        g = c
+      } else if (matiz < 180) {
+        g = c
+        b = x
+      } else if (matiz < 240) {
+        g = x
+        b = c
+      } else if (matiz < 300) {
+        r = x
+        b = c
+      } else {
+        r = c
+        b = x
+      }
+
+      const hex = (valor: number) =>
+        Math.round((valor + m) * 255)
+          .toString(16)
+          .padStart(2, "0")
+          .toUpperCase()
+
+      resultado.push(`#${hex(r)}${hex(g)}${hex(b)}`)
+    }
+  }
+
+  return resultado
 }
 
 function PaletaCores({
@@ -4764,24 +4802,127 @@ const infoButton = {
   cursor: "pointer"
 }
 
-const smallInfoButton = {
-  width: 28,
-  height: 28,
-  borderRadius: "50%",
+
+
+
+const colorSelectRow = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: 8,
+  alignItems: "stretch",
+  minWidth: 0
+}
+
+const colorExpandButton = {
   border: "1px solid #dfd2b9",
+  borderRadius: 8,
+  padding: "0 13px",
   background: "#fffdf8",
-  color: "#8b6f3d",
-  fontWeight: 700,
+  color: "#78633b",
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const
+}
+
+const colorPickerPanel = {
+  marginTop: 10,
+  padding: 12,
+  border: "1px solid #e7dece",
+  borderRadius: 10,
+  background: "#fcfaf5",
+  width: "100%",
+  boxSizing: "border-box" as const
+}
+
+const colorPickerTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  marginBottom: 12
+}
+
+const colorPickerTitle = {
+  display: "block",
+  color: "#4e4941",
+  fontSize: 12
+}
+
+const colorPickerHint = {
+  display: "block",
+  marginTop: 3,
+  color: "#8c857b",
+  fontSize: 10
+}
+
+const nativeColorButton = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  padding: "6px 9px",
+  border: "1px solid #ddd4c4",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#665d50",
+  fontSize: 10,
   cursor: "pointer"
 }
 
-const infoCard = {
-  padding: 14,
-  border: "1px solid #ece3d3",
-  borderRadius: 10,
-  background: "#fff"
+const quickColorsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(28px, 1fr))",
+  gap: 5,
+  width: "100%",
+  maxHeight: 210,
+  overflowY: "auto" as const,
+  padding: 2,
+  boxSizing: "border-box" as const
 }
 
+const quickColor = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  minWidth: 0,
+  borderRadius: 6,
+  cursor: "pointer",
+  padding: 0,
+  boxSizing: "border-box" as const
+}
+
+const suggestedPriceBox = {
+  minHeight: 42,
+  boxSizing: "border-box" as const,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  padding: "9px 11px",
+  border: "1px solid #e1d7c4",
+  borderRadius: 8,
+  background: "#faf7ee"
+}
+
+const profitBox = {
+  minHeight: 42,
+  boxSizing: "border-box" as const,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  padding: "9px 11px",
+  border: "1px solid #dfe7d9",
+  borderRadius: 8,
+  background: "#f5f8f2",
+  color: "#5f7055"
+}
+
+const profitBoxNegative = {
+  border: "1px solid #ecd6d6",
+  background: "#fff7f7",
+  color: "#a34e4e"
+}
 
 const paletteWrapper = {
   marginTop: 10,
@@ -4802,9 +4943,9 @@ const paletteTitle = {
 
 const paletteGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax(62px, 1fr))",
   gap: 6,
-  maxHeight: 210,
+  maxHeight: 320,
   overflowY: "auto" as const
 }
 
@@ -4845,59 +4986,12 @@ const paletteAdd = {
   cursor: "pointer"
 }
 
-const pricingPanel = {
-  gridColumn: "1 / -1",
-  minWidth: 0,
-  padding: 16,
-  background: "#faf7ee",
-  border: "1px solid #eadfc7",
-  borderRadius: 12
-}
 
-const pricingHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 14
-}
 
-const pricingTitle = {
-  display: "block",
-  color: "#4e493f",
-  fontSize: 14
-}
 
-const pricingSubtitle = {
-  display: "block",
-  marginTop: 3,
-  color: "#898176",
-  fontSize: 11
-}
 
-const pricingGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
-  gap: 10,
-  width: "100%",
-  boxSizing: "border-box" as const
-}
 
-const pricingItem = {
-  padding: "11px 12px",
-  background: "#fff",
-  border: "1px solid #eee5d4",
-  borderRadius: 9
-}
 
-const pricingResult = {
-  display: "flex",
-  justifyContent: "space-between",
-  marginTop: 12,
-  paddingTop: 11,
-  borderTop: "1px solid #e9dfc9",
-  color: "#746b5d",
-  fontSize: 12
-}
 
 const markupCheck = {
   display: "flex",
@@ -4993,8 +5087,10 @@ const mobileForm = {
 const formGrid = {
   display: "grid",
   gridTemplateColumns:
-    "1fr 1fr",
-  gap: 15
+    "minmax(0, 1fr) minmax(0, 1fr)",
+  gap: 15,
+  width: "100%",
+  minWidth: 0
 }
 
 const field = {
@@ -5052,6 +5148,7 @@ const overlayModal = {
 
 const modal = {
   width: "100%",
+  maxWidth: "760px",
   maxHeight: "92vh",
   overflowY:
     "auto" as const,
