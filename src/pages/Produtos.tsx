@@ -3874,6 +3874,51 @@ useEffect(() => {
           </div>
         </div>
       )}
+      {/* MODAL INFORMAÇÕES ERP */}
+
+      {modalInformacoes && (
+        <div style={overlayModal}>
+          <div style={{ ...modal, maxWidth: isMobile ? "100%" : 620 }}>
+            <ModalHeader
+              title="Referências e precificação"
+              subtitle="Como os códigos e os valores funcionam no cadastro."
+              fechar={() => setModalInformacoes(false)}
+            />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={infoCard}>
+                <strong>Código do produto</strong>
+                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Código da variante</strong>
+                <p>É o código numérico gravado em <code>produtoVariantes.codigoVariante</code>. Ele identifica aquela combinação específica de cor e tamanho.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>SKU</strong>
+                <p>É a referência operacional da variante. Diferente dos códigos numéricos, o SKU é textual e permanece único no banco.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Markup 2,5x</strong>
+                <p>O sistema calcula a venda sugerida multiplicando o custo por 2,5. Exemplo: custo de R$ 40,00 → venda sugerida de R$ 100,00 → lucro unitário de R$ 60,00.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Venda escolhida</strong>
+                <p>O valor sugerido não é obrigatório. Se a opção “Usar markup sugerido” estiver desmarcada, você pode informar o preço que deseja praticar e o lucro é recalculado automaticamente.</p>
+              </div>
+            </div>
+
+            <div style={modalFooter}>
+              <button style={primaryButton} onClick={() => setModalInformacoes(false)}>Entendi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
@@ -4916,49 +4961,4 @@ const colorPicker = {
   background:
     "#fff",
   cursor: "pointer"
-      {/* MODAL INFORMAÇÕES ERP */}
-
-      {modalInformacoes && (
-        <div style={overlayModal}>
-          <div style={{ ...modal, maxWidth: isMobile ? "100%" : 620 }}>
-            <ModalHeader
-              title="Referências e precificação"
-              subtitle="Como os códigos e os valores funcionam no cadastro."
-              fechar={() => setModalInformacoes(false)}
-            />
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={infoCard}>
-                <strong>Código do produto</strong>
-                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Código da variante</strong>
-                <p>É o código numérico gravado em <code>produtoVariantes.codigoVariante</code>. Ele identifica aquela combinação específica de cor e tamanho.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>SKU</strong>
-                <p>É a referência operacional da variante. Diferente dos códigos numéricos, o SKU é textual e permanece único no banco.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Markup 2,5x</strong>
-                <p>O sistema calcula a venda sugerida multiplicando o custo por 2,5. Exemplo: custo de R$ 40,00 → venda sugerida de R$ 100,00 → lucro unitário de R$ 60,00.</p>
-              </div>
-
-              <div style={infoCard}>
-                <strong>Venda escolhida</strong>
-                <p>O valor sugerido não é obrigatório. Se a opção “Usar markup sugerido” estiver desmarcada, você pode informar o preço que deseja praticar e o lucro é recalculado automaticamente.</p>
-              </div>
-            </div>
-
-            <div style={modalFooter}>
-              <button style={primaryButton} onClick={() => setModalInformacoes(false)}>Entendi</button>
-            </div>
-          </div>
-        </div>
-      )}
-
 }
