@@ -4845,20 +4845,7 @@ const textarea = {
     "vertical" as const
 }
 
-const calculationLabel = {
-  display:
-    "block",
-  color: "#898176",
-  fontSize: 10,
-  marginBottom: 4
-}
 
-const calculationValue = {
-  display:
-    "block",
-  color: "#4e493f",
-  fontSize: 15
-}
 
 const overlayModal = {
   position: "fixed" as const,
