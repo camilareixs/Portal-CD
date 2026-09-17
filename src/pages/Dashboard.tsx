@@ -104,15 +104,7 @@ const numero = (valor: unknown) => {
   return 0
 }
 
-const formatarData = (valor?: string | null) => {
-  if (!valor) return "-"
 
-  const data = new Date(valor)
-
-  if (Number.isNaN(data.getTime())) return "-"
-
-  return data.toLocaleDateString("pt-BR")
-}
 
 const formatarDataHora = (valor?: string | null) => {
   if (!valor) return "-"
