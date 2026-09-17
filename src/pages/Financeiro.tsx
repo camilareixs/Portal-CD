@@ -163,7 +163,7 @@ export default function Financeiro() {
   const [filtroMes, setFiltroMes] = useState("todos")
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()))
   const [busca, setBusca] = useState("")
-  const [filtroStatus, setFiltroStatus] = useState("todos")
+  const [filtroStatus] = useState("todos")
   const [periodoPersonalizado, setPeriodoPersonalizado] = useState(false)
   const [dataInicio, setDataInicio] = useState(inicioDoMesAtual())
   const [dataFim, setDataFim] = useState(hojeISO())
@@ -258,7 +258,6 @@ export default function Financeiro() {
   const receitasPeriodo = useMemo(() => receitas.filter(r => dentroDoPeriodo(r.dataCompetencia)), [receitas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const receitasRecebidas = useMemo(() => receitas.filter(r => r.status === "RECEBIDA" && dentroDoPeriodo(r.dataRecebimento || r.dataCompetencia)), [receitas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const totalReceitasExtras = useMemo(() => receitasRecebidas.filter(r => r.tipo !== "VENDA" && r.tipo !== "PAGAMENTO_FIADO").reduce((t, r) => t + r.valor, 0), [receitasRecebidas])
-  const recebidoFiado = useMemo(() => receitasRecebidas.filter(r => r.tipo === "PAGAMENTO_FIADO").reduce((t, r) => t + r.valor, 0), [receitasRecebidas])
   const totalRecebido = useMemo(() => receitasRecebidas.reduce((t, r) => t + r.valor, 0), [receitasRecebidas])
 
   const despesasPeriodo = useMemo(() => despesas.filter(d => dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
@@ -319,8 +318,8 @@ export default function Financeiro() {
     const ano = Number(filtroAno) || new Date().getFullYear()
     return meses.map(m => {
       const vendas = vendasValidas.filter(v => anoDaData(v.criadoem) === ano && mesDaData(v.criadoem) === m.value).reduce((t, v) => t + v.valor, 0)
-      const despesas = despesas.filter(d => d.status === "PAGA" && anoDaData(d.dataPagamento || d.dataCompetencia) === ano && mesDaData(d.dataPagamento || d.dataCompetencia) === m.value).reduce((t, d) => t + d.valor, 0)
-      return { ...m, vendas, despesas, saldo: vendas - despesas }
+      const despesasMes = despesas.filter(d => d.status === "PAGA" && anoDaData(d.dataPagamento || d.dataCompetencia) === ano && mesDaData(d.dataPagamento || d.dataCompetencia) === m.value).reduce((t, d) => t + d.valor, 0)
+      return { ...m, vendas, despesas: despesasMes, saldo: vendas - despesasMes }
     })
   }, [filtroAno, vendasValidas, despesas])
 
