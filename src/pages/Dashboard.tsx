@@ -1,81 +1,81 @@
 import { useEffect, useMemo, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { supabase } from "../lib/supabase"
 
-type Periodo = "dia" | "mes" | "trimestre" | "ano" | "todos"
+type Periodo = "7" | "30" | "90" | "365"
 
 type Cliente = {
   id: string
   nome: string
-  cpf: string | null
-  pontos: number | null
+  cpf?: string | null
+  pontos?: number | null
 }
 
 type Compra = {
   id: string
-  clienteid: string | null
-  valor: number | null
-  criadoem: string
+  clienteid?: string | null
+  valor?: number | null
+  criadoem?: string | null
   pagamento?: string | null
   status?: string | null
 }
 
 type Receita = {
   id: string
-  tipo: string | null
-  descricao: string | null
-  valor: number | null
-  dataCompetencia: string | null
-  dataRecebimento: string | null
-  status: string | null
-  compraId: string | null
+  tipo?: string | null
+  descricao?: string | null
+  valor?: number | null
+  dataCompetencia?: string | null
+  dataRecebimento?: string | null
+  status?: string | null
+  compraId?: string | null
 }
 
 type Despesa = {
   id: string
-  descricao: string | null
-  valor: number | null
-  dataCompetencia: string | null
-  dataPagamento: string | null
-  categoria: string | null
-  status: string | null
+  descricao?: string | null
+  valor?: number | null
+  dataCompetencia?: string | null
+  dataPagamento?: string | null
+  categoria?: string | null
+  status?: string | null
 }
 
 type Produto = {
   id: string
   nome: string
-  categoria: string | null
-  subcategoria: string | null
-  codigoProduto: number | null
-  ativo: boolean
+  categoria?: string | null
+  subcategoria?: string | null
+  codigoProduto?: number | null
+  ativo?: boolean | null
 }
 
 type Variante = {
   id: string
-  produtoId: string | null
-  sku: string | null
-  precoVenda: number | null
-  custoUnitario: number | null
-  estoqueAtual: number | null
-  estoqueMinimo: number | null
-  ativo: boolean
-  cor: string | null
-  tamanho: string | null
-  codigoVariante: number | null
+  produtoId?: string | null
+  sku?: string | null
+  precoVenda?: number | null
+  custoUnitario?: number | null
+  estoqueAtual?: number | null
+  estoqueMinimo?: number | null
+  ativo?: boolean | null
+  cor?: string | null
+  tamanho?: string | null
+  codigoVariante?: number | null
 }
 
 type VendaItem = {
   id: string
-  compraId: string | null
-  quantidade: number | null
-  custoUnitario: number | null
+  compraId?: string | null
+  quantidade?: number | null
+  custoUnitario?: number | null
   [key: string]: unknown
 }
 
 type VendaProduto = {
+  produtoId: string
   nome: string
   quantidade: number
   faturamento: number
-  custo: number
 }
 
 type VendaDia = {
@@ -83,79 +83,84 @@ type VendaDia = {
   valor: number
 }
 
-function moeda(valor: number) {
-  return valor.toLocaleString("pt-BR", {
+const moeda = (valor: number) =>
+  valor.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
   })
+
+const numero = (valor: unknown) => {
+  if (typeof valor === "number") return valor
+  if (typeof valor === "string") {
+    const normalizado = valor
+      .replace(/\./g, "")
+      .replace(",", ".")
+      .replace(/[^\d.-]/g, "")
+
+    const convertido = Number(normalizado)
+    return Number.isFinite(convertido) ? convertido : 0
+  }
+
+  return 0
 }
 
-function numero(valor: unknown) {
-  const n = Number(valor)
-  return Number.isFinite(n) ? n : 0
+const formatarData = (valor?: string | null) => {
+  if (!valor) return "-"
+
+  const data = new Date(valor)
+
+  if (Number.isNaN(data.getTime())) return "-"
+
+  return data.toLocaleDateString("pt-BR")
 }
 
-function formatarData(data: string | null | undefined) {
-  if (!data) return "—"
+const formatarDataHora = (valor?: string | null) => {
+  if (!valor) return "-"
 
-  const d = new Date(data)
+  const data = new Date(valor)
 
-  if (Number.isNaN(d.getTime())) return "—"
+  if (Number.isNaN(data.getTime())) return "-"
 
-  return d.toLocaleDateString("pt-BR")
-}
-
-function formatarDataHora(data: string | null | undefined) {
-  if (!data) return "—"
-
-  const d = new Date(data)
-
-  if (Number.isNaN(d.getTime())) return "—"
-
-  return d.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+  return data.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
   })
 }
 
-function normalizarTexto(valor: unknown) {
-  return String(valor ?? "")
-    .trim()
+const normalizarTexto = (valor: unknown) =>
+  String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-}
+    .trim()
 
-function pegarCampo(
+const pegarCampo = (
   objeto: Record<string, unknown>,
   nomes: string[],
-): unknown {
+): unknown => {
   for (const nome of nomes) {
-    if (
-      Object.prototype.hasOwnProperty.call(objeto, nome) &&
-      objeto[nome] !== null &&
-      objeto[nome] !== undefined &&
-      objeto[nome] !== ""
-    ) {
+    if (objeto[nome] !== undefined && objeto[nome] !== null) {
       return objeto[nome]
     }
   }
 
-  return null
+  return undefined
 }
 
-function obterIdProdutoDoItem(item: VendaItem) {
-  return pegarCampo(item, [
+const obterIdProdutoDoItem = (item: VendaItem) => {
+  const valor = pegarCampo(item, [
     "produtoId",
     "produtoid",
     "produto_id",
     "idProduto",
     "idproduto",
   ])
+
+  return valor ? String(valor) : null
 }
 
-function obterIdVarianteDoItem(item: VendaItem) {
-  return pegarCampo(item, [
+const obterIdVarianteDoItem = (item: VendaItem) => {
+  const valor = pegarCampo(item, [
     "produtoVarianteId",
     "produtovarianteid",
     "produto_variante_id",
@@ -165,63 +170,43 @@ function obterIdVarianteDoItem(item: VendaItem) {
     "idVariante",
     "idvariante",
   ])
+
+  return valor ? String(valor) : null
 }
 
-function inicioDoPeriodo(periodo: Periodo) {
-  const agora = new Date()
+const inicioDoPeriodo = (periodo: Periodo) => {
+  const data = new Date()
+  data.setHours(0, 0, 0, 0)
 
-  if (periodo === "dia") {
-    return new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
-    )
-  }
+  const dias = Number(periodo) - 1
 
-  if (periodo === "mes") {
-    return new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      1,
-    )
-  }
+  data.setDate(data.getDate() - dias)
 
-  if (periodo === "trimestre") {
-    return new Date(
-      agora.getFullYear(),
-      agora.getMonth() - 2,
-      1,
-    )
-  }
-
-  if (periodo === "ano") {
-    return new Date(
-      agora.getFullYear(),
-      0,
-      1,
-    )
-  }
-
-  return null
+  return data
 }
 
-function estaNoPeriodo(data: string, periodo: Periodo) {
-  if (periodo === "todos") return true
+const estaNoPeriodo = (
+  dataString: string | null | undefined,
+  periodo: Periodo,
+) => {
+  if (!dataString) return false
 
-  const inicio = inicioDoPeriodo(periodo)
+  const data = new Date(dataString)
 
-  if (!inicio) return true
+  if (Number.isNaN(data.getTime())) return false
 
-  return new Date(data) >= inicio
+  return data >= inicioDoPeriodo(periodo)
 }
 
-function percentual(valor: number, total: number) {
+const percentual = (valor: number, total: number) => {
   if (!total) return 0
-  return (valor / total) * 100
+
+  return Math.max(0, Math.min(100, (valor / total) * 100))
 }
 
 export default function Dashboard() {
-  const [periodo, setPeriodo] = useState<Periodo>("mes")
+  const [periodo, setPeriodo] = useState<Periodo>("30")
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [receitas, setReceitas] = useState<Receita[]>([])
@@ -230,143 +215,117 @@ export default function Dashboard() {
   const [variantes, setVariantes] = useState<Variante[]>([])
   const [vendaItens, setVendaItens] = useState<VendaItem[]>([])
 
-  const [carregando, setCarregando] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
-  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null)
 
-  const [meta, setMeta] = useState(30000)
+  const [meta, setMeta] = useState(10000)
   const [editandoMeta, setEditandoMeta] = useState(false)
-  const [metaInput, setMetaInput] = useState("30000")
+  const [novaMeta, setNovaMeta] = useState("10000")
 
   const [popupCupons, setPopupCupons] = useState(false)
 
-  async function carregarDados() {
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const carregarDados = async () => {
     try {
-      setCarregando(true)
+      setLoading(true)
       setErro("")
 
       const [
-        clientesResult,
-        comprasResult,
-        receitasResult,
-        despesasResult,
-        produtosResult,
-        variantesResult,
-        vendaItensResult,
+        clientesResponse,
+        comprasResponse,
+        receitasResponse,
+        despesasResponse,
+        produtosResponse,
+        variantesResponse,
+        vendaItensResponse,
       ] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id,nome,cpf,pontos")
-          .order("nome"),
+          .select("id,nome,cpf,pontos"),
 
         supabase
           .from("compras")
-          .select("id,clienteid,valor,criadoem,pagamento,status")
-          .order("criadoem", { ascending: false }),
+          .select("id,clienteid,valor,criadoem,pagamento,status"),
 
         supabase
           .from("receitas")
           .select(
             "id,tipo,descricao,valor,dataCompetencia,dataRecebimento,status,compraId",
-          )
-          .order("criadoem", { ascending: false }),
+          ),
 
         supabase
           .from("despesas")
           .select(
             "id,descricao,valor,dataCompetencia,dataPagamento,categoria,status",
-          )
-          .order("criadoem", { ascending: false }),
+          ),
 
         supabase
           .from("produtos")
           .select(
             "id,nome,categoria,subcategoria,codigoProduto,ativo",
-          )
-          .order("nome"),
+          ),
 
         supabase
           .from("produtoVariantes")
           .select(
             "id,produtoId,sku,precoVenda,custoUnitario,estoqueAtual,estoqueMinimo,ativo,cor,tamanho,codigoVariante",
-          )
-          .order("criadoem", { ascending: false }),
+          ),
 
         supabase
           .from("vendaItens")
           .select("*"),
       ])
 
-      if (clientesResult.error) {
-        throw clientesResult.error
+      if (clientesResponse.error) {
+        throw clientesResponse.error
       }
 
-      if (comprasResult.error) {
-        throw comprasResult.error
+      if (comprasResponse.error) {
+        throw comprasResponse.error
       }
 
-      if (receitasResult.error) {
-        throw receitasResult.error
+      if (receitasResponse.error) {
+        throw receitasResponse.error
       }
 
-      if (despesasResult.error) {
-        throw despesasResult.error
+      if (despesasResponse.error) {
+        throw despesasResponse.error
       }
 
-      if (produtosResult.error) {
-        throw produtosResult.error
+      if (produtosResponse.error) {
+        throw produtosResponse.error
       }
 
-      if (variantesResult.error) {
-        throw variantesResult.error
+      if (variantesResponse.error) {
+        throw variantesResponse.error
       }
 
-      if (vendaItensResult.error) {
-        throw vendaItensResult.error
+      if (vendaItensResponse.error) {
+        throw vendaItensResponse.error
       }
 
-      setClientes(
-        (clientesResult.data ?? []) as Cliente[],
-      )
-
-      setCompras(
-        (comprasResult.data ?? []) as Compra[],
-      )
-
-      setReceitas(
-        (receitasResult.data ?? []) as Receita[],
-      )
-
-      setDespesas(
-        (despesasResult.data ?? []) as Despesa[],
-      )
-
-      setProdutos(
-        (produtosResult.data ?? []) as Produto[],
-      )
-
-      setVariantes(
-        (variantesResult.data ?? []) as Variante[],
-      )
-
-      setVendaItens(
-        (vendaItensResult.data ?? []) as VendaItem[],
-      )
-
-      setAtualizadoEm(new Date())
+      setClientes((clientesResponse.data ?? []) as Cliente[])
+      setCompras((comprasResponse.data ?? []) as Compra[])
+      setReceitas((receitasResponse.data ?? []) as Receita[])
+      setDespesas((despesasResponse.data ?? []) as Despesa[])
+      setProdutos((produtosResponse.data ?? []) as Produto[])
+      setVariantes((variantesResponse.data ?? []) as Variante[])
+      setVendaItens((vendaItensResponse.data ?? []) as VendaItem[])
     } catch (error) {
       console.error(error)
+
       setErro(
-        "Não foi possível carregar os dados do dashboard.",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar os dados do dashboard.",
       )
     } finally {
-      setCarregando(false)
+      setLoading(false)
     }
   }
-
-  useEffect(() => {
-    carregarDados()
-  }, [])
 
   const clientesMap = useMemo(() => {
     const mapa = new Map<string, Cliente>()
@@ -398,48 +357,29 @@ export default function Dashboard() {
     return mapa
   }, [variantes])
 
-  const comprasPeriodo = useMemo(() => {
-    return compras.filter((compra) =>
-      estaNoPeriodo(compra.criadoem, periodo),
-    )
-  }, [compras, periodo])
+  const comprasPeriodo = useMemo(
+    () =>
+      compras.filter(
+        (compra) =>
+          estaNoPeriodo(compra.criadoem, periodo) &&
+          normalizarTexto(compra.status) !== "cancelada" &&
+          normalizarTexto(compra.status) !== "cancelado",
+      ),
+    [compras, periodo],
+  )
 
-  const receitasPeriodo = useMemo(() => {
-    return receitas.filter((receita) => {
-      const data =
-        receita.dataCompetencia ||
-        receita.dataRecebimento
-
-      if (!data) return periodo === "todos"
-
-      return estaNoPeriodo(data, periodo)
-    })
-  }, [receitas, periodo])
-
-  const despesasPeriodo = useMemo(() => {
-    return despesas.filter((despesa) => {
-      const data =
-        despesa.dataCompetencia ||
-        despesa.dataPagamento
-
-      if (!data) return periodo === "todos"
-
-      return estaNoPeriodo(data, periodo)
-    })
-  }, [despesas, periodo])
-
-  const faturamento = useMemo(() => {
-    return comprasPeriodo.reduce(
-      (total, compra) => total + numero(compra.valor),
-      0,
-    )
-  }, [comprasPeriodo])
+  const faturamento = useMemo(
+    () =>
+      comprasPeriodo.reduce(
+        (total, compra) => total + numero(compra.valor),
+        0,
+      ),
+    [comprasPeriodo],
+  )
 
   const pedidos = comprasPeriodo.length
 
-  const ticketMedio = pedidos
-    ? faturamento / pedidos
-    : 0
+  const ticketMedio = pedidos > 0 ? faturamento / pedidos : 0
 
   const clientesAtendidos = useMemo(() => {
     const ids = new Set<string>()
@@ -453,178 +393,128 @@ export default function Dashboard() {
     return ids.size
   }, [comprasPeriodo])
 
-  const totalReceitasRecebidas = useMemo(() => {
-    return receitasPeriodo
-      .filter(
+  const receitasPeriodo = useMemo(
+    () =>
+      receitas.filter(
         (receita) =>
-          normalizarTexto(receita.status) === "recebida",
-      )
-      .reduce(
-        (total, receita) => total + numero(receita.valor),
-        0,
-      )
-  }, [receitasPeriodo])
-
-  const totalReceitasPendentes = useMemo(() => {
-    return receitasPeriodo
-      .filter(
-        (receita) =>
-          normalizarTexto(receita.status) === "pendente",
-      )
-      .reduce(
-        (total, receita) => total + numero(receita.valor),
-        0,
-      )
-  }, [receitasPeriodo])
-
-  const totalDespesasPagas = useMemo(() => {
-    return despesasPeriodo
-      .filter(
-        (despesa) =>
-          normalizarTexto(despesa.status) === "paga",
-      )
-      .reduce(
-        (total, despesa) => total + numero(despesa.valor),
-        0,
-      )
-  }, [despesasPeriodo])
-
-  const totalDespesasPendentes = useMemo(() => {
-    return despesasPeriodo
-      .filter(
-        (despesa) =>
-          normalizarTexto(despesa.status) === "pendente",
-      )
-      .reduce(
-        (total, despesa) => total + numero(despesa.valor),
-        0,
-      )
-  }, [despesasPeriodo])
-
-  const custoProdutosVendidos = useMemo(() => {
-    return vendaItens
-      .filter((item) => {
-        if (!item.compraId) return false
-
-        return comprasPeriodo.some(
-          (compra) => compra.id === item.compraId,
-        )
-      })
-      .reduce((total, item) => {
-        const quantidade = numero(item.quantidade)
-        const custo = numero(item.custoUnitario)
-
-        return total + quantidade * custo
-      }, 0)
-  }, [vendaItens, comprasPeriodo])
-
-  const lucroBruto = faturamento - custoProdutosVendidos
-
-  const resultadoLiquido =
-    lucroBruto - totalDespesasPagas
-
-  const margemBruta = percentual(
-    lucroBruto,
-    faturamento,
+          estaNoPeriodo(
+            receita.dataRecebimento ?? receita.dataCompetencia,
+            periodo,
+          ) &&
+          normalizarTexto(receita.status) !== "cancelada" &&
+          normalizarTexto(receita.status) !== "cancelado",
+      ),
+    [receitas, periodo],
   )
 
-  const margemLiquida = percentual(
-    resultadoLiquido,
-    faturamento,
+  const totalReceitasRecebidas = useMemo(
+    () =>
+      receitasPeriodo
+        .filter((receita) => normalizarTexto(receita.status) === "recebida")
+        .reduce((total, receita) => total + numero(receita.valor), 0),
+    [receitasPeriodo],
   )
 
-  const valorEstoque = useMemo(() => {
-    return variantes.reduce((total, variante) => {
-      const estoque = numero(variante.estoqueAtual)
-      const custo = numero(variante.custoUnitario)
+  const totalReceitasPendentes = useMemo(
+    () =>
+      receitasPeriodo
+        .filter((receita) => normalizarTexto(receita.status) === "pendente")
+        .reduce((total, receita) => total + numero(receita.valor), 0),
+    [receitasPeriodo],
+  )
 
-      return total + estoque * custo
-    }, 0)
-  }, [variantes])
+  const despesasPeriodo = useMemo(
+    () =>
+      despesas.filter(
+        (despesa) =>
+          estaNoPeriodo(
+            despesa.dataPagamento ?? despesa.dataCompetencia,
+            periodo,
+          ) &&
+          normalizarTexto(despesa.status) !== "cancelada" &&
+          normalizarTexto(despesa.status) !== "cancelado",
+      ),
+    [despesas, periodo],
+  )
 
-  const estoqueBaixo = useMemo(() => {
-    return variantes.filter((variante) => {
-      if (!variante.ativo) return false
+  const totalDespesasPagas = useMemo(
+    () =>
+      despesasPeriodo
+        .filter((despesa) => normalizarTexto(despesa.status) === "paga")
+        .reduce((total, despesa) => total + numero(despesa.valor), 0),
+    [despesasPeriodo],
+  )
 
-      const estoque = numero(variante.estoqueAtual)
-      const minimo = numero(variante.estoqueMinimo)
-
-      return estoque <= minimo
-    })
-  }, [variantes])
-
-  const estoqueZerado = useMemo(() => {
-    return variantes.filter((variante) => {
-      if (!variante.ativo) return false
-
-      return numero(variante.estoqueAtual) <= 0
-    })
-  }, [variantes])
+  const totalDespesasPendentes = useMemo(
+    () =>
+      despesasPeriodo
+        .filter((despesa) => normalizarTexto(despesa.status) === "pendente")
+        .reduce((total, despesa) => total + numero(despesa.valor), 0),
+    [despesasPeriodo],
+  )
 
   const vendasPorProduto = useMemo(() => {
     const mapa = new Map<string, VendaProduto>()
 
     vendaItens.forEach((item) => {
-      if (!item.compraId) return
+      const compraId = item.compraId
+
+      if (!compraId) return
 
       const compra = comprasPeriodo.find(
-        (c) => c.id === item.compraId,
+        (itemCompra) => itemCompra.id === compraId,
       )
 
       if (!compra) return
 
-      const idVariante = obterIdVarianteDoItem(item)
-      const idProduto = obterIdProdutoDoItem(item)
+      const quantidade = numero(item.quantidade)
 
-      let produto: Produto | undefined
+      if (quantidade <= 0) return
 
-      if (idVariante) {
-        const variante = variantesMap.get(
-          String(idVariante),
-        )
+      const produtoId =
+        obterIdProdutoDoItem(item) ??
+        (() => {
+          const varianteId = obterIdVarianteDoItem(item)
 
-        if (variante?.produtoId) {
-          produto = produtosMap.get(
-            variante.produtoId,
-          )
-        }
-      }
+          if (!varianteId) return null
 
-      if (!produto && idProduto) {
-        produto = produtosMap.get(String(idProduto))
-      }
+          return variantesMap.get(varianteId)?.produtoId ?? null
+        })()
+
+      if (!produtoId) return
+
+      const produto = produtosMap.get(produtoId)
 
       if (!produto) return
 
-      const chave = produto.id
-      const quantidade = numero(item.quantidade)
+      const precoVenda = (() => {
+        const varianteId = obterIdVarianteDoItem(item)
 
-      let precoVenda = 0
+        if (!varianteId) return 0
 
-      if (idVariante) {
-        const variante = variantesMap.get(
-          String(idVariante),
-        )
+        const variante = variantesMap.get(varianteId)
 
-        precoVenda = numero(variante?.precoVenda)
-      }
+        return numero(variante?.precoVenda)
+      })()
 
-      const custo = numero(item.custoUnitario)
+      const faturamentoItem =
+        precoVenda > 0
+          ? precoVenda * quantidade
+          : numero(compra.valor) > 0 && pedidos > 0
+            ? (numero(compra.valor) / pedidos) * quantidade
+            : 0
 
-      const atual = mapa.get(chave)
+      const atual = mapa.get(produtoId)
 
       if (atual) {
         atual.quantidade += quantidade
-        atual.faturamento +=
-          quantidade * precoVenda
-        atual.custo += quantidade * custo
+        atual.faturamento += faturamentoItem
       } else {
-        mapa.set(chave, {
+        mapa.set(produtoId, {
+          produtoId,
           nome: produto.nome,
           quantidade,
-          faturamento:
-            quantidade * precoVenda,
-          custo: quantidade * custo,
+          faturamento: faturamentoItem,
         })
       }
     })
@@ -635,104 +525,107 @@ export default function Dashboard() {
   }, [
     vendaItens,
     comprasPeriodo,
-    variantesMap,
     produtosMap,
+    variantesMap,
+    pedidos,
   ])
 
-  const produtoMaisVendido =
-    vendasPorProduto[0] ?? null
+  const produtoMaisVendido = vendasPorProduto[0] ?? null
 
-  const produtoMaisFaturado = useMemo(() => {
-    return [...vendasPorProduto].sort(
-      (a, b) => b.faturamento - a.faturamento,
-    )[0] ?? null
-  }, [vendasPorProduto])
+  const produtoMaisFaturado = useMemo(
+    () =>
+      [...vendasPorProduto].sort(
+        (a, b) => b.faturamento - a.faturamento,
+      )[0] ?? null,
+    [vendasPorProduto],
+  )
 
-  const vendasPorCategoria = useMemo(() => {
-    const mapa = new Map<
-      string,
-      { nome: string; quantidade: number; faturamento: number }
-    >()
+  const custoProdutosVendidos = useMemo(
+    () =>
+      vendaItens.reduce((total, item) => {
+        if (!item.compraId) return total
 
-    vendaItens.forEach((item) => {
-      if (!item.compraId) return
-
-      const compra = comprasPeriodo.find(
-        (c) => c.id === item.compraId,
-      )
-
-      if (!compra) return
-
-      const idVariante = obterIdVarianteDoItem(item)
-      const idProduto = obterIdProdutoDoItem(item)
-
-      let produto: Produto | undefined
-
-      if (idVariante) {
-        const variante = variantesMap.get(
-          String(idVariante),
+        const compraExiste = comprasPeriodo.some(
+          (compra) => compra.id === item.compraId,
         )
 
-        if (variante?.produtoId) {
-          produto = produtosMap.get(
-            variante.produtoId,
-          )
+        if (!compraExiste) return total
+
+        const quantidade = numero(item.quantidade)
+        const custoInformado = numero(item.custoUnitario)
+
+        if (quantidade <= 0 || custoInformado <= 0) {
+          return total
         }
-      }
 
-      if (!produto && idProduto) {
-        produto = produtosMap.get(String(idProduto))
-      }
+        return total + quantidade * custoInformado
+      }, 0),
+    [vendaItens, comprasPeriodo],
+  )
 
-      if (!produto) return
+  const lucroBruto = faturamento - custoProdutosVendidos
 
-      const categoria =
-        produto.categoria || "Sem categoria"
+  const resultadoLiquido =
+    faturamento + totalReceitasRecebidas - totalDespesasPagas
 
-      const quantidade = numero(item.quantidade)
+  const margemBruta =
+    faturamento > 0 ? (lucroBruto / faturamento) * 100 : 0
 
-      const atual = mapa.get(categoria)
+  const margemLiquida =
+    faturamento > 0 ? (resultadoLiquido / faturamento) * 100 : 0
 
-      if (atual) {
-        atual.quantidade += quantidade
-      } else {
-        mapa.set(categoria, {
-          nome: categoria,
-          quantidade,
-          faturamento: 0,
-        })
-      }
-    })
+  const valorEstoque = useMemo(
+    () =>
+      variantes
+        .filter((variante) => variante.ativo !== false)
+        .reduce(
+          (total, variante) =>
+            total +
+            numero(variante.estoqueAtual) *
+              numero(variante.custoUnitario),
+          0,
+        ),
+    [variantes],
+  )
 
-    return Array.from(mapa.values()).sort(
-      (a, b) => b.quantidade - a.quantidade,
-    )
-  }, [
-    vendaItens,
-    comprasPeriodo,
-    variantesMap,
-    produtosMap,
-  ])
+  const estoqueBaixo = useMemo(
+    () =>
+      variantes.filter((variante) => {
+        if (variante.ativo === false) return false
+
+        const estoque = numero(variante.estoqueAtual)
+        const minimo = numero(variante.estoqueMinimo)
+
+        return estoque > 0 && estoque <= minimo
+      }).length,
+    [variantes],
+  )
+
+  const estoqueZerado = useMemo(
+    () =>
+      variantes.filter(
+        (variante) =>
+          variante.ativo !== false &&
+          numero(variante.estoqueAtual) <= 0,
+      ).length,
+    [variantes],
+  )
 
   const vendasPorPagamento = useMemo(() => {
     const mapa = new Map<string, number>()
 
     comprasPeriodo.forEach((compra) => {
       const pagamento =
-        compra.pagamento || "Não informado"
+        compra.pagamento?.trim() || "Não informado"
 
       mapa.set(
         pagamento,
-        (mapa.get(pagamento) ?? 0) +
-          numero(compra.valor),
+        (mapa.get(pagamento) ?? 0) + numero(compra.valor),
       )
     })
 
     return Array.from(mapa.entries())
-      .map(([nome, valor]) => ({
-        nome,
-        valor,
-      }))
+      .map(([nome, valor]) => ({ nome, valor }))
       .sort((a, b) => b.valor - a.valor)
   }, [comprasPeriodo])
 
@@ -740,31 +633,30 @@ export default function Dashboard() {
     const mapa = new Map<
       string,
       {
-        id: string
+        clienteId: string
         nome: string
-        compras: number
+        quantidade: number
         valor: number
       }
     >()
 
-    compras.forEach((compra) => {
+    comprasPeriodo.forEach((compra) => {
       if (!compra.clienteid) return
 
-      const cliente =
-        clientesMap.get(compra.clienteid)
+      const cliente = clientesMap.get(compra.clienteid)
 
       if (!cliente) return
 
       const atual = mapa.get(cliente.id)
 
       if (atual) {
-        atual.compras += 1
+        atual.quantidade += 1
         atual.valor += numero(compra.valor)
       } else {
         mapa.set(cliente.id, {
-          id: cliente.id,
+          clienteId: cliente.id,
           nome: cliente.nome,
-          compras: 1,
+          quantidade: 1,
           valor: numero(compra.valor),
         })
       }
@@ -773,95 +665,41 @@ export default function Dashboard() {
     return Array.from(mapa.values()).sort(
       (a, b) => b.valor - a.valor,
     )
-  }, [compras, clientesMap])
+  }, [comprasPeriodo, clientesMap])
 
   const topClientes = clientesRanking.slice(0, 5)
 
-  const clientesComCupom = useMemo(() => {
-    return clientes.filter(
-      (cliente) => numero(cliente.pontos) >= 10,
-    )
-  }, [clientes])
-
-  const clientesInativos = useMemo(() => {
-    const agora = new Date()
-
-    const clientesComUltimaCompra = clientes
-      .map((cliente) => {
-        const comprasCliente = compras.filter(
-          (compra) =>
-            compra.clienteid === cliente.id,
-        )
-
-        if (!comprasCliente.length) {
-          return {
-            ...cliente,
-            ultimaCompra: null,
-            diasSemComprar: null,
-          }
-        }
-
-        const ultimaCompra =
-          comprasCliente
-            .sort(
-              (a, b) =>
-                new Date(b.criadoem).getTime() -
-                new Date(a.criadoem).getTime(),
-            )[0]
-
-        const diasSemComprar = Math.floor(
-          (agora.getTime() -
-            new Date(
-              ultimaCompra.criadoem,
-            ).getTime()) /
-            86400000,
-        )
-
-        return {
-          ...cliente,
-          ultimaCompra: ultimaCompra.criadoem,
-          diasSemComprar,
-        }
-      })
-      .filter(
-        (cliente) =>
-          cliente.diasSemComprar === null ||
-          cliente.diasSemComprar >= 60,
-      )
-      .sort(
-        (a, b) =>
-          numero(b.diasSemComprar) -
-          numero(a.diasSemComprar),
-      )
-
-    return clientesComUltimaCompra
-  }, [clientes, compras])
+  const clientesComCupom = useMemo(
+    () => clientes.filter((cliente) => numero(cliente.pontos) >= 10),
+    [clientes],
+  )
 
   const vendasUltimos7Dias = useMemo(() => {
-    const hoje = new Date()
     const dias: VendaDia[] = []
 
     for (let i = 6; i >= 0; i--) {
-      const data = new Date(hoje)
+      const data = new Date()
       data.setHours(0, 0, 0, 0)
       data.setDate(data.getDate() - i)
 
       const inicio = new Date(data)
       const fim = new Date(data)
-      fim.setDate(fim.getDate() + 1)
+      fim.setHours(23, 59, 59, 999)
 
-      const valor = compras.filter((compra) => {
-        const dataCompra = new Date(compra.criadoem)
+      const valor = compras
+        .filter((compra) => {
+          if (!compra.criadoem) return false
 
-        return (
-          dataCompra >= inicio &&
-          dataCompra < fim
-        )
-      }).reduce(
-        (total, compra) =>
-          total + numero(compra.valor),
-        0,
-      )
+          const dataCompra = new Date(compra.criadoem)
+
+          return (
+            dataCompra >= inicio &&
+            dataCompra <= fim &&
+            normalizarTexto(compra.status) !== "cancelada" &&
+            normalizarTexto(compra.status) !== "cancelado"
+          )
+        })
+        .reduce((total, compra) => total + numero(compra.valor), 0)
 
       dias.push({
         data: data.toLocaleDateString("pt-BR", {
@@ -875,159 +713,156 @@ export default function Dashboard() {
     return dias
   }, [compras])
 
-  const maiorVenda7Dias = Math.max(
+  const maiorVendaDia = Math.max(
     ...vendasUltimos7Dias.map((item) => item.valor),
     1,
   )
 
   const vendasPorMes = useMemo(() => {
-    const mapa = new Map<
-      string,
-      { chave: string; nome: string; valor: number }
-    >()
+    const mapa = new Map<string, number>()
 
-    compras.forEach((compra) => {
-      const data = new Date(compra.criadoem)
-
-      if (Number.isNaN(data.getTime())) return
-
-      const chave = `${data.getFullYear()}-${String(
-        data.getMonth() + 1,
-      ).padStart(2, "0")}`
-
-      const nome = data.toLocaleDateString(
-        "pt-BR",
-        {
-          month: "short",
-          year: "2-digit",
-        },
+    compras
+      .filter(
+        (compra) =>
+          normalizarTexto(compra.status) !== "cancelada" &&
+          normalizarTexto(compra.status) !== "cancelado",
       )
+      .forEach((compra) => {
+        if (!compra.criadoem) return
 
-      const atual = mapa.get(chave)
+        const data = new Date(compra.criadoem)
 
-      if (atual) {
-        atual.valor += numero(compra.valor)
-      } else {
-        mapa.set(chave, {
+        if (Number.isNaN(data.getTime())) return
+
+        const chave = `${data.getFullYear()}-${String(
+          data.getMonth() + 1,
+        ).padStart(2, "0")}`
+
+        mapa.set(
           chave,
-          nome,
-          valor: numero(compra.valor),
-        })
-      }
-    })
+          (mapa.get(chave) ?? 0) + numero(compra.valor),
+        )
+      })
 
-    return Array.from(mapa.values())
-      .sort((a, b) =>
-        a.chave.localeCompare(b.chave),
-      )
+    return Array.from(mapa.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
+      .map(([chave, valor]) => {
+        const [ano, mes] = chave.split("-")
+
+        const data = new Date(
+          Number(ano),
+          Number(mes) - 1,
+          1,
+        )
+
+        return {
+          nome: data.toLocaleDateString("pt-BR", {
+            month: "short",
+          }),
+          valor,
+        }
+      })
   }, [compras])
 
-  const maiorMes = Math.max(
+  const maiorVendaMes = Math.max(
     ...vendasPorMes.map((item) => item.valor),
     1,
   )
 
-  const metaPercentual = Math.min(
-    percentual(faturamento, meta),
-    100,
-  )
-
-  const vendaRecente = comprasPeriodo.slice(0, 6)
-
   const movimentacoesRecentes = useMemo(() => {
-    const receitasMov = receitasPeriodo
-      .map((receita) => ({
-        id: `r-${receita.id}`,
-        tipo: "receita",
+    const lista = [
+      ...compras.map((compra) => ({
+        id: `compra-${compra.id}`,
+        tipo: "Venda",
         descricao:
-          receita.descricao ||
-          receita.tipo ||
-          "Receita",
+          clientesMap.get(compra.clienteid ?? "")?.nome ??
+          "Cliente não identificado",
+        valor: numero(compra.valor),
+        data: compra.criadoem,
+      })),
+
+      ...receitas.map((receita) => ({
+        id: `receita-${receita.id}`,
+        tipo: "Receita",
+        descricao:
+          receita.descricao || receita.tipo || "Receita",
         valor: numero(receita.valor),
         data:
-          receita.dataRecebimento ||
-          receita.dataCompetencia ||
-          "",
-      }))
+          receita.dataRecebimento ??
+          receita.dataCompetencia,
+      })),
 
-    const despesasMov = despesasPeriodo
-      .map((despesa) => ({
-        id: `d-${despesa.id}`,
-        tipo: "despesa",
-        descricao:
-          despesa.descricao || "Despesa",
+      ...despesas.map((despesa) => ({
+        id: `despesa-${despesa.id}`,
+        tipo: "Despesa",
+        descricao: despesa.descricao || "Despesa",
         valor: numero(despesa.valor),
         data:
-          despesa.dataPagamento ||
-          despesa.dataCompetencia ||
-          "",
-      }))
+          despesa.dataPagamento ??
+          despesa.dataCompetencia,
+      })),
+    ]
 
-    return [...receitasMov, ...despesasMov]
-      .sort(
-        (a, b) =>
-          new Date(b.data).getTime() -
-          new Date(a.data).getTime(),
-      )
+    return lista
+      .sort((a, b) => {
+        const dataA = a.data
+          ? new Date(a.data).getTime()
+          : 0
+
+        const dataB = b.data
+          ? new Date(b.data).getTime()
+          : 0
+
+        return dataB - dataA
+      })
       .slice(0, 8)
-  }, [receitasPeriodo, despesasPeriodo])
+  }, [compras, receitas, despesas, clientesMap])
 
   const alertas = useMemo(() => {
     const lista: {
+      tipo: "danger" | "warning" | "info"
       titulo: string
       descricao: string
-      tipo: "estoque" | "financeiro" | "cliente"
     }[] = []
 
-    if (estoqueZerado.length > 0) {
+    if (estoqueZerado > 0) {
       lista.push({
+        tipo: "danger",
         titulo: "Produtos sem estoque",
-        descricao: `${estoqueZerado.length} variante(s) estão zeradas.`,
-        tipo: "estoque",
+        descricao: `${estoqueZerado} variante(s) estão sem estoque.`,
       })
     }
 
-    if (
-      estoqueBaixo.length > 0 &&
-      estoqueZerado.length === 0
-    ) {
+    if (estoqueBaixo > 0) {
       lista.push({
+        tipo: "warning",
         titulo: "Estoque baixo",
-        descricao: `${estoqueBaixo.length} variante(s) atingiram o estoque mínimo.`,
-        tipo: "estoque",
+        descricao: `${estoqueBaixo} variante(s) estão no estoque mínimo.`,
       })
     }
 
     if (totalReceitasPendentes > 0) {
       lista.push({
+        tipo: "warning",
         titulo: "Valores a receber",
-        descricao: `${moeda(totalReceitasPendentes)} pendentes.`,
-        tipo: "financeiro",
+        descricao: `${moeda(totalReceitasPendentes)} estão pendentes.`,
       })
     }
 
     if (totalDespesasPendentes > 0) {
       lista.push({
-        titulo: "Contas pendentes",
-        descricao: `${moeda(totalDespesasPendentes)} em despesas pendentes.`,
-        tipo: "financeiro",
+        tipo: "info",
+        titulo: "Despesas pendentes",
+        descricao: `${moeda(totalDespesasPendentes)} ainda não foram pagas.`,
       })
     }
 
     if (clientesComCupom.length > 0) {
       lista.push({
+        tipo: "info",
         titulo: "Cupons disponíveis",
-        descricao: `${clientesComCupom.length} cliente(s) já possuem 10 pontos.`,
-        tipo: "cliente",
-      })
-    }
-
-    if (clientesInativos.length > 0) {
-      lista.push({
-        titulo: "Clientes para reativar",
-        descricao: `${clientesInativos.length} cliente(s) estão há 60 dias ou mais sem comprar.`,
-        tipo: "cliente",
+        descricao: `${clientesComCupom.length} cliente(s) atingiram 10 pontos.`,
       })
     }
 
@@ -1037,56 +872,71 @@ export default function Dashboard() {
     estoqueBaixo,
     totalReceitasPendentes,
     totalDespesasPendentes,
-    clientesComCupom,
-    clientesInativos,
+    clientesComCupom.length,
   ])
 
-  function salvarMeta() {
-    const valor = Number(
-      metaInput
-        .replace(/\./g, "")
-        .replace(",", "."),
-    )
+  const metaPercentual = percentual(faturamento, meta)
 
-    if (!Number.isFinite(valor) || valor <= 0) {
-      setMetaInput(String(meta))
-      setEditandoMeta(false)
-      return
-    }
+  const salvarMeta = () => {
+    const valor = numero(novaMeta)
+
+    if (valor <= 0) return
 
     setMeta(valor)
-    setMetaInput(String(valor))
+    setNovaMeta(String(valor))
     setEditandoMeta(false)
   }
 
-  function nomeCliente(clienteid: string | null) {
-    if (!clienteid) return "Cliente não identificado"
-
+  if (loading) {
     return (
-      clientesMap.get(clienteid)?.nome ||
-      "Cliente não identificado"
+      <div className="dashboard-loading">
+        <div className="loading-spinner" />
+        <p>Carregando dashboard...</p>
+
+        <style>{`
+          .dashboard-loading {
+            min-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            color: #6b6257;
+          }
+
+          .loading-spinner {
+            width: 34px;
+            height: 34px;
+            border: 3px solid #eadfcd;
+            border-top-color: #b99352;
+            border-radius: 50%;
+            animation: girar 0.8s linear infinite;
+          }
+
+          @keyframes girar {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </div>
     )
   }
 
   return (
-    <>
+    <div className="dashboard">
       <style>{`
-        * {
+        .dashboard {
+          width: 100%;
+          min-height: 100%;
+          background: #faf9f7;
+          color: #27231f;
+          padding: 28px;
           box-sizing: border-box;
         }
 
-        .dashboard-page {
-          width: 100%;
-          min-height: 100%;
-          background: #f6f6f7;
-          color: #181818;
-          padding: 24px;
-        }
-
-        .dashboard-container {
-          width: 100%;
-          max-width: 1500px;
-          margin: 0 auto;
+        .dashboard * {
+          box-sizing: border-box;
         }
 
         .dashboard-header {
@@ -1094,188 +944,209 @@ export default function Dashboard() {
           align-items: flex-start;
           justify-content: space-between;
           gap: 20px;
-          margin-bottom: 24px;
+          margin-bottom: 26px;
         }
 
         .dashboard-title {
           margin: 0;
           font-size: 30px;
+          line-height: 1.2;
           font-weight: 700;
-          letter-spacing: -0.8px;
+          color: #29251f;
         }
 
         .dashboard-subtitle {
-          margin: 6px 0 0;
-          color: #777;
+          margin: 7px 0 0;
+          color: #80766b;
           font-size: 14px;
         }
 
-        .dashboard-actions {
+        .periodos {
           display: flex;
-          gap: 10px;
-          align-items: center;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-
-        .period-selector {
-          display: flex;
+          gap: 6px;
           background: #fff;
-          border: 1px solid #e5e5e5;
-          border-radius: 12px;
-          padding: 4px;
-          box-shadow: 0 3px 12px rgba(0,0,0,.03);
+          padding: 5px;
+          border: 1px solid #e9e2d8;
+          border-radius: 10px;
         }
 
-        .period-button {
+        .periodo-btn {
           border: 0;
           background: transparent;
-          padding: 9px 13px;
-          border-radius: 9px;
+          padding: 9px 14px;
+          border-radius: 7px;
+          color: #71685e;
           cursor: pointer;
-          color: #777;
           font-size: 13px;
           font-weight: 600;
         }
 
-        .period-button.active {
-          background: #e6c35c;
-          color: #181818;
+        .periodo-btn:hover {
+          background: #f8f3eb;
         }
 
-        .refresh-button {
-          border: 1px solid #dedede;
-          background: #fff;
-          color: #222;
+        .periodo-btn.ativo {
+          background: #d4b16d;
+          color: #fff;
+        }
+
+        .erro-box {
+          background: #fff2f0;
+          border: 1px solid #e6b8b0;
+          color: #9b4034;
           border-radius: 10px;
-          padding: 10px 14px;
-          cursor: pointer;
-          font-weight: 600;
+          padding: 14px 16px;
+          margin-bottom: 20px;
+          font-size: 14px;
         }
 
-        .refresh-button:hover {
-          background: #fafafa;
-        }
-
-        .kpi-grid {
+        .grid-kpis {
           display: grid;
           grid-template-columns: repeat(6, minmax(0, 1fr));
           gap: 14px;
-          margin-bottom: 18px;
+          margin-bottom: 20px;
         }
 
         .kpi-card {
           background: #fff;
-          border: 1px solid #e8e8e8;
-          border-radius: 16px;
+          border: 1px solid #ebe5dc;
+          border-radius: 12px;
           padding: 18px;
-          min-width: 0;
-          box-shadow: 0 5px 20px rgba(0,0,0,.035);
+          min-height: 120px;
         }
 
         .kpi-label {
-          color: #777;
+          color: #877d72;
           font-size: 12px;
           font-weight: 600;
-          margin-bottom: 10px;
+          text-transform: uppercase;
+          letter-spacing: .04em;
         }
 
         .kpi-value {
+          margin-top: 9px;
           font-size: 23px;
-          font-weight: 750;
-          letter-spacing: -0.5px;
+          font-weight: 700;
+          color: #2c2721;
           white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
         }
 
-        .kpi-small {
-          color: #999;
-          font-size: 11px;
+        .kpi-description {
           margin-top: 7px;
+          color: #958b80;
+          font-size: 12px;
         }
 
-        .gold {
-          color: #a37a00;
-        }
-
-        .green {
-          color: #39794f;
-        }
-
-        .red {
-          color: #a84646;
-        }
-
-        .dashboard-grid-main {
+        .dashboard-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.6fr) minmax(320px, .8fr);
+          grid-template-columns: repeat(12, minmax(0, 1fr));
           gap: 18px;
-          margin-bottom: 18px;
         }
 
-        .dashboard-grid-two {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 18px;
-          margin-bottom: 18px;
-        }
-
-        .dashboard-grid-three {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 18px;
-          margin-bottom: 18px;
-        }
-
-        .card {
+        .painel {
           background: #fff;
-          border: 1px solid #e8e8e8;
-          border-radius: 18px;
+          border: 1px solid #ebe5dc;
+          border-radius: 12px;
           padding: 20px;
           min-width: 0;
-          box-shadow: 0 5px 20px rgba(0,0,0,.035);
         }
 
-        .card-header {
+        .col-4 {
+          grid-column: span 4;
+        }
+
+        .col-5 {
+          grid-column: span 5;
+        }
+
+        .col-6 {
+          grid-column: span 6;
+        }
+
+        .col-7 {
+          grid-column: span 7;
+        }
+
+        .col-8 {
+          grid-column: span 8;
+        }
+
+        .col-12 {
+          grid-column: span 12;
+        }
+
+        .painel-header {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 18px;
+          gap: 14px;
+          margin-bottom: 20px;
         }
 
-        .card-title {
+        .painel-titulo {
           margin: 0;
           font-size: 16px;
           font-weight: 700;
+          color: #302a24;
         }
 
-        .card-description {
-          color: #888;
+        .painel-subtitulo {
+          margin: 5px 0 0;
+          color: #92877b;
           font-size: 12px;
-          margin-top: 4px;
         }
 
-        .link-button {
+        .link-btn {
           border: 0;
           background: transparent;
-          color: #9a7400;
+          color: #ad8749;
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
-          padding: 4px;
         }
 
-        .chart {
+        .produto-destaque {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .destaque-item {
+          border: 1px solid #eee7dd;
+          background: #fcfbf9;
+          border-radius: 10px;
+          padding: 15px;
+        }
+
+        .destaque-label {
+          font-size: 11px;
+          color: #958b80;
+          text-transform: uppercase;
+          letter-spacing: .04em;
+        }
+
+        .destaque-nome {
+          margin-top: 8px;
+          font-size: 16px;
+          font-weight: 700;
+          color: #312b24;
+        }
+
+        .destaque-numero {
+          margin-top: 5px;
+          font-size: 13px;
+          color: #776d62;
+        }
+
+        .grafico-barras {
           display: flex;
           align-items: flex-end;
           gap: 10px;
-          height: 190px;
-          padding-top: 12px;
+          height: 180px;
+          padding-top: 10px;
         }
 
-        .chart-column {
+        .barra-coluna {
           flex: 1;
           height: 100%;
           display: flex;
@@ -1285,1773 +1156,1332 @@ export default function Dashboard() {
           min-width: 0;
         }
 
-        .chart-bar {
+        .barra {
           width: 100%;
-          max-width: 52px;
-          min-height: 4px;
-          background: #e6c35c;
-          border-radius: 8px 8px 3px 3px;
-          transition: height .2s ease;
+          max-width: 42px;
+          min-height: 3px;
+          border-radius: 5px 5px 2px 2px;
+          background: #d4b16d;
         }
 
-        .chart-value {
-          font-size: 10px;
-          color: #777;
+        .barra-valor {
+          font-size: 9px;
+          color: #8c8174;
           margin-bottom: 5px;
           white-space: nowrap;
         }
 
-        .chart-label {
+        .barra-label {
           font-size: 10px;
-          color: #999;
+          color: #81766a;
           margin-top: 7px;
         }
 
-        .meta-box {
-          background: #faf7e9;
-          border: 1px solid #eee2af;
-          border-radius: 14px;
-          padding: 16px;
+        .meta-container {
+          margin-top: 8px;
         }
 
         .meta-top {
           display: flex;
+          align-items: center;
           justify-content: space-between;
           gap: 10px;
-          align-items: center;
-          margin-bottom: 12px;
         }
 
-        .meta-title {
+        .meta-valor {
+          font-size: 24px;
+          font-weight: 700;
+          color: #302a24;
+        }
+
+        .meta-percentual {
+          color: #aa8243;
           font-size: 13px;
           font-weight: 700;
         }
 
-        .meta-value {
-          font-size: 12px;
-          color: #777;
-        }
-
-        .meta-progress {
+        .progress-bg {
           height: 9px;
-          background: #e9e9e9;
-          border-radius: 99px;
+          background: #eee9e2;
+          border-radius: 999px;
           overflow: hidden;
+          margin-top: 13px;
         }
 
-        .meta-fill {
+        .progress-fill {
           height: 100%;
-          background: #cda82e;
-          border-radius: 99px;
+          background: #d4b16d;
+          border-radius: 999px;
+        }
+
+        .meta-info {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 8px;
+          color: #8d8276;
+          font-size: 11px;
         }
 
         .meta-edit {
+          margin-top: 16px;
           display: flex;
           gap: 8px;
-          margin-top: 12px;
         }
 
-        .meta-input {
-          flex: 1;
-          min-width: 0;
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          padding: 8px 10px;
-        }
-
-        .meta-save {
-          border: 0;
-          border-radius: 8px;
-          padding: 8px 12px;
-          background: #1c1c1c;
-          color: #fff;
-          cursor: pointer;
-        }
-
-        .icon-button {
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          border: 0;
-          background: #1c1c1c;
-          color: #fff;
-          cursor: pointer;
-          font-size: 18px;
-          line-height: 1;
-        }
-
-        .highlight-list {
-          display: grid;
-          gap: 10px;
-        }
-
-        .highlight {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 15px;
-          padding: 12px;
-          background: #fafafa;
-          border-radius: 12px;
-        }
-
-        .highlight-main {
-          min-width: 0;
-        }
-
-        .highlight-title {
-          font-weight: 700;
-          font-size: 13px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .highlight-description {
-          color: #888;
-          font-size: 11px;
-          margin-top: 3px;
-        }
-
-        .highlight-value {
-          font-size: 13px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .product-ranking {
-          display: grid;
-          gap: 10px;
-        }
-
-        .product-row {
-          display: grid;
-          grid-template-columns: 32px minmax(0,1fr) auto;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 0;
-          border-bottom: 1px solid #eee;
-        }
-
-        .product-row:last-child {
-          border-bottom: 0;
-        }
-
-        .ranking-number {
-          width: 28px;
-          height: 28px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #f4edcf;
-          color: #876700;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .product-name {
-          font-size: 13px;
-          font-weight: 650;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .product-detail {
-          font-size: 11px;
-          color: #999;
-          margin-top: 3px;
-        }
-
-        .stock-row {
-          display: grid;
-          grid-template-columns: minmax(0,1fr) auto;
-          gap: 12px;
-          align-items: center;
-          padding: 11px 0;
-          border-bottom: 1px solid #eee;
-        }
-
-        .stock-row:last-child {
-          border-bottom: 0;
-        }
-
-        .stock-name {
-          font-size: 13px;
-          font-weight: 650;
-        }
-
-        .stock-detail {
-          color: #999;
-          font-size: 11px;
-          margin-top: 3px;
-        }
-
-        .stock-number {
-          font-size: 13px;
-          font-weight: 750;
-          color: #a84646;
-        }
-
-        .finance-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0,1fr));
-          gap: 10px;
-        }
-
-        .finance-item {
-          padding: 12px;
-          background: #fafafa;
-          border-radius: 12px;
-        }
-
-        .finance-item-label {
-          color: #888;
-          font-size: 11px;
-        }
-
-        .finance-item-value {
-          margin-top: 5px;
-          font-size: 15px;
-          font-weight: 750;
-        }
-
-        .table-wrap {
-          overflow-x: auto;
-        }
-
-        .simple-table {
+        .input {
           width: 100%;
-          border-collapse: collapse;
-          min-width: 500px;
+          border: 1px solid #ddd5c9;
+          border-radius: 8px;
+          padding: 9px 10px;
+          outline: none;
+          font-size: 13px;
+          background: #fff;
         }
 
-        .simple-table th {
-          text-align: left;
-          color: #999;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: .5px;
-          padding: 0 10px 10px;
+        .input:focus {
+          border-color: #c8a15d;
+        }
+
+        .btn {
+          border: 0;
+          border-radius: 8px;
+          padding: 9px 13px;
+          cursor: pointer;
+          font-size: 12px;
           font-weight: 700;
         }
 
-        .simple-table td {
-          padding: 11px 10px;
-          border-top: 1px solid #eee;
-          font-size: 12px;
+        .btn-primary {
+          background: #c9a15b;
+          color: #fff;
         }
 
-        .simple-table td:last-child,
-        .simple-table th:last-child {
-          text-align: right;
+        .btn-secondary {
+          background: #f0ece6;
+          color: #655c53;
         }
 
-        .badge {
+        .lista {
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+        }
+
+        .lista-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 11px 0;
+          border-bottom: 1px solid #f0ece6;
+        }
+
+        .lista-item:last-child {
+          border-bottom: 0;
+        }
+
+        .lista-esquerda {
+          min-width: 0;
+        }
+
+        .lista-nome {
+          font-size: 13px;
+          font-weight: 600;
+          color: #39322a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .lista-detalhe {
+          margin-top: 3px;
+          color: #91867a;
+          font-size: 11px;
+        }
+
+        .lista-valor {
+          font-size: 13px;
+          font-weight: 700;
+          color: #4a4035;
+          white-space: nowrap;
+        }
+
+        .estoque-tag {
           display: inline-flex;
           align-items: center;
-          padding: 4px 8px;
-          border-radius: 999px;
-          background: #f2f2f2;
+          padding: 4px 7px;
+          border-radius: 5px;
           font-size: 10px;
           font-weight: 700;
+          margin-left: 5px;
         }
 
-        .badge.gold-badge {
-          background: #f5edcf;
-          color: #806000;
+        .estoque-tag.zero {
+          background: #fbe7e4;
+          color: #a54136;
         }
 
-        .badge.red-badge {
-          background: #f8e7e7;
-          color: #9c4545;
+        .estoque-tag.baixo {
+          background: #fdf1d9;
+          color: #98702e;
         }
 
-        .badge.green-badge {
-          background: #e7f2e9;
-          color: #39724b;
-        }
-
-        .alert-list {
+        .financeiro-grid {
           display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 10px;
         }
 
-        .alert {
-          display: flex;
-          gap: 12px;
-          align-items: flex-start;
-          padding: 12px;
-          border-radius: 12px;
-          background: #fafafa;
+        .financeiro-item {
+          border: 1px solid #eee7de;
+          border-radius: 9px;
+          padding: 13px;
         }
 
-        .alert-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          margin-top: 5px;
-          flex: 0 0 auto;
-          background: #cda82e;
-        }
-
-        .alert-dot.estoque {
-          background: #c78d2d;
-        }
-
-        .alert-dot.financeiro {
-          background: #b24d4d;
-        }
-
-        .alert-dot.cliente {
-          background: #777;
-        }
-
-        .alert-title {
-          font-size: 12px;
-          font-weight: 750;
-        }
-
-        .alert-description {
-          margin-top: 3px;
+        .financeiro-label {
+          color: #91867b;
           font-size: 11px;
-          color: #888;
+        }
+
+        .financeiro-value {
+          margin-top: 6px;
+          color: #332c25;
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .positivo {
+          color: #4d7957;
+        }
+
+        .negativo {
+          color: #a14b40;
+        }
+
+        .alertas {
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+        }
+
+        .alerta {
+          padding: 12px;
+          border-radius: 9px;
+          border: 1px solid #ece5dc;
+        }
+
+        .alerta.danger {
+          background: #fff4f2;
+          border-color: #efd2cd;
+        }
+
+        .alerta.warning {
+          background: #fffaf0;
+          border-color: #efe0bb;
+        }
+
+        .alerta.info {
+          background: #f7f7f4;
+        }
+
+        .alerta-titulo {
+          font-size: 12px;
+          font-weight: 700;
+          color: #40382f;
+        }
+
+        .alerta-descricao {
+          margin-top: 4px;
+          color: #8a7f73;
+          font-size: 11px;
           line-height: 1.4;
         }
 
-        .empty {
-          padding: 28px 10px;
-          text-align: center;
-          color: #999;
+        .tabela-wrapper {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .tabela {
+          width: 100%;
+          border-collapse: collapse;
+          min-width: 520px;
+        }
+
+        .tabela th {
+          text-align: left;
+          color: #94897d;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: .04em;
+          padding: 0 10px 11px;
+          border-bottom: 1px solid #ece6dd;
+        }
+
+        .tabela td {
+          padding: 12px 10px;
+          border-bottom: 1px solid #f1ede8;
+          color: #4a4138;
           font-size: 12px;
         }
 
-        .loading {
-          padding: 60px;
-          text-align: center;
-          color: #888;
+        .tabela td.valor {
+          font-weight: 700;
+          text-align: right;
         }
 
-        .error {
-          padding: 16px;
-          background: #fff0f0;
-          border: 1px solid #f0caca;
-          color: #a84646;
-          border-radius: 12px;
-          margin-bottom: 18px;
+        .tabela th:last-child {
+          text-align: right;
+        }
+
+        .sem-dados {
+          padding: 25px 10px;
+          text-align: center;
+          color: #988d81;
+          font-size: 12px;
         }
 
         .popup-overlay {
           position: fixed;
           inset: 0;
-          z-index: 100;
-          background: rgba(0,0,0,.42);
+          background: rgba(30, 25, 20, .45);
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 20px;
+          z-index: 1000;
         }
 
         .popup {
-          width: 100%;
-          max-width: 620px;
+          width: min(520px, 100%);
           max-height: 80vh;
           overflow: auto;
           background: #fff;
-          border-radius: 18px;
+          border-radius: 14px;
           padding: 22px;
-          box-shadow: 0 25px 80px rgba(0,0,0,.22);
+          box-shadow: 0 20px 60px rgba(0,0,0,.2);
         }
 
         .popup-header {
           display: flex;
+          align-items: center;
           justify-content: space-between;
           gap: 15px;
-          align-items: center;
           margin-bottom: 18px;
         }
 
         .popup-title {
           margin: 0;
           font-size: 18px;
-          font-weight: 750;
+          color: #302a24;
         }
 
-        .close-button {
+        .fechar {
           border: 0;
-          background: #f3f3f3;
+          background: #f3efe9;
           width: 32px;
           height: 32px;
           border-radius: 50%;
           cursor: pointer;
-          font-size: 18px;
+          color: #6d6359;
         }
 
-        .coupon-client {
+        .cupom-cliente {
           display: flex;
           justify-content: space-between;
-          gap: 12px;
+          align-items: center;
           padding: 12px 0;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #eee8df;
         }
 
-        .coupon-client:last-child {
-          border-bottom: 0;
-        }
-
-        .coupon-name {
+        .cupom-nome {
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 600;
         }
 
-        .coupon-points {
-          color: #9a7400;
+        .cupom-pontos {
+          color: #ad8444;
           font-size: 12px;
           font-weight: 700;
         }
 
         @media (max-width: 1250px) {
-          .kpi-grid {
+          .grid-kpis {
             grid-template-columns: repeat(3, minmax(0, 1fr));
           }
 
-          .dashboard-grid-three {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+          .col-4,
+          .col-5 {
+            grid-column: span 6;
           }
         }
 
-        @media (max-width: 900px) {
-          .dashboard-page {
-            padding: 16px;
+        @media (max-width: 850px) {
+          .dashboard {
+            padding: 18px;
           }
 
           .dashboard-header {
             flex-direction: column;
           }
 
-          .dashboard-actions {
-            width: 100%;
-            justify-content: flex-start;
-          }
-
-          .period-selector {
+          .periodos {
             width: 100%;
             overflow-x: auto;
           }
 
-          .period-button {
+          .periodo-btn {
             flex: 1;
-            min-width: 70px;
+            white-space: nowrap;
           }
 
-          .dashboard-grid-main,
-          .dashboard-grid-two {
-            grid-template-columns: 1fr;
+          .grid-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
-          .dashboard-grid-three {
-            grid-template-columns: 1fr;
+          .col-4,
+          .col-5,
+          .col-6,
+          .col-7,
+          .col-8 {
+            grid-column: span 12;
           }
         }
 
-        @media (max-width: 600px) {
-          .dashboard-page {
-            padding: 12px;
+        @media (max-width: 520px) {
+          .dashboard {
+            padding: 13px;
           }
 
           .dashboard-title {
             font-size: 24px;
           }
 
-          .kpi-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+          .grid-kpis {
+            grid-template-columns: 1fr;
           }
 
           .kpi-card {
-            padding: 14px;
-            border-radius: 14px;
+            min-height: auto;
           }
 
-          .kpi-value {
-            font-size: 18px;
-          }
-
-          .card {
-            padding: 15px;
-            border-radius: 15px;
-          }
-
-          .dashboard-actions {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .refresh-button {
-            width: 100%;
-          }
-
-          .chart {
-            height: 155px;
-            gap: 6px;
-          }
-
-          .finance-grid {
+          .produto-destaque {
             grid-template-columns: 1fr;
+          }
+
+          .financeiro-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .painel {
+            padding: 16px;
           }
         }
       `}</style>
 
-      <main className="dashboard-page">
-        <div className="dashboard-container">
-          <header className="dashboard-header">
-            <div>
-              <h1 className="dashboard-title">
-                Visão geral
-              </h1>
+      <div className="dashboard-header">
+        <div>
+          <h1 className="dashboard-title">Dashboard</h1>
+          <p className="dashboard-subtitle">
+            Visão geral do desempenho da loja
+          </p>
+        </div>
 
-              <p className="dashboard-subtitle">
-                Acompanhe as principais informações da
-                Cami&Duda em um só lugar.
-                {atualizadoEm && (
-                  <>
-                    {" "}
-                    Atualizado às{" "}
-                    {atualizadoEm.toLocaleTimeString(
-                      "pt-BR",
-                      {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      },
-                    )}
-                    .
-                  </>
-                )}
+        <div className="periodos">
+          <button
+            className={`periodo-btn ${
+              periodo === "7" ? "ativo" : ""
+            }`}
+            onClick={() => setPeriodo("7")}
+          >
+            7 dias
+          </button>
+
+          <button
+            className={`periodo-btn ${
+              periodo === "30" ? "ativo" : ""
+            }`}
+            onClick={() => setPeriodo("30")}
+          >
+            30 dias
+          </button>
+
+          <button
+            className={`periodo-btn ${
+              periodo === "90" ? "ativo" : ""
+            }`}
+            onClick={() => setPeriodo("90")}
+          >
+            90 dias
+          </button>
+
+          <button
+            className={`periodo-btn ${
+              periodo === "365" ? "ativo" : ""
+            }`}
+            onClick={() => setPeriodo("365")}
+          >
+            1 ano
+          </button>
+        </div>
+      </div>
+
+      {erro && <div className="erro-box">{erro}</div>}
+
+      <div className="grid-kpis">
+        <div className="kpi-card">
+          <div className="kpi-label">Faturamento</div>
+          <div className="kpi-value">{moeda(faturamento)}</div>
+          <div className="kpi-description">
+            Vendas no período selecionado
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Resultado</div>
+          <div
+            className={`kpi-value ${
+              resultadoLiquido >= 0 ? "positivo" : "negativo"
+            }`}
+          >
+            {moeda(resultadoLiquido)}
+          </div>
+          <div className="kpi-description">
+            Resultado operacional calculado
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Pedidos</div>
+          <div className="kpi-value">{pedidos}</div>
+          <div className="kpi-description">
+            Pedidos realizados no período
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Ticket médio</div>
+          <div className="kpi-value">{moeda(ticketMedio)}</div>
+          <div className="kpi-description">
+            Média por pedido
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Clientes</div>
+          <div className="kpi-value">{clientesAtendidos}</div>
+          <div className="kpi-description">
+            Clientes que compraram
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-label">Estoque baixo</div>
+          <div className="kpi-value">
+            {estoqueBaixo + estoqueZerado}
+          </div>
+          <div className="kpi-description">
+            {estoqueZerado} sem estoque
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-grid">
+        <section className="painel col-8">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Vendas dos últimos 7 dias
+              </h2>
+              <p className="painel-subtitulo">
+                Acompanhamento diário do faturamento
+              </p>
+            </div>
+          </div>
+
+          <div className="grafico-barras">
+            {vendasUltimos7Dias.map((item) => (
+              <div className="barra-coluna" key={item.data}>
+                <div className="barra-valor">
+                  {item.valor > 0 ? moeda(item.valor) : ""}
+                </div>
+
+                <div
+                  className="barra"
+                  style={{
+                    height: `${Math.max(
+                      3,
+                      (item.valor / maiorVendaDia) * 135,
+                    )}px`,
+                  }}
+                />
+
+                <div className="barra-label">{item.data}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="painel col-4">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">Meta de vendas</h2>
+              <p className="painel-subtitulo">
+                Acompanhamento do objetivo
               </p>
             </div>
 
-            <div className="dashboard-actions">
-              <div className="period-selector">
-                {[
-                  ["dia", "Hoje"],
-                  ["mes", "Mês"],
-                  ["trimestre", "3 meses"],
-                  ["ano", "Ano"],
-                  ["todos", "Tudo"],
-                ].map(([valor, label]) => (
-                  <button
-                    key={valor}
-                    className={`period-button ${
-                      periodo === valor
-                        ? "active"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      setPeriodo(
-                        valor as Periodo,
-                      )
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
+            <button
+              className="link-btn"
+              onClick={() => {
+                setNovaMeta(String(meta))
+                setEditandoMeta(!editandoMeta)
+              }}
+            >
+              {editandoMeta ? "Fechar" : "Editar"}
+            </button>
+          </div>
+
+          <div className="meta-container">
+            <div className="meta-top">
+              <div className="meta-valor">
+                {moeda(faturamento)}
               </div>
 
-              <button
-                className="refresh-button"
-                onClick={carregarDados}
-              >
-                Atualizar
-              </button>
+              <div className="meta-percentual">
+                {metaPercentual.toFixed(0)}%
+              </div>
             </div>
-          </header>
 
-          {erro && (
-            <div className="error">
-              {erro}
+            <div className="progress-bg">
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${metaPercentual}%`,
+                }}
+              />
             </div>
-          )}
 
-          {carregando ? (
-            <div className="card loading">
-              Carregando informações da loja...
+            <div className="meta-info">
+              <span>Atual</span>
+              <span>Meta: {moeda(meta)}</span>
             </div>
-          ) : (
-            <>
-              <section className="kpi-grid">
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    FATURAMENTO
+
+            {editandoMeta && (
+              <div className="meta-edit">
+                <input
+                  className="input"
+                  value={novaMeta}
+                  onChange={(event) =>
+                    setNovaMeta(event.target.value)
+                  }
+                  placeholder="Ex.: 15000"
+                />
+
+                <button
+                  className="btn btn-primary"
+                  onClick={salvarMeta}
+                >
+                  Salvar
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="painel col-6">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Destaques de vendas
+              </h2>
+              <p className="painel-subtitulo">
+                Produtos que mais se destacaram
+              </p>
+            </div>
+          </div>
+
+          <div className="produto-destaque">
+            <div className="destaque-item">
+              <div className="destaque-label">
+                Mais vendido
+              </div>
+
+              <div className="destaque-nome">
+                {produtoMaisVendido?.nome ?? "Sem dados"}
+              </div>
+
+              <div className="destaque-numero">
+                {produtoMaisVendido
+                  ? `${produtoMaisVendido.quantidade} unidade(s)`
+                  : "Nenhuma venda identificada"}
+              </div>
+            </div>
+
+            <div className="destaque-item">
+              <div className="destaque-label">
+                Maior faturamento
+              </div>
+
+              <div className="destaque-nome">
+                {produtoMaisFaturado?.nome ?? "Sem dados"}
+              </div>
+
+              <div className="destaque-numero">
+                {produtoMaisFaturado
+                  ? moeda(produtoMaisFaturado.faturamento)
+                  : "Nenhum valor identificado"}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="painel col-6">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Clientes em destaque
+              </h2>
+              <p className="painel-subtitulo">
+                Maiores valores comprados no período
+              </p>
+            </div>
+          </div>
+
+          <div className="lista">
+            {topClientes.length === 0 ? (
+              <div className="sem-dados">
+                Nenhuma compra com cliente identificado.
+              </div>
+            ) : (
+              topClientes.map((cliente, index) => (
+                <div
+                  className="lista-item"
+                  key={cliente.clienteId}
+                >
+                  <div className="lista-esquerda">
+                    <div className="lista-nome">
+                      {index + 1}. {cliente.nome}
+                    </div>
+
+                    <div className="lista-detalhe">
+                      {cliente.quantidade} pedido(s)
+                    </div>
                   </div>
 
-                  <div className="kpi-value gold">
-                    {moeda(faturamento)}
-                  </div>
-
-                  <div className="kpi-small">
-                    {pedidos} venda(s) no período
+                  <div className="lista-valor">
+                    {moeda(cliente.valor)}
                   </div>
                 </div>
+              ))
+            )}
+          </div>
+        </section>
 
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    RESULTADO LÍQUIDO
+        <section className="painel col-6">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Produtos mais vendidos
+              </h2>
+              <p className="painel-subtitulo">
+                Ranking por quantidade
+              </p>
+            </div>
+          </div>
+
+          <div className="lista">
+            {vendasPorProduto.length === 0 ? (
+              <div className="sem-dados">
+                Não foi possível identificar os produtos vendidos.
+              </div>
+            ) : (
+              vendasPorProduto.slice(0, 5).map((produto, index) => (
+                <div
+                  className="lista-item"
+                  key={produto.produtoId}
+                >
+                  <div className="lista-esquerda">
+                    <div className="lista-nome">
+                      {index + 1}. {produto.nome}
+                    </div>
+
+                    <div className="lista-detalhe">
+                      Faturamento: {moeda(produto.faturamento)}
+                    </div>
+                  </div>
+
+                  <div className="lista-valor">
+                    {produto.quantidade} un.
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="painel col-6">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Atenção no estoque
+              </h2>
+              <p className="painel-subtitulo">
+                Produtos que precisam de reposição
+              </p>
+            </div>
+          </div>
+
+          <div className="lista">
+            {variantes.filter(
+              (variante) =>
+                variante.ativo !== false &&
+                numero(variante.estoqueAtual) <=
+                  numero(variante.estoqueMinimo),
+            ).length === 0 ? (
+              <div className="sem-dados">
+                Nenhuma variante abaixo do estoque mínimo.
+              </div>
+            ) : (
+              variantes
+                .filter(
+                  (variante) =>
+                    variante.ativo !== false &&
+                    numero(variante.estoqueAtual) <=
+                      numero(variante.estoqueMinimo),
+                )
+                .sort(
+                  (a, b) =>
+                    numero(a.estoqueAtual) -
+                    numero(b.estoqueAtual),
+                )
+                .slice(0, 7)
+                .map((variante) => {
+                  const produto = variante.produtoId
+                    ? produtosMap.get(variante.produtoId)
+                    : null
+
+                  const estoque = numero(
+                    variante.estoqueAtual,
+                  )
+
+                  return (
+                    <div
+                      className="lista-item"
+                      key={variante.id}
+                    >
+                      <div className="lista-esquerda">
+                        <div className="lista-nome">
+                          {produto?.nome ??
+                            "Produto não identificado"}
+                        </div>
+
+                        <div className="lista-detalhe">
+                          {variante.cor || "Sem cor"}{" "}
+                          {variante.tamanho
+                            ? `• ${variante.tamanho}`
+                            : ""}
+                        </div>
+                      </div>
+
+                      <div className="lista-valor">
+                        {estoque}
+                        <span
+                          className={`estoque-tag ${
+                            estoque <= 0
+                              ? "zero"
+                              : "baixo"
+                          }`}
+                        >
+                          {estoque <= 0
+                            ? "ZERADO"
+                            : "BAIXO"}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+            )}
+          </div>
+        </section>
+
+        <section className="painel col-5">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Financeiro
+              </h2>
+              <p className="painel-subtitulo">
+                Resumo financeiro do período
+              </p>
+            </div>
+          </div>
+
+          <div className="financeiro-grid">
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Receitas recebidas
+              </div>
+
+              <div className="financeiro-value positivo">
+                {moeda(totalReceitasRecebidas)}
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Receitas pendentes
+              </div>
+
+              <div className="financeiro-value">
+                {moeda(totalReceitasPendentes)}
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Despesas pagas
+              </div>
+
+              <div className="financeiro-value negativo">
+                {moeda(totalDespesasPagas)}
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Despesas pendentes
+              </div>
+
+              <div className="financeiro-value">
+                {moeda(totalDespesasPendentes)}
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Lucro bruto
+              </div>
+
+              <div
+                className={`financeiro-value ${
+                  lucroBruto >= 0
+                    ? "positivo"
+                    : "negativo"
+                }`}
+              >
+                {moeda(lucroBruto)}
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Margem bruta
+              </div>
+
+              <div className="financeiro-value">
+                {margemBruta.toFixed(1)}%
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Margem líquida
+              </div>
+
+              <div className="financeiro-value">
+                {margemLiquida.toFixed(1)}%
+              </div>
+            </div>
+
+            <div className="financeiro-item">
+              <div className="financeiro-label">
+                Valor do estoque
+              </div>
+
+              <div className="financeiro-value">
+                {moeda(valorEstoque)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="painel col-7">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Formas de pagamento
+              </h2>
+              <p className="painel-subtitulo">
+                Distribuição do faturamento por pagamento
+              </p>
+            </div>
+          </div>
+
+          <div className="lista">
+            {vendasPorPagamento.length === 0 ? (
+              <div className="sem-dados">
+                Nenhuma venda no período.
+              </div>
+            ) : (
+              vendasPorPagamento.slice(0, 6).map((item) => {
+                const percentualPagamento =
+                  faturamento > 0
+                    ? (item.valor / faturamento) * 100
+                    : 0
+
+                return (
+                  <div
+                    className="lista-item"
+                    key={item.nome}
+                  >
+                    <div
+                      className="lista-esquerda"
+                      style={{ width: "100%" }}
+                    >
+                      <div className="lista-nome">
+                        {item.nome}
+                      </div>
+
+                      <div
+                        className="progress-bg"
+                        style={{
+                          marginTop: 7,
+                          height: 5,
+                        }}
+                      >
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${percentualPagamento}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="lista-valor">
+                      {moeda(item.valor)}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </section>
+
+        <section className="painel col-4">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Alertas
+              </h2>
+              <p className="painel-subtitulo">
+                Pontos que merecem atenção
+              </p>
+            </div>
+          </div>
+
+          <div className="alertas">
+            {alertas.length === 0 ? (
+              <div className="sem-dados">
+                Nenhum alerta no momento.
+              </div>
+            ) : (
+              alertas.slice(0, 5).map((alerta, index) => (
+                <div
+                  className={`alerta ${alerta.tipo}`}
+                  key={`${alerta.titulo}-${index}`}
+                >
+                  <div className="alerta-titulo">
+                    {alerta.titulo}
+                  </div>
+
+                  <div className="alerta-descricao">
+                    {alerta.descricao}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="painel col-8">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Faturamento mensal
+              </h2>
+              <p className="painel-subtitulo">
+                Evolução das vendas nos últimos meses
+              </p>
+            </div>
+          </div>
+
+          <div className="grafico-barras">
+            {vendasPorMes.length === 0 ? (
+              <div className="sem-dados">
+                Ainda não existem vendas suficientes para exibir
+                o histórico.
+              </div>
+            ) : (
+              vendasPorMes.map((item) => (
+                <div
+                  className="barra-coluna"
+                  key={`${item.nome}-${item.valor}`}
+                >
+                  <div className="barra-valor">
+                    {moeda(item.valor)}
                   </div>
 
                   <div
-                    className={`kpi-value ${
-                      resultadoLiquido >= 0
-                        ? "green"
-                        : "red"
-                    }`}
-                  >
-                    {moeda(resultadoLiquido)}
-                  </div>
+                    className="barra"
+                    style={{
+                      height: `${Math.max(
+                        3,
+                        (item.valor / maiorVendaMes) * 135,
+                      )}px`,
+                    }}
+                  />
 
-                  <div className="kpi-small">
-                    Margem líquida:{" "}
-                    {margemLiquida.toFixed(1)}%
-                  </div>
-                </div>
-
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    PEDIDOS
-                  </div>
-
-                  <div className="kpi-value">
-                    {pedidos}
-                  </div>
-
-                  <div className="kpi-small">
-                    Clientes atendidos:{" "}
-                    {clientesAtendidos}
+                  <div className="barra-label">
+                    {item.nome}
                   </div>
                 </div>
+              ))
+            )}
+          </div>
+        </section>
 
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    TICKET MÉDIO
-                  </div>
+        <section className="painel col-8">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Clientes com cupom
+              </h2>
+              <p className="painel-subtitulo">
+                Clientes que atingiram 10 pontos
+              </p>
+            </div>
 
-                  <div className="kpi-value">
-                    {moeda(ticketMedio)}
-                  </div>
+            <button
+              className="link-btn"
+              onClick={() => setPopupCupons(true)}
+            >
+              Ver clientes
+            </button>
+          </div>
 
-                  <div className="kpi-small">
-                    Média por venda
-                  </div>
+          <div className="produto-destaque">
+            <div className="destaque-item">
+              <div className="destaque-label">
+                Clientes elegíveis
+              </div>
+
+              <div className="destaque-nome">
+                {clientesComCupom.length}
+              </div>
+
+              <div className="destaque-numero">
+                Cada cliente recebe um cupom de R$ 60,00
+              </div>
+            </div>
+
+            <div className="destaque-item">
+              <div className="destaque-label">
+                Regra de fidelidade
+              </div>
+
+              <div className="destaque-nome">
+                10 pontos
+              </div>
+
+              <div className="destaque-numero">
+                A cada R$ 150,00 em compras = 1 ponto
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="painel col-4">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Resumo operacional
+              </h2>
+              <p className="painel-subtitulo">
+                Indicadores atuais
+              </p>
+            </div>
+          </div>
+
+          <div className="lista">
+            <div className="lista-item">
+              <div className="lista-esquerda">
+                <div className="lista-nome">
+                  Produtos cadastrados
                 </div>
+              </div>
 
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    A RECEBER
-                  </div>
+              <div className="lista-valor">
+                {produtos.filter(
+                  (produto) => produto.ativo !== false,
+                ).length}
+              </div>
+            </div>
 
-                  <div className="kpi-value red">
-                    {moeda(
-                      totalReceitasPendentes,
-                    )}
-                  </div>
-
-                  <div className="kpi-small">
-                    Valores pendentes
-                  </div>
+            <div className="lista-item">
+              <div className="lista-esquerda">
+                <div className="lista-nome">
+                  Variantes cadastradas
                 </div>
+              </div>
 
-                <div className="kpi-card">
-                  <div className="kpi-label">
-                    ESTOQUE BAIXO
-                  </div>
+              <div className="lista-valor">
+                {variantes.filter(
+                  (variante) => variante.ativo !== false,
+                ).length}
+              </div>
+            </div>
 
-                  <div className="kpi-value">
-                    {estoqueBaixo.length}
-                  </div>
-
-                  <div className="kpi-small">
-                    {estoqueZerado.length} zerado(s)
-                  </div>
+            <div className="lista-item">
+              <div className="lista-esquerda">
+                <div className="lista-nome">
+                  Estoque zerado
                 </div>
-              </section>
+              </div>
 
-              <section className="dashboard-grid-main">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Vendas dos últimos 7 dias
-                      </h2>
+              <div className="lista-valor negativo">
+                {estoqueZerado}
+              </div>
+            </div>
 
-                      <div className="card-description">
-                        Faturamento diário
-                      </div>
-                    </div>
-
-                    <strong className="gold">
-                      {moeda(
-                        vendasUltimos7Dias.reduce(
-                          (total, item) =>
-                            total + item.valor,
-                          0,
-                        ),
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="chart">
-                    {vendasUltimos7Dias.map(
-                      (item) => {
-                        const altura =
-                          (item.valor /
-                            maiorVenda7Dias) *
-                          100
-
-                        return (
-                          <div
-                            className="chart-column"
-                            key={item.data}
-                          >
-                            <div className="chart-value">
-                              {item.valor > 0
-                                ? moeda(
-                                    item.valor,
-                                  )
-                                : "—"}
-                            </div>
-
-                            <div
-                              className="chart-bar"
-                              style={{
-                                height: `${Math.max(
-                                  altura,
-                                  item.valor > 0
-                                    ? 5
-                                    : 2,
-                                )}%`,
-                              }}
-                            />
-
-                            <div className="chart-label">
-                              {item.data}
-                            </div>
-                          </div>
-                        )
-                      },
-                    )}
-                  </div>
+            <div className="lista-item">
+              <div className="lista-esquerda">
+                <div className="lista-nome">
+                  Estoque baixo
                 </div>
+              </div>
 
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Meta de faturamento
-                      </h2>
+              <div className="lista-valor">
+                {estoqueBaixo}
+              </div>
+            </div>
 
-                      <div className="card-description">
-                        Acompanhe o objetivo do período
-                      </div>
-                    </div>
+            <div className="lista-item">
+              <div className="lista-esquerda">
+                <div className="lista-nome">
+                  Margem bruta
+                </div>
+              </div>
 
-                    <button
-                      className="icon-button"
-                      onClick={() => {
-                        if (editandoMeta) {
-                          salvarMeta()
-                        } else {
-                          setMetaInput(
-                            String(meta),
-                          )
-                          setEditandoMeta(true)
-                        }
-                      }}
+              <div className="lista-valor">
+                {margemBruta.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="painel col-12">
+          <div className="painel-header">
+            <div>
+              <h2 className="painel-titulo">
+                Movimentações recentes
+              </h2>
+              <p className="painel-subtitulo">
+                Últimas vendas, receitas e despesas registradas
+              </p>
+            </div>
+          </div>
+
+          <div className="tabela-wrapper">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Descrição</th>
+                  <th>Data</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {movimentacoesRecentes.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="sem-dados"
                     >
-                      {editandoMeta ? "×" : "+"}
-                    </button>
-                  </div>
-
-                  <div className="meta-box">
-                    <div className="meta-top">
-                      <span className="meta-title">
-                        Realizado
-                      </span>
-
-                      <span className="meta-value">
-                        {moeda(faturamento)} /{" "}
-                        {moeda(meta)}
-                      </span>
-                    </div>
-
-                    <div className="meta-progress">
-                      <div
-                        className="meta-fill"
-                        style={{
-                          width: `${metaPercentual}%`,
-                        }}
-                      />
-                    </div>
-
-                    <div className="meta-top" style={{ marginTop: 10 }}>
-                      <span className="meta-value">
-                        {metaPercentual.toFixed(1)}%
-                        atingido
-                      </span>
-
-                      <span className="meta-value">
-                        Faltam{" "}
-                        {moeda(
-                          Math.max(
-                            meta -
-                              faturamento,
-                            0,
-                          ),
-                        )}
-                      </span>
-                    </div>
-
-                    {editandoMeta && (
-                      <div className="meta-edit">
-                        <input
-                          className="meta-input"
-                          value={metaInput}
-                          onChange={(e) =>
-                            setMetaInput(
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Meta"
-                        />
-
-                        <button
-                          className="meta-save"
-                          onClick={salvarMeta}
-                        >
-                          Salvar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: 16 }}>
-                    <div className="highlight-list">
-                      <div className="highlight">
-                        <div className="highlight-main">
-                          <div className="highlight-title">
-                            Margem bruta
-                          </div>
-
-                          <div className="highlight-description">
-                            Depois do custo dos produtos
-                          </div>
-                        </div>
-
-                        <div className="highlight-value green">
-                          {margemBruta.toFixed(1)}%
-                        </div>
-                      </div>
-
-                      <div className="highlight">
-                        <div className="highlight-main">
-                          <div className="highlight-title">
-                            Valor em estoque
-                          </div>
-
-                          <div className="highlight-description">
-                            Custo das variantes disponíveis
-                          </div>
-                        </div>
-
-                        <div className="highlight-value">
-                          {moeda(valorEstoque)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="dashboard-grid-three">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Produto mais vendido
-                      </h2>
-
-                      <div className="card-description">
-                        Maior quantidade vendida
-                      </div>
-                    </div>
-                  </div>
-
-                  {produtoMaisVendido ? (
-                    <div className="highlight">
-                      <div className="highlight-main">
-                        <div className="highlight-title">
-                          {produtoMaisVendido.nome}
-                        </div>
-
-                        <div className="highlight-description">
-                          {produtoMaisVendido.quantidade}{" "}
-                          unidade(s)
-                        </div>
-                      </div>
-
-                      <div className="highlight-value gold">
-                        {moeda(
-                          produtoMaisVendido.faturamento,
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Ainda não há itens de venda
-                      vinculados aos produtos.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Produto que mais faturou
-                      </h2>
-
-                      <div className="card-description">
-                        Maior receita gerada
-                      </div>
-                    </div>
-                  </div>
-
-                  {produtoMaisFaturado ? (
-                    <div className="highlight">
-                      <div className="highlight-main">
-                        <div className="highlight-title">
-                          {produtoMaisFaturado.nome}
-                        </div>
-
-                        <div className="highlight-description">
-                          {produtoMaisFaturado.quantidade}{" "}
-                          unidade(s)
-                        </div>
-                      </div>
-
-                      <div className="highlight-value gold">
-                        {moeda(
-                          produtoMaisFaturado.faturamento,
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhum produto identificado.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Clientes
-                      </h2>
-
-                      <div className="card-description">
-                        Fidelidade e relacionamento
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="highlight-list">
-                    <div className="highlight">
-                      <div className="highlight-main">
-                        <div className="highlight-title">
-                          Total de clientes
-                        </div>
-                      </div>
-
-                      <div className="highlight-value">
-                        {clientes.length}
-                      </div>
-                    </div>
-
-                    <button
-                      className="highlight"
-                      style={{
-                        border: 0,
-                        width: "100%",
-                        cursor:
-                          clientesComCupom.length
-                            ? "pointer"
-                            : "default",
-                        textAlign: "left",
-                      }}
-                      onClick={() =>
-                        clientesComCupom.length &&
-                        setPopupCupons(true)
-                      }
-                    >
-                      <div className="highlight-main">
-                        <div className="highlight-title">
-                          Clientes com cupom
-                        </div>
-
-                        <div className="highlight-description">
-                          10 pontos ou mais
-                        </div>
-                      </div>
-
-                      <div className="highlight-value gold">
-                        {clientesComCupom.length}
-                      </div>
-                    </button>
-
-                    <div className="highlight">
-                      <div className="highlight-main">
-                        <div className="highlight-title">
-                          Para reativar
-                        </div>
-
-                        <div className="highlight-description">
-                          60+ dias sem comprar
-                        </div>
-                      </div>
-
-                      <div className="highlight-value">
-                        {clientesInativos.length}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className="dashboard-grid-two">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Produtos mais vendidos
-                      </h2>
-
-                      <div className="card-description">
-                        Ranking por quantidade
-                      </div>
-                    </div>
-                  </div>
-
-                  {vendasPorProduto.length ? (
-                    <div className="product-ranking">
-                      {vendasPorProduto
-                        .slice(0, 5)
-                        .map(
-                          (
-                            produto,
-                            index,
-                          ) => (
-                            <div
-                              className="product-row"
-                              key={produto.nome}
-                            >
-                              <div className="ranking-number">
-                                {index + 1}
-                              </div>
-
-                              <div>
-                                <div className="product-name">
-                                  {produto.nome}
-                                </div>
-
-                                <div className="product-detail">
-                                  {produto.quantidade}{" "}
-                                  unidade(s)
-                                </div>
-                              </div>
-
-                              <div className="highlight-value">
-                                {moeda(
-                                  produto.faturamento,
-                                )}
-                              </div>
-                            </div>
-                          ),
-                        )}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhum produto vendido no período.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Estoque que precisa de atenção
-                      </h2>
-
-                      <div className="card-description">
-                        Variantes no mínimo ou abaixo dele
-                      </div>
-                    </div>
-
-                    <span className="badge red-badge">
-                      {estoqueBaixo.length}
-                    </span>
-                  </div>
-
-                  {estoqueBaixo.length ? (
-                    <div>
-                      {estoqueBaixo
-                        .slice(0, 7)
-                        .map((variante) => {
-                          const produto =
-                            variante.produtoId
-                              ? produtosMap.get(
-                                  variante.produtoId,
-                                )
-                              : undefined
-
-                          return (
-                            <div
-                              className="stock-row"
-                              key={variante.id}
-                            >
-                              <div>
-                                <div className="stock-name">
-                                  {produto?.nome ||
-                                    "Produto"}
-                                </div>
-
-                                <div className="stock-detail">
-                                  {[
-                                    variante.cor,
-                                    variante.tamanho,
-                                    variante.sku,
-                                  ]
-                                    .filter(
-                                      Boolean,
-                                    )
-                                    .join(
-                                      " • ",
-                                    ) ||
-                                    "Sem detalhe da variante"}
-                                </div>
-                              </div>
-
-                              <div className="stock-number">
-                                {numero(
-                                  variante.estoqueAtual,
-                                )}{" "}
-                                /{" "}
-                                {numero(
-                                  variante.estoqueMinimo,
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhuma variante está abaixo do
-                      estoque mínimo.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="dashboard-grid-three">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Financeiro
-                      </h2>
-
-                      <div className="card-description">
-                        Resumo do período
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="finance-grid">
-                    <div className="finance-item">
-                      <div className="finance-item-label">
-                        Faturamento
-                      </div>
-
-                      <div className="finance-item-value">
-                        {moeda(faturamento)}
-                      </div>
-                    </div>
-
-                    <div className="finance-item">
-                      <div className="finance-item-label">
-                        CMV
-                      </div>
-
-                      <div className="finance-item-value">
-                        {moeda(
-                          custoProdutosVendidos,
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="finance-item">
-                      <div className="finance-item-label">
-                        Despesas pagas
-                      </div>
-
-                      <div className="finance-item-value red">
-                        {moeda(
-                          totalDespesasPagas,
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="finance-item">
-                      <div className="finance-item-label">
-                        Resultado
-                      </div>
-
-                      <div
-                        className={`finance-item-value ${
-                          resultadoLiquido >= 0
-                            ? "green"
-                            : "red"
-                        }`}
-                      >
-                        {moeda(
-                          resultadoLiquido,
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Formas de pagamento
-                      </h2>
-
-                      <div className="card-description">
-                        Faturamento por método
-                      </div>
-                    </div>
-                  </div>
-
-                  {vendasPorPagamento.length ? (
-                    <div className="product-ranking">
-                      {vendasPorPagamento
-                        .slice(0, 5)
-                        .map(
-                          (item) => (
-                            <div
-                              className="highlight"
-                              key={item.nome}
-                            >
-                              <div className="highlight-main">
-                                <div className="highlight-title">
-                                  {item.nome}
-                                </div>
-
-                                <div className="highlight-description">
-                                  {percentual(
-                                    item.valor,
-                                    faturamento,
-                                  ).toFixed(
-                                    1,
-                                  )}
-                                  % do faturamento
-                                </div>
-                              </div>
-
-                              <div className="highlight-value">
-                                {moeda(
-                                  item.valor,
-                                )}
-                              </div>
-                            </div>
-                          ),
-                        )}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhuma venda no período.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Alertas
-                      </h2>
-
-                      <div className="card-description">
-                        Pontos que merecem atenção
-                      </div>
-                    </div>
-
-                    <span className="badge">
-                      {alertas.length}
-                    </span>
-                  </div>
-
-                  {alertas.length ? (
-                    <div className="alert-list">
-                      {alertas
-                        .slice(0, 5)
-                        .map((alerta) => (
-                          <div
-                            className="alert"
-                            key={`${alerta.tipo}-${alerta.titulo}`}
-                          >
-                            <span
-                              className={`alert-dot ${alerta.tipo}`}
-                            />
-
-                            <div>
-                              <div className="alert-title">
-                                {alerta.titulo}
-                              </div>
-
-                              <div className="alert-description">
-                                {alerta.descricao}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhum alerta importante no momento.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="dashboard-grid-two">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Evolução do faturamento
-                      </h2>
-
-                      <div className="card-description">
-                        Últimos meses registrados
-                      </div>
-                    </div>
-                  </div>
-
-                  {vendasPorMes.length ? (
-                    <div className="chart">
-                      {vendasPorMes.map(
-                        (item) => {
-                          const altura =
-                            (item.valor /
-                              maiorMes) *
-                            100
-
-                          return (
-                            <div
-                              className="chart-column"
-                              key={item.chave}
-                            >
-                              <div className="chart-value">
-                                {moeda(
-                                  item.valor,
-                                )}
-                              </div>
-
-                              <div
-                                className="chart-bar"
-                                style={{
-                                  height: `${Math.max(
-                                    altura,
-                                    4,
-                                  )}%`,
-                                }}
-                              />
-
-                              <div className="chart-label">
-                                {item.nome}
-                              </div>
-                            </div>
-                          )
-                        },
-                      )}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Sem histórico de vendas.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Melhores clientes
-                      </h2>
-
-                      <div className="card-description">
-                        Ranking por valor comprado
-                      </div>
-                    </div>
-                  </div>
-
-                  {topClientes.length ? (
-                    <div className="product-ranking">
-                      {topClientes.map(
-                        (cliente, index) => (
-                          <div
-                            className="product-row"
-                            key={cliente.id}
-                          >
-                            <div className="ranking-number">
-                              {index + 1}
-                            </div>
-
-                            <div>
-                              <div className="product-name">
-                                {cliente.nome}
-                              </div>
-
-                              <div className="product-detail">
-                                {cliente.compras}{" "}
-                                compra(s)
-                              </div>
-                            </div>
-
-                            <div className="highlight-value">
-                              {moeda(
-                                cliente.valor,
-                              )}
-                            </div>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhuma compra vinculada a clientes.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="dashboard-grid-two">
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Vendas recentes
-                      </h2>
-
-                      <div className="card-description">
-                        Últimas vendas do período
-                      </div>
-                    </div>
-                  </div>
-
-                  {vendaRecente.length ? (
-                    <div className="table-wrap">
-                      <table className="simple-table">
-                        <thead>
-                          <tr>
-                            <th>Data</th>
-                            <th>Cliente</th>
-                            <th>Pagamento</th>
-                            <th>Valor</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {vendaRecente.map(
-                            (compra) => (
-                              <tr key={compra.id}>
-                                <td>
-                                  {formatarDataHora(
-                                    compra.criadoem,
-                                  )}
-                                </td>
-
-                                <td>
-                                  {nomeCliente(
-                                    compra.clienteid,
-                                  )}
-                                </td>
-
-                                <td>
-                                  {compra.pagamento ||
-                                    "—"}
-                                </td>
-
-                                <td>
-                                  {moeda(
-                                    numero(
-                                      compra.valor,
-                                    ),
-                                  )}
-                                </td>
-                              </tr>
-                            ),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      Nenhuma venda encontrada.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <div>
-                      <h2 className="card-title">
-                        Movimentações financeiras
-                      </h2>
-
-                      <div className="card-description">
-                        Receitas e despesas recentes
-                      </div>
-                    </div>
-                  </div>
-
-                  {movimentacoesRecentes.length ? (
-                    <div className="table-wrap">
-                      <table className="simple-table">
-                        <thead>
-                          <tr>
-                            <th>Data</th>
-                            <th>Descrição</th>
-                            <th>Tipo</th>
-                            <th>Valor</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {movimentacoesRecentes.map(
-                            (mov) => (
-                              <tr key={mov.id}>
-                                <td>
-                                  {formatarData(
-                                    mov.data,
-                                  )}
-                                </td>
-
-                                <td>
-                                  {mov.descricao}
-                                </td>
-
-                                <td>
-                                  <span
-                                    className={`badge ${
-                                      mov.tipo ===
-                                      "receita"
-                                        ? "green-badge"
-                                        : "red-badge"
-                                    }`}
-                                  >
-                                    {mov.tipo ===
-                                    "receita"
-                                      ? "Receita"
-                                      : "Despesa"}
-                                  </span>
-                                </td>
-
-                                <td
-                                  className={
-                                    mov.tipo ===
-                                    "receita"
-                                      ? "green"
-                                      : "red"
-                                  }
-                                >
-                                  {moeda(
-                                    mov.valor,
-                                  )}
-                                </td>
-                              </tr>
-                            ),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="empty">
                       Nenhuma movimentação encontrada.
-                    </div>
-                  )}
-                </div>
-              </section>
+                    </td>
+                  </tr>
+                ) : (
+                  movimentacoesRecentes.map((movimento) => (
+                    <tr key={movimento.id}>
+                      <td>{movimento.tipo}</td>
 
-              <section className="card">
-                <div className="card-header">
-                  <div>
-                    <h2 className="card-title">
-                      Resumo operacional
-                    </h2>
+                      <td>{movimento.descricao}</td>
 
-                    <div className="card-description">
-                      Indicadores gerais da loja
-                    </div>
-                  </div>
-                </div>
+                      <td>
+                        {formatarDataHora(movimento.data)}
+                      </td>
 
-                <div className="finance-grid">
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Produtos cadastrados
-                    </div>
-
-                    <div className="finance-item-value">
-                      {produtos.length}
-                    </div>
-                  </div>
-
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Variantes ativas
-                    </div>
-
-                    <div className="finance-item-value">
-                      {
-                        variantes.filter(
-                          (v) => v.ativo,
-                        ).length
-                      }
-                    </div>
-                  </div>
-
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Unidades em estoque
-                    </div>
-
-                    <div className="finance-item-value">
-                      {variantes.reduce(
-                        (total, variante) =>
-                          total +
-                          numero(
-                            variante.estoqueAtual,
-                          ),
-                        0,
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Despesas pagas
-                    </div>
-
-                    <div className="finance-item-value red">
-                      {moeda(
-                        totalDespesasPagas,
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Receitas recebidas
-                    </div>
-
-                    <div className="finance-item-value green">
-                      {moeda(
-                        totalReceitasRecebidas,
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="finance-item">
-                    <div className="finance-item-label">
-                      Lucro bruto
-                    </div>
-
-                    <div className="finance-item-value green">
-                      {moeda(lucroBruto)}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </>
-          )}
-        </div>
-      </main>
+                      <td className="valor">
+                        {moeda(movimento.valor)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
 
       {popupCupons && (
         <div
           className="popup-overlay"
-          onClick={() =>
-            setPopupCupons(false)
-          }
+          onClick={() => setPopupCupons(false)}
         >
           <div
             className="popup"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="popup-header">
-              <div>
-                <h2 className="popup-title">
-                  Clientes com cupom
-                </h2>
-
-                <div className="card-description">
-                  Clientes com 10 pontos ou mais
-                </div>
-              </div>
+              <h2 className="popup-title">
+                Clientes com cupom
+              </h2>
 
               <button
-                className="close-button"
-                onClick={() =>
-                  setPopupCupons(false)
-                }
+                className="fechar"
+                onClick={() => setPopupCupons(false)}
               >
                 ×
               </button>
             </div>
 
-            {clientesComCupom.map(
-              (cliente) => (
+            {clientesComCupom.length === 0 ? (
+              <div className="sem-dados">
+                Nenhum cliente atingiu 10 pontos.
+              </div>
+            ) : (
+              clientesComCupom.map((cliente) => (
                 <div
-                  className="coupon-client"
+                  className="cupom-cliente"
                   key={cliente.id}
                 >
-                  <div>
-                    <div className="coupon-name">
-                      {cliente.nome}
-                    </div>
-
-                    <div className="card-description">
-                      {cliente.cpf || "CPF não informado"}
-                    </div>
+                  <div className="cupom-nome">
+                    {cliente.nome}
                   </div>
 
-                  <div className="coupon-points">
-                    {numero(cliente.pontos)}{" "}
-                    pontos
+                  <div className="cupom-pontos">
+                    {numero(cliente.pontos)} pontos
                   </div>
                 </div>
-              ),
+              ))
             )}
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
