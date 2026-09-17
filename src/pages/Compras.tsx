@@ -2192,29 +2192,7 @@ const dashValue = {
     "break-word" as const
 }
 
-const mesGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(120px,1fr))",
-  gap: 10,
-  width: "100%"
-}
 
-const mesCard = {
-  background: "#f9f9f9",
-  padding: 14,
-  borderRadius: 12,
-  minWidth: 0,
-  overflow:
-    "hidden" as const
-}
-
-const mesValor = {
-  marginTop: 5,
-  fontWeight: 600,
-  wordBreak:
-    "break-word" as const
-}
 
 const emptyText = {
   color: "#888",
