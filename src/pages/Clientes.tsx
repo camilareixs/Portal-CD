@@ -926,12 +926,12 @@ ${
                 {c.nome}
               </div>
 
-              {c.clienteRef && (
+              {c.observacao && (
                 <div
                   className="cliente-card-ref"
                   style={muted}
                 >
-                  {c.clienteRef}
+                  {c.observacao}
                 </div>
               )}
 
