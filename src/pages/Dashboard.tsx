@@ -80,10 +80,7 @@ type VendaProduto = {
   custo: number
 }
 
-type VendaDia = {
-  data: string
-  total: number
-}
+
 
 const moeda = (valor: number) =>
   Number(valor || 0).toLocaleString("pt-BR", {
@@ -1255,7 +1252,7 @@ export default function Dashboard() {
                 style={grafico}
               >
                 {vendasUltimos7Dias.map(
-                  (venda, index) => {
+                  (venda) => {
                     const altura =
                       maiorVendaDia > 0
                         ? Math.max(
