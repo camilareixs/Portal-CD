@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase"
 
 type Produto = {
   id: string
+  codigoProduto: number | null
   nome: string
   descricao: string | null
   ativo: boolean
@@ -19,6 +20,7 @@ type Produto = {
 type Variante = {
   id: string
   produtoId: string
+  codigoVariante: number | null
   sku: string
   precoVenda: number
   custoUnitario: number
@@ -251,8 +253,44 @@ function dataBR(data: string | null) {
 }
 
 function valorNumerico(valor: string) {
+  if (!valor) return 0
+
   return Number(
-    valor.replace(/\./g, "").replace(",", ".")
+    valor.replace(/[^0-9,-]/g, "").replace(/\./g, "").replace(",", ".")
+  )
+}
+
+function formatarMoedaInput(valor: string) {
+  const numero = valorNumerico(valor)
+  if (!Number.isFinite(numero)) return ""
+
+  return numero.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+const MARKUP_PADRAO = 2.5
+
+function vendaSugerida(custo: number) {
+  return custo > 0 ? custo * MARKUP_PADRAO : 0
+}
+
+function normalizarTexto(valor: string) {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+}
+
+function encontrarCor(nome: string | null, cores: Cor[]) {
+  if (!nome) return null
+
+  const normalizado = normalizarTexto(nome)
+  return (
+    cores.find(cor => normalizarTexto(cor.nome) === normalizado) ??
+    null
   )
 }
 
@@ -278,6 +316,9 @@ export default function Produtos() {
     useState(false)
 
   const [modalEstoque, setModalEstoque] =
+    useState(false)
+
+  const [modalInformacoes, setModalInformacoes] =
     useState(false)
 
   const [produtoEditando, setProdutoEditando] =
@@ -363,6 +404,9 @@ const [salvando, setSalvando] = useState(false)
       estoqueMinimo: "0",
       estoqueMaximo: ""
     })
+
+  const [usarMarkupSugerido, setUsarMarkupSugerido] =
+    useState(true)
 
   const [formEstoque, setFormEstoque] =
     useState({
@@ -535,6 +579,7 @@ useEffect(() => {
       estoqueMinimo: "0",
       estoqueMaximo: ""
     })
+    setUsarMarkupSugerido(true)
 
     setModalVariante(true)
   }
@@ -560,6 +605,11 @@ useEffect(() => {
           ? variante.estoqueMaximo.toString()
           : ""
     })
+    setUsarMarkupSugerido(
+      Math.abs(
+        variante.precoVenda - vendaSugerida(variante.custoUnitario)
+      ) < 0.01
+    )
 
     setModalVariante(true)
   }
@@ -722,6 +772,8 @@ useEffect(() => {
       precoVenda: preco,
 
       custoUnitario: custo,
+
+      margemAlvo: custo > 0 ? (MARKUP_PADRAO - 1) * 100 : null,
 
       estoqueMinimo,
 
@@ -1345,6 +1397,14 @@ useEffect(() => {
                 : "auto"
           }}
         >
+          <button
+            style={infoButton}
+            onClick={() => setModalInformacoes(true)}
+            title="Entender códigos, SKU e precificação"
+          >
+            i
+          </button>
+
           {aba === "produtos" && (
             <button
               style={{
@@ -1539,6 +1599,10 @@ useEffect(() => {
                 <thead>
                   <tr>
                     <th style={th}>
+                      Código
+                    </th>
+
+                    <th style={th}>
                       Produto
                     </th>
 
@@ -1584,6 +1648,12 @@ useEffect(() => {
                             produto.id
                           }
                         >
+                          <td style={td}>
+                            <span style={referenceBadge}>
+                              {produto.codigoProduto ?? "—"}
+                            </span>
+                          </td>
+
                           <td style={td}>
                             <strong>
                               {
@@ -1744,6 +1814,10 @@ useEffect(() => {
                         }
                       >
                         <div>
+                          <span style={referenceBadge}>
+                            Cód. {produto.codigoProduto ?? "—"}
+                          </span>
+
                           <h3
                             style={
                               mobileProductName
@@ -2009,6 +2083,10 @@ useEffect(() => {
                     <thead>
                       <tr>
                         <th style={th}>
+                          Cód. variante
+                        </th>
+
+                        <th style={th}>
                           Cor
                         </th>
 
@@ -2026,6 +2104,14 @@ useEffect(() => {
 
                         <th style={th}>
                           Custo
+                        </th>
+
+                        <th style={th}>
+                          Venda sugerida
+                        </th>
+
+                        <th style={th}>
+                          Markup
                         </th>
 
                         <th style={th}>
@@ -2050,6 +2136,12 @@ useEffect(() => {
                               variante.id
                             }
                           >
+                            <td style={td}>
+                              <span style={referenceBadge}>
+                                {variante.codigoVariante ?? "—"}
+                              </span>
+                            </td>
+
                             <td style={td}>
                               <CorLabel
                                 nome={
@@ -2085,6 +2177,16 @@ useEffect(() => {
                               {moeda(
                                 variante.custoUnitario
                               )}
+                            </td>
+
+                            <td style={td}>
+                              <strong>
+                                {moeda(vendaSugerida(variante.custoUnitario))}
+                              </strong>
+                            </td>
+
+                            <td style={td}>
+                              2,5x
                             </td>
 
                             <td style={td}>
@@ -2189,6 +2291,10 @@ useEffect(() => {
                               </strong>
                             </div>
 
+                            <span style={referenceBadge}>
+                              Cód. variante {variante.codigoVariante ?? "—"}
+                            </span>
+
                             <span
                               style={
                                 sku
@@ -2232,6 +2338,15 @@ useEffect(() => {
                               {moeda(
                                 variante.custoUnitario
                               )}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span>
+                              Venda sugerida
+                            </span>
+                            <strong>
+                              {moeda(vendaSugerida(variante.custoUnitario))}
                             </strong>
                           </div>
 
@@ -2650,6 +2765,14 @@ useEffect(() => {
                   : formGrid
               }
             >
+              {produtoEditando && (
+                <Field label="Código do produto">
+                  <div style={readOnlyCode}>
+                    {produtoEditando.codigoProduto ?? "—"}
+                  </div>
+                </Field>
+              )}
+
               <Field
                 label="Nome do produto"
                 full
@@ -3033,6 +3156,14 @@ useEffect(() => {
                   : formGrid
               }
             >
+              {varianteEditando && (
+                <Field label="Código da variante">
+                  <div style={readOnlyCode}>
+                    {varianteEditando.codigoVariante ?? "—"}
+                  </div>
+                </Field>
+              )}
+
               <Field label="Produto" full>
                 <select
                   value={
@@ -3067,9 +3198,7 @@ useEffect(() => {
                           produto.id
                         }
                       >
-                        {
-                          produto.nome
-                        }
+                        {produto.codigoProduto ?? "—"} • {produto.nome}
                       </option>
                     )
                   )}
@@ -3257,137 +3386,118 @@ useEffect(() => {
                 />
               </Field>
 
-              {/* CÁLCULO AUTOMÁTICO */}
+              {/* PRECIFICAÇÃO ERP */}
 
               {(() => {
-                const preco =
-                  valorNumerico(
-                    formVariante.precoVenda
-                  )
-
-                const custo =
-                  valorNumerico(
-                    formVariante.custoUnitario
-                  )
-
-                const lucro =
-                  lucroUnitario(
-                    preco,
-                    custo
-                  )
-
-                const percentual =
-                  percentualSobreCusto(
-                    preco,
-                    custo
-                  )
-
-                if (
-                  !formVariante.precoVenda ||
-                  !formVariante.custoUnitario
-                ) {
-                  return null
-                }
+                const custo = valorNumerico(formVariante.custoUnitario)
+                const sugerido = vendaSugerida(custo)
+                const preco = valorNumerico(formVariante.precoVenda)
+                const lucro = lucroUnitario(preco, custo)
+                const percentual = percentualSobreCusto(preco, custo)
 
                 return (
-                  <div
-                    style={{
-                      gridColumn:
-                        "1 / -1",
-                      display:
-                        "grid",
-                      gridTemplateColumns:
-                        isMobile
-                          ? "1fr 1fr"
-                          : "repeat(3, 1fr)",
-                      gap: 10,
-                      padding: 14,
-                      background:
-                        "#faf7ee",
-                      border:
-                        "1px solid #eee2c5",
-                      borderRadius: 12
-                    }}
-                  >
-                    <div>
-                      <span
-                        style={
-                          calculationLabel
-                        }
-                      >
-                        Lucro unitário
-                      </span>
-
-                      <strong
-                        style={
-                          calculationValue
-                        }
-                      >
-                        {moeda(
-                          lucro
-                        )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span
-                        style={
-                          calculationLabel
-                        }
-                      >
-                        Sobre o custo
-                      </span>
-
-                      <strong
-                        style={{
-                          ...calculationValue,
-                          color:
-                            percentual !==
-                              null &&
-                            percentual <
-                              0
-                              ? "#a34e4e"
-                              : "#657b58"
-                        }}
-                      >
-                        {percentual ===
-                        null
-                          ? "-"
-                          : `${
-                              percentual >=
-                              0
-                                ? "+"
-                                : ""
-                            }${percentual.toFixed(
-                              2
-                            )}%`}
-                      </strong>
-                    </div>
-
-                    {!isMobile && (
+                  <div style={pricingPanel}>
+                    <div style={pricingHeader}>
                       <div>
-                        <span
-                          style={
-                            calculationLabel
-                          }
-                        >
-                          Venda
-                        </span>
+                        <strong style={pricingTitle}>Precificação</strong>
+                        <span style={pricingSubtitle}>Markup padrão da loja: {MARKUP_PADRAO.toFixed(1)}x</span>
+                      </div>
+                      <button
+                        type="button"
+                        style={smallInfoButton}
+                        onClick={() => setModalInformacoes(true)}
+                        title="Como funciona o markup"
+                      >
+                        ?
+                      </button>
+                    </div>
 
-                        <strong
-                          style={
-                            calculationValue
+                    <div style={{ ...pricingGrid, gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))" }}>
+                      <div style={pricingItem}>
+                        <span>Preço de custo</span>
+                        <strong>{moeda(custo)}</strong>
+                      </div>
+
+                      <div style={pricingItem}>
+                        <span>Venda sugerida</span>
+                        <strong>{moeda(sugerido)}</strong>
+                        <small>Custo × {MARKUP_PADRAO.toFixed(1)}</small>
+                      </div>
+
+                      <div style={pricingItem}>
+                        <span>Venda escolhida</span>
+                        <strong>{moeda(preco)}</strong>
+                      </div>
+
+                      <div style={pricingItem}>
+                        <span>Lucro unitário</span>
+                        <strong style={{ color: lucro >= 0 ? "#657b58" : "#a34e4e" }}>{moeda(lucro)}</strong>
+                      </div>
+                    </div>
+
+                    <label style={markupCheck}>
+                      <input
+                        type="checkbox"
+                        checked={usarMarkupSugerido}
+                        onChange={e => {
+                          const marcado = e.target.checked
+                          setUsarMarkupSugerido(marcado)
+                          if (marcado && custo > 0) {
+                            setFormVariante(prev => ({
+                              ...prev,
+                              precoVenda: sugerido.toFixed(2)
+                            }))
                           }
-                        >
-                          {moeda(
-                            preco
-                          )}
-                        </strong>
+                        }}
+                      />
+                      <span>Usar markup sugerido ({MARKUP_PADRAO.toFixed(1)}x)</span>
+                    </label>
+
+                    {custo > 0 && (
+                      <div style={pricingResult}>
+                        <span>Sobre o custo</span>
+                        <strong>{percentual === null ? "-" : `${percentual >= 0 ? "+" : ""}${percentual.toFixed(2)}%`}</strong>
                       </div>
                     )}
                   </div>
                 )
               })()}
+
+              <Field label="Preço de venda escolhido">
+                <input
+                  value={formVariante.precoVenda}
+                  onChange={e => {
+                    setUsarMarkupSugerido(false)
+                    setFormVariante(prev => ({ ...prev, precoVenda: e.target.value }))
+                  }}
+                  onBlur={() => setFormVariante(prev => ({ ...prev, precoVenda: formatarMoedaInput(prev.precoVenda) }))}
+                  style={input}
+                  placeholder="100,00"
+                  inputMode="decimal"
+                />
+                <span style={inputHint}>Você pode alterar o valor mesmo com o markup desmarcado.</span>
+              </Field>
+
+              <Field label="Preço de custo">
+                <input
+                  value={formVariante.custoUnitario}
+                  onChange={e => {
+                    const novoCusto = e.target.value
+                    setFormVariante(prev => ({
+                      ...prev,
+                      custoUnitario: novoCusto,
+                      ...(usarMarkupSugerido && valorNumerico(novoCusto) > 0
+                        ? { precoVenda: vendaSugerida(valorNumerico(novoCusto)).toFixed(2) }
+                        : {})
+                    }))
+                  }}
+                  onBlur={() => setFormVariante(prev => ({ ...prev, custoUnitario: formatarMoedaInput(prev.custoUnitario) }))}
+                  style={input}
+                  placeholder="40,00"
+                  inputMode="decimal"
+                />
+                <span style={inputHint}>Base usada para calcular automaticamente a venda sugerida.</span>
+              </Field>
 
               <Field label="Estoque mínimo">
                 <input
@@ -3803,33 +3913,21 @@ function CorLabel({
 }) {
   if (!nome) return <span>-</span>
 
-  const cor = cores.find(
-    item => item.nome === nome
-  )
+  const cor = encontrarCor(nome, cores)
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems:
-          "center",
-        gap: 8
-      }}
-    >
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span
         style={{
-          width: 16,
-          height: 16,
-          minWidth: 16,
-          borderRadius:
-            "50%",
-          background:
-            cor?.hex ?? "#ddd",
-          border:
-            "1px solid #ddd"
+          width: 18,
+          height: 18,
+          minWidth: 18,
+          borderRadius: "50%",
+          background: cor?.hex ?? "#e8e3d9",
+          border: "1px solid #d8d0c2",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,.45)"
         }}
       />
-
       <span>{nome}</span>
     </div>
   )
@@ -3842,38 +3940,23 @@ function CorPreview({
   nome: string
   cores: Cor[]
 }) {
-  const cor = cores.find(
-    item => item.nome === nome
-  )
+  const cor = encontrarCor(nome, cores)
 
   if (!cor) return null
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems:
-          "center",
-        gap: 7,
-        marginTop: 6,
-        fontSize: 12,
-        color: "#888"
-      }}
-    >
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, fontSize: 12, color: "#777168" }}>
       <span
         style={{
-          width: 16,
-          height: 16,
-          borderRadius:
-            "50%",
-          background:
-            cor.hex,
-          border:
-            "1px solid #ddd"
+          width: 20,
+          height: 20,
+          borderRadius: "50%",
+          background: cor.hex,
+          border: "1px solid #d8d0c2",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,.45)"
         }}
       />
-
-      {cor.hex}
+      <span>Cor cadastrada: <strong>{cor.nome}</strong> · {cor.hex}</span>
     </div>
   )
 }
@@ -4503,6 +4586,130 @@ const mobileVariantTitle = {
   color: "#4c473f"
 }
 
+const infoButton = {
+  width: 38,
+  height: 38,
+  borderRadius: 9,
+  border: "1px solid #dfd2b9",
+  background: "#fffdf8",
+  color: "#8b6f3d",
+  fontWeight: 700,
+  fontSize: 14,
+  cursor: "pointer"
+}
+
+const smallInfoButton = {
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  border: "1px solid #dfd2b9",
+  background: "#fffdf8",
+  color: "#8b6f3d",
+  fontWeight: 700,
+  cursor: "pointer"
+}
+
+const infoCard = {
+  padding: 14,
+  border: "1px solid #ece3d3",
+  borderRadius: 10,
+  background: "#fff"
+}
+
+const pricingPanel = {
+  gridColumn: "1 / -1",
+  padding: 16,
+  background: "#faf7ee",
+  border: "1px solid #eadfc7",
+  borderRadius: 12
+}
+
+const pricingHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 14
+}
+
+const pricingTitle = {
+  display: "block",
+  color: "#4e493f",
+  fontSize: 14
+}
+
+const pricingSubtitle = {
+  display: "block",
+  marginTop: 3,
+  color: "#898176",
+  fontSize: 11
+}
+
+const pricingGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 10
+}
+
+const pricingItem = {
+  padding: "11px 12px",
+  background: "#fff",
+  border: "1px solid #eee5d4",
+  borderRadius: 9
+}
+
+const pricingResult = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginTop: 12,
+  paddingTop: 11,
+  borderTop: "1px solid #e9dfc9",
+  color: "#746b5d",
+  fontSize: 12
+}
+
+const markupCheck = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 13,
+  color: "#5f584e",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer"
+}
+
+const inputHint = {
+  color: "#969087",
+  fontSize: 10,
+  lineHeight: 1.4
+}
+
+const readOnlyCode = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  border: "1px solid #e4dbc9",
+  borderRadius: 8,
+  padding: "10px 11px",
+  background: "#f7f3e9",
+  color: "#78633b",
+  fontSize: 13,
+  fontWeight: 700
+}
+
+const referenceBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 7px",
+  borderRadius: 6,
+  background: "#f7f3e9",
+  border: "1px solid #e9dfc9",
+  color: "#78633b",
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: "0.02em",
+  whiteSpace: "nowrap" as const
+}
+
 const sku = {
   display: "block",
   marginTop: 5,
@@ -4709,4 +4916,49 @@ const colorPicker = {
   background:
     "#fff",
   cursor: "pointer"
+      {/* MODAL INFORMAÇÕES ERP */}
+
+      {modalInformacoes && (
+        <div style={overlayModal}>
+          <div style={{ ...modal, maxWidth: isMobile ? "100%" : 620 }}>
+            <ModalHeader
+              title="Referências e precificação"
+              subtitle="Como os códigos e os valores funcionam no cadastro."
+              fechar={() => setModalInformacoes(false)}
+            />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={infoCard}>
+                <strong>Código do produto</strong>
+                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Código da variante</strong>
+                <p>É o código numérico gravado em <code>produtoVariantes.codigoVariante</code>. Ele identifica aquela combinação específica de cor e tamanho.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>SKU</strong>
+                <p>É a referência operacional da variante. Diferente dos códigos numéricos, o SKU é textual e permanece único no banco.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Markup 2,5x</strong>
+                <p>O sistema calcula a venda sugerida multiplicando o custo por 2,5. Exemplo: custo de R$ 40,00 → venda sugerida de R$ 100,00 → lucro unitário de R$ 60,00.</p>
+              </div>
+
+              <div style={infoCard}>
+                <strong>Venda escolhida</strong>
+                <p>O valor sugerido não é obrigatório. Se a opção “Usar markup sugerido” estiver desmarcada, você pode informar o preço que deseja praticar e o lucro é recalculado automaticamente.</p>
+              </div>
+            </div>
+
+            <div style={modalFooter}>
+              <button style={primaryButton} onClick={() => setModalInformacoes(false)}>Entendi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
 }
