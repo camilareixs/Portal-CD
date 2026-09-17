@@ -110,8 +110,10 @@ const CORES_PADRAO: Cor[] = [
   { nome: "Vinho", hex: "#722F37" },
   { nome: "Bordô", hex: "#800020" },
   { nome: "Rosa", hex: "#FFC0CB" },
-  { nome: "Pink", hex: "#FF1493" },
+  { nome: "Rosa Chiclete", hex: "#FF69B4" },
+  { nome: "Rosa Pink", hex: "#FF1493" },
   { nome: "Rosa Bebê", hex: "#F4C2C2" },
+  { nome: "Rosa Antigo", hex: "#C08081" },
   { nome: "Roxo", hex: "#800080" },
   { nome: "Lilás", hex: "#C8A2C8" },
   { nome: "Amarelo", hex: "#FFFF00" },
@@ -255,13 +257,32 @@ function dataBR(data: string | null) {
 function valorNumerico(valor: string) {
   if (!valor) return 0
 
-  return Number(
-    valor.replace(/[^0-9,-]/g, "").replace(/\./g, "").replace(",", ".")
-  )
+  let texto = String(valor)
+    .trim()
+    .replace(/R\$\s?/gi, "")
+    .replace(/\s/g, "")
+
+  if (!texto) return 0
+
+  // Aceita 9.999,99 / 9999,99 / 9999.99 / 9999
+  if (texto.includes(",") && texto.includes(".")) {
+    texto = texto.replace(/\./g, "").replace(",", ".")
+  } else if (texto.includes(",")) {
+    texto = texto.replace(",", ".")
+  } else if ((texto.match(/\./g) || []).length > 1) {
+    texto = texto.replace(/\./g, "")
+  } else if (/^\d+\.\d{1,2}$/.test(texto)) {
+    // Ponto como separador decimal quando há somente 1 ponto e até 2 casas.
+  } else {
+    texto = texto.replace(/\./g, "")
+  }
+
+  const numero = Number(texto.replace(/[^0-9.-]/g, ""))
+  return Number.isFinite(numero) ? numero : 0
 }
 
-function formatarMoedaInput(valor: string) {
-  const numero = valorNumerico(valor)
+function formatarMoedaInput(valor: string | number) {
+  const numero = typeof valor === "number" ? valor : valorNumerico(valor)
   if (!Number.isFinite(numero)) return ""
 
   return numero.toLocaleString("pt-BR", {
@@ -308,6 +329,10 @@ export default function Produtos() {
     useState("")
 
   const [busca, setBusca] = useState("")
+
+  const [ordenacaoProdutos, setOrdenacaoProdutos] = useState<
+    "codigo" | "nome" | "entradaRecente" | "entradaAntiga"
+  >("nome")
 
   const [modalProduto, setModalProduto] =
     useState(false)
@@ -382,6 +407,7 @@ const [salvando, setSalvando] = useState(false)
     )
 
   const [formProduto, setFormProduto] = useState({
+    codigoProduto: "",
     nome: "",
     descricao: "",
     categoria: "",
@@ -492,14 +518,19 @@ useEffect(() => {
   carregarDados()
 }, [])
 
-  useEffect(() => {
-    carregarDados()
-  }, [])
-
   function abrirNovoProduto() {
     setProdutoEditando(null)
 
+    const proximoCodigo =
+      Math.max(
+        0,
+        ...produtos
+          .map(produto => Number(produto.codigoProduto ?? 0))
+          .filter(codigo => Number.isFinite(codigo))
+      ) + 1
+
     setFormProduto({
+      codigoProduto: String(proximoCodigo),
       nome: "",
       descricao: "",
       categoria: "",
@@ -523,6 +554,7 @@ useEffect(() => {
     setProdutoEditando(produto)
 
     setFormProduto({
+      codigoProduto: produto.codigoProduto !== null ? String(produto.codigoProduto) : "",
       nome: produto.nome ?? "",
       descricao: produto.descricao ?? "",
       categoria: produto.categoria ?? "",
@@ -574,7 +606,7 @@ useEffect(() => {
       cor: "",
       tamanho: "",
       sku: "",
-      precoVenda: precoInicial,
+      precoVenda: precoInicial ? formatarMoedaInput(precoInicial) : "",
       custoUnitario: "",
       estoqueMinimo: "0",
       estoqueMaximo: ""
@@ -595,9 +627,9 @@ useEffect(() => {
       tamanho: variante.tamanho ?? "",
       sku: variante.sku ?? "",
       precoVenda:
-        variante.precoVenda.toString(),
+        formatarMoedaInput(variante.precoVenda),
       custoUnitario:
-        variante.custoUnitario.toString(),
+        formatarMoedaInput(variante.custoUnitario),
       estoqueMinimo:
         variante.estoqueMinimo.toString(),
       estoqueMaximo:
@@ -627,7 +659,17 @@ useEffect(() => {
 
     setSalvando(true)
 
+    const codigoProdutoTexto = formProduto.codigoProduto.trim()
+    const codigoProduto = codigoProdutoTexto === "" ? null : Number(codigoProdutoTexto.replace(/\D/g, ""))
+
+    if (codigoProdutoTexto !== "" && (!Number.isInteger(codigoProduto) || codigoProduto < 0)) {
+      alert("Informe um código de produto numérico válido.")
+      setSalvando(false)
+      return
+    }
+
     const dados = {
+      codigoProduto,
       nome: formProduto.nome.trim(),
       descricao:
         formProduto.descricao.trim() ||
@@ -1243,29 +1285,44 @@ useEffect(() => {
 
   const produtosFiltrados =
     useMemo(() => {
-      const termo =
-        busca.trim().toLowerCase()
+      const termo = busca.trim().toLowerCase()
 
-      if (!termo) {
-        return produtos
-      }
+      const filtrados = termo
+        ? produtos.filter(
+            produto =>
+              [
+                produto.nome,
+                produto.categoria,
+                produto.subcategoria,
+                produto.tecido,
+                produto.codigoProduto
+              ]
+                .filter(valor => valor !== null && valor !== undefined)
+                .some(valor =>
+                  String(valor).toLowerCase().includes(termo)
+                )
+          )
+        : [...produtos]
 
-      return produtos.filter(
-        produto =>
-          [
-            produto.nome,
-            produto.categoria,
-            produto.subcategoria,
-            produto.tecido
-          ]
-            .filter(Boolean)
-            .some(valor =>
-              String(valor)
-                .toLowerCase()
-                .includes(termo)
-            )
-      )
-    }, [produtos, busca])
+      return filtrados.sort((a, b) => {
+        if (ordenacaoProdutos === "codigo") {
+          const codigoA = a.codigoProduto ?? Number.MAX_SAFE_INTEGER
+          const codigoB = b.codigoProduto ?? Number.MAX_SAFE_INTEGER
+          return codigoA - codigoB
+        }
+
+        if (ordenacaoProdutos === "nome") {
+          return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
+        }
+
+        const dataA = a.dataEntrada ? new Date(a.dataEntrada).getTime() : 0
+        const dataB = b.dataEntrada ? new Date(b.dataEntrada).getTime() : 0
+
+        return ordenacaoProdutos === "entradaRecente"
+          ? dataB - dataA
+          : dataA - dataB
+      })
+    }, [produtos, busca, ordenacaoProdutos])
 
   const variantesFiltradas =
     useMemo(() => {
@@ -1283,13 +1340,30 @@ useEffect(() => {
       produtoSelecionado
     ])
 
+  const estoquePorVariante =
+    useMemo(() => {
+      const mapa = new Map<string, number>()
+
+      for (const movimento of movimentacoes) {
+        if (!mapa.has(movimento.varianteId)) {
+          mapa.set(movimento.varianteId, Number(movimento.saldoPosterior ?? 0))
+        }
+      }
+
+      return mapa
+    }, [movimentacoes])
+
+  function estoqueAtualDaVariante(variante: Variante) {
+    return estoquePorVariante.get(variante.id) ?? variante.estoqueAtual
+  }
+
   const totalUnidades =
     useMemo(
       () =>
         variantes.reduce(
           (total, variante) =>
             total +
-            variante.estoqueAtual,
+            estoqueAtualDaVariante(variante),
           0
         ),
       [variantes]
@@ -1301,7 +1375,7 @@ useEffect(() => {
         variantes.reduce(
           (total, variante) =>
             total +
-            variante.estoqueAtual *
+            estoqueAtualDaVariante(variante) *
               variante.custoUnitario,
           0
         ),
@@ -1314,7 +1388,7 @@ useEffect(() => {
         variantes.filter(
           variante =>
             variante.ativo &&
-            variante.estoqueAtual <=
+            estoqueAtualDaVariante(variante) <=
               variante.estoqueMinimo
         ).length,
       [variantes]
@@ -1571,22 +1645,44 @@ useEffect(() => {
               )}
             </div>
 
-            <input
-              value={busca}
-              onChange={e =>
-                setBusca(
-                  e.target.value
-                )
-              }
-              placeholder="Buscar produto..."
+            <div
               style={{
-                ...search,
-                width:
-                  isMobile
-                    ? "100%"
-                    : 260
+                display: "flex",
+                gap: 8,
+                width: isMobile ? "100%" : "auto",
+                flexDirection: isMobile ? "column" : "row"
               }}
-            />
+            >
+              <input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar produto..."
+                style={{
+                  ...search,
+                  width: isMobile ? "100%" : 250
+                }}
+              />
+
+              <select
+                value={ordenacaoProdutos}
+                onChange={e =>
+                  setOrdenacaoProdutos(
+                    e.target.value as "codigo" | "nome" | "entradaRecente" | "entradaAntiga"
+                  )
+                }
+                style={{
+                  ...input,
+                  width: isMobile ? "100%" : 190,
+                  minWidth: 0
+                }}
+                aria-label="Ordenar produtos"
+              >
+                <option value="nome">Nome: A-Z</option>
+                <option value="codigo">Código: menor → maior</option>
+                <option value="entradaRecente">Entrada: mais recente</option>
+                <option value="entradaAntiga">Entrada: mais antiga</option>
+              </select>
+            </div>
           </div>
 
           {!isMobile ? (
@@ -1783,7 +1879,7 @@ useEffect(() => {
                         variante
                       ) =>
                         total +
-                        variante.estoqueAtual,
+                        estoqueAtualDaVariante(variante),
                       0
                     )
 
@@ -1794,7 +1890,7 @@ useEffect(() => {
                         variante
                       ) =>
                         total +
-                        variante.estoqueAtual *
+                        estoqueAtualDaVariante(variante) *
                           variante.custoUnitario,
                       0
                     )
@@ -2199,9 +2295,8 @@ useEffect(() => {
 
                             <td style={td}>
                               <EstoqueBadge
-                                variante={
-                                  variante
-                                }
+                                variante={variante}
+                                estoqueAtual={estoqueAtualDaVariante(variante)}
                               />
                             </td>
 
@@ -2308,9 +2403,8 @@ useEffect(() => {
                           </div>
 
                           <EstoqueBadge
-                            variante={
-                              variante
-                            }
+                            variante={variante}
+                            estoqueAtual={estoqueAtualDaVariante(variante)}
                           />
                         </div>
 
@@ -2765,13 +2859,21 @@ useEffect(() => {
                   : formGrid
               }
             >
-              {produtoEditando && (
-                <Field label="Código do produto">
-                  <div style={readOnlyCode}>
-                    {produtoEditando.codigoProduto ?? "—"}
-                  </div>
-                </Field>
-              )}
+              <Field label="Código do produto">
+                <input
+                  value={formProduto.codigoProduto}
+                  onChange={e =>
+                    setFormProduto(prev => ({
+                      ...prev,
+                      codigoProduto: e.target.value.replace(/\D/g, "")
+                    }))
+                  }
+                  style={input}
+                  placeholder="Ex.: 1001"
+                  inputMode="numeric"
+                />
+                <span style={inputHint}>Referência numérica do produto. No novo cadastro, o próximo código é sugerido automaticamente.</span>
+              </Field>
 
               <Field
                 label="Nome do produto"
@@ -3205,7 +3307,7 @@ useEffect(() => {
                 </select>
               </Field>
 
-              <Field label="Cor">
+              <Field label="Cor / RGB / HEX">
                 <select
                   value={
                     formVariante.cor
@@ -3261,12 +3363,20 @@ useEffect(() => {
 
                 {formVariante.cor && (
                   <CorPreview
-                    nome={
-                      formVariante.cor
-                    }
+                    nome={formVariante.cor}
                     cores={cores}
                   />
                 )}
+
+                <PaletaCores
+                  cores={cores}
+                  selecionada={formVariante.cor}
+                  onSelecionar={hex => {
+                    const cor = cores.find(item => item.hex.toUpperCase() === hex.toUpperCase())
+                    if (cor) setFormVariante(prev => ({ ...prev, cor: cor.nome }))
+                  }}
+                  onNovaCor={() => abrirNovaOpcao("cor")}
+                />
               </Field>
 
               <Field label="Tamanho">
@@ -3344,46 +3454,31 @@ useEffect(() => {
                 />
               </Field>
 
-              <Field label="Preço de venda">
-                <input
-                  value={
-                    formVariante.precoVenda
-                  }
-                  onChange={e =>
-                    setFormVariante(
-                      prev => ({
-                        ...prev,
-                        precoVenda:
-                          e.target
-                            .value
-                      })
-                    )
-                  }
-                  style={input}
-                  placeholder="69,00"
-                  inputMode="decimal"
-                />
-              </Field>
-
               <Field label="Custo unitário">
                 <input
-                  value={
-                    formVariante.custoUnitario
-                  }
-                  onChange={e =>
-                    setFormVariante(
-                      prev => ({
-                        ...prev,
-                        custoUnitario:
-                          e.target
-                            .value
-                      })
-                    )
+                  value={formVariante.custoUnitario}
+                  onChange={e => {
+                    const novoCusto = e.target.value
+                    const custoNumerico = valorNumerico(novoCusto)
+                    setFormVariante(prev => ({
+                      ...prev,
+                      custoUnitario: novoCusto,
+                      ...(usarMarkupSugerido && custoNumerico > 0
+                        ? { precoVenda: formatarMoedaInput(vendaSugerida(custoNumerico)) }
+                        : {})
+                    }))
+                  }}
+                  onBlur={() =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      custoUnitario: formatarMoedaInput(prev.custoUnitario)
+                    }))
                   }
                   style={input}
-                  placeholder="42,90"
+                  placeholder="40,00"
                   inputMode="decimal"
                 />
+                <span style={inputHint}>Informe em reais. Ex.: 42,90.</span>
               </Field>
 
               {/* PRECIFICAÇÃO ERP */}
@@ -3400,19 +3495,19 @@ useEffect(() => {
                     <div style={pricingHeader}>
                       <div>
                         <strong style={pricingTitle}>Precificação</strong>
-                        <span style={pricingSubtitle}>Markup padrão da loja: {MARKUP_PADRAO.toFixed(1)}x</span>
+                        <span style={pricingSubtitle}>Markup padrão da loja: {MARKUP_PADRAO.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}x</span>
                       </div>
                       <button
                         type="button"
                         style={smallInfoButton}
                         onClick={() => setModalInformacoes(true)}
-                        title="Como funciona o markup"
+                        title="Como funciona a precificação"
                       >
                         ?
                       </button>
                     </div>
 
-                    <div style={{ ...pricingGrid, gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))" }}>
+                    <div style={pricingGrid}>
                       <div style={pricingItem}>
                         <span>Preço de custo</span>
                         <strong>{moeda(custo)}</strong>
@@ -3421,17 +3516,17 @@ useEffect(() => {
                       <div style={pricingItem}>
                         <span>Venda sugerida</span>
                         <strong>{moeda(sugerido)}</strong>
-                        <small>Custo × {MARKUP_PADRAO.toFixed(1)}</small>
-                      </div>
-
-                      <div style={pricingItem}>
-                        <span>Venda escolhida</span>
-                        <strong>{moeda(preco)}</strong>
+                        <small>Custo × 2,5</small>
                       </div>
 
                       <div style={pricingItem}>
                         <span>Lucro unitário</span>
                         <strong style={{ color: lucro >= 0 ? "#657b58" : "#a34e4e" }}>{moeda(lucro)}</strong>
+                      </div>
+
+                      <div style={pricingItem}>
+                        <span>Markup aplicado</span>
+                        <strong>{custo > 0 && preco > 0 ? `${(preco / custo).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x` : "—"}</strong>
                       </div>
                     </div>
 
@@ -3445,58 +3540,43 @@ useEffect(() => {
                           if (marcado && custo > 0) {
                             setFormVariante(prev => ({
                               ...prev,
-                              precoVenda: sugerido.toFixed(2)
+                              precoVenda: formatarMoedaInput(sugerido)
                             }))
                           }
                         }}
                       />
-                      <span>Usar markup sugerido ({MARKUP_PADRAO.toFixed(1)}x)</span>
+                      <span>Usar markup sugerido (2,5x)</span>
                     </label>
 
-                    {custo > 0 && (
-                      <div style={pricingResult}>
-                        <span>Sobre o custo</span>
-                        <strong>{percentual === null ? "-" : `${percentual >= 0 ? "+" : ""}${percentual.toFixed(2)}%`}</strong>
-                      </div>
-                    )}
+                    <div style={pricingResult}>
+                      <span>Sobre o custo</span>
+                      <strong>{percentual === null ? "—" : `${percentual >= 0 ? "+" : ""}${percentual.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`}</strong>
+                    </div>
                   </div>
                 )
               })()}
 
-              <Field label="Preço de venda escolhido">
+              <Field label="Preço de venda">
                 <input
                   value={formVariante.precoVenda}
                   onChange={e => {
                     setUsarMarkupSugerido(false)
-                    setFormVariante(prev => ({ ...prev, precoVenda: e.target.value }))
+                    setFormVariante(prev => ({
+                      ...prev,
+                      precoVenda: e.target.value
+                    }))
                   }}
-                  onBlur={() => setFormVariante(prev => ({ ...prev, precoVenda: formatarMoedaInput(prev.precoVenda) }))}
+                  onBlur={() =>
+                    setFormVariante(prev => ({
+                      ...prev,
+                      precoVenda: formatarMoedaInput(prev.precoVenda)
+                    }))
+                  }
                   style={input}
                   placeholder="100,00"
                   inputMode="decimal"
                 />
-                <span style={inputHint}>Você pode alterar o valor mesmo com o markup desmarcado.</span>
-              </Field>
-
-              <Field label="Preço de custo">
-                <input
-                  value={formVariante.custoUnitario}
-                  onChange={e => {
-                    const novoCusto = e.target.value
-                    setFormVariante(prev => ({
-                      ...prev,
-                      custoUnitario: novoCusto,
-                      ...(usarMarkupSugerido && valorNumerico(novoCusto) > 0
-                        ? { precoVenda: vendaSugerida(valorNumerico(novoCusto)).toFixed(2) }
-                        : {})
-                    }))
-                  }}
-                  onBlur={() => setFormVariante(prev => ({ ...prev, custoUnitario: formatarMoedaInput(prev.custoUnitario) }))}
-                  style={input}
-                  placeholder="40,00"
-                  inputMode="decimal"
-                />
-                <span style={inputHint}>Base usada para calcular automaticamente a venda sugerida.</span>
+                <span style={inputHint}>Você pode usar a venda sugerida ou informar outro valor em reais.</span>
               </Field>
 
               <Field label="Estoque mínimo">
@@ -3586,7 +3666,7 @@ useEffect(() => {
               title="Movimentar estoque"
               subtitle={
                 varianteEstoque
-                  ? `${varianteEstoque.sku} • estoque atual: ${varianteEstoque.estoqueAtual}`
+                  ? `${varianteEstoque.sku} • estoque atual: ${estoqueAtualDaVariante(varianteEstoque)}`
                   : ""
               }
               fechar={() =>
@@ -3808,36 +3888,27 @@ useEffect(() => {
                   >
                     <input
                       type="color"
-                      value={
-                        novaOpcaoHex
-                      }
-                      onChange={e =>
-                        setNovaOpcaoHex(
-                          e.target
-                            .value
-                        )
-                      }
-                      style={
-                        colorPicker
-                      }
+                      value={novaOpcaoHex}
+                      onChange={e => setNovaOpcaoHex(e.target.value.toUpperCase())}
+                      style={colorPicker}
+                      title="Escolher cor"
                     />
 
                     <input
-                      value={
-                        novaOpcaoHex
-                      }
-                      onChange={e =>
-                        setNovaOpcaoHex(
-                          e.target
-                            .value
-                        )
-                      }
-                      style={{
-                        ...input,
-                        flex: 1
-                      }}
+                      value={novaOpcaoHex}
+                      onChange={e => setNovaOpcaoHex(e.target.value.toUpperCase())}
+                      style={{ ...input, flex: 1 }}
+                      placeholder="#FF69B4"
                     />
                   </div>
+
+                  <span style={inputHint}>Escolha visualmente no seletor de cor ou informe o HEX. Não precisa procurar a cor na internet.</span>
+
+                  <PaletaCores
+                    cores={cores}
+                    selecionada={novaOpcaoHex}
+                    onSelecionar={cor => setNovaOpcaoHex(cor)}
+                  />
                 </Field>
               </div>
             )}
@@ -3888,7 +3959,7 @@ useEffect(() => {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={infoCard}>
                 <strong>Código do produto</strong>
-                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas.</p>
+                <p>É o código numérico gravado em <code>produtos.codigoProduto</code>. Ele identifica o produto principal e aparece no cadastro e nas listas. No cadastro do produto, ele pode ser alterado quando necessário.</p>
               </div>
 
               <div style={infoCard}>
@@ -4006,6 +4077,60 @@ function CorPreview({
   )
 }
 
+function PaletaCores({
+  cores,
+  selecionada,
+  onSelecionar,
+  onNovaCor
+}: {
+  cores: Cor[]
+  selecionada?: string
+  onSelecionar: (hex: string) => void
+  onNovaCor?: () => void
+}) {
+  const selecionadaNormalizada = normalizarTexto(selecionada ?? "")
+
+  return (
+    <div style={paletteWrapper}>
+      <div style={paletteTitle}>Paleta de cores</div>
+      <div style={paletteGrid}>
+        {cores.map(cor => {
+          const ativo =
+            normalizarTexto(cor.nome) === selecionadaNormalizada ||
+            cor.hex.toUpperCase() === (selecionada ?? "").toUpperCase()
+
+          return (
+            <button
+              key={`${cor.nome}-${cor.hex}`}
+              type="button"
+              title={`${cor.nome} · ${cor.hex}`}
+              onClick={() => onSelecionar(cor.hex)}
+              style={{
+                ...paletteColor,
+                border: ativo ? "2px solid #8b6f3d" : "1px solid #d8d0c2",
+                boxShadow: ativo ? "0 0 0 2px #efe4cc" : "none"
+              }}
+            >
+              <span style={{ ...paletteSwatch, background: cor.hex }} />
+              <span style={paletteName}>{cor.nome}</span>
+            </button>
+          )
+        })}
+
+        {onNovaCor && (
+          <button
+            type="button"
+            onClick={onNovaCor}
+            style={paletteAdd}
+          >
+            + Nova cor
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LucroInfo({
   variante
 }: {
@@ -4055,29 +4180,25 @@ function LucroInfo({
 }
 
 function EstoqueBadge({
-  variante
+  variante,
+  estoqueAtual
 }: {
   variante: Variante
+  estoqueAtual?: number
 }) {
-  const baixo =
-    variante.estoqueAtual <=
-    variante.estoqueMinimo
+  const saldo = estoqueAtual ?? variante.estoqueAtual
+  const baixo = saldo <= variante.estoqueMinimo
 
   return (
     <span
       style={{
         ...stockBadge,
-        color: baixo
-          ? "#9a6b19"
-          : "#5c6657",
-        background: baixo
-          ? "#fbf2dc"
-          : "#eef3eb"
+        color: baixo ? "#9a6b19" : "#5c6657",
+        background: baixo ? "#fbf2dc" : "#eef3eb"
       }}
     >
-      {variante.estoqueAtual}
-      {baixo &&
-        " • baixo"}
+      {saldo}
+      {baixo && " • baixo"}
     </span>
   )
 }
@@ -4661,8 +4782,72 @@ const infoCard = {
   background: "#fff"
 }
 
+
+const paletteWrapper = {
+  marginTop: 10,
+  padding: 10,
+  border: "1px solid #eee6d8",
+  borderRadius: 9,
+  background: "#fffdf9"
+}
+
+const paletteTitle = {
+  color: "#777168",
+  fontSize: 10,
+  fontWeight: 700,
+  marginBottom: 8,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.04em"
+}
+
+const paletteGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))",
+  gap: 6,
+  maxHeight: 210,
+  overflowY: "auto" as const
+}
+
+const paletteColor = {
+  minWidth: 0,
+  padding: 5,
+  borderRadius: 7,
+  background: "#fff",
+  cursor: "pointer",
+  textAlign: "left" as const
+}
+
+const paletteSwatch = {
+  display: "block",
+  width: "100%",
+  height: 25,
+  borderRadius: 5,
+  border: "1px solid rgba(0,0,0,.08)"
+}
+
+const paletteName = {
+  display: "block",
+  marginTop: 4,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const,
+  color: "#5f584e",
+  fontSize: 9
+}
+
+const paletteAdd = {
+  minHeight: 48,
+  border: "1px dashed #cbb98f",
+  borderRadius: 7,
+  background: "#fffdf8",
+  color: "#8b6f3d",
+  fontSize: 10,
+  cursor: "pointer"
+}
+
 const pricingPanel = {
   gridColumn: "1 / -1",
+  minWidth: 0,
   padding: 16,
   background: "#faf7ee",
   border: "1px solid #eadfc7",
@@ -4691,8 +4876,10 @@ const pricingSubtitle = {
 
 const pricingGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 10
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
+  gap: 10,
+  width: "100%",
+  boxSizing: "border-box" as const
 }
 
 const pricingItem = {
