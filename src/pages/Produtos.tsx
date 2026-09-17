@@ -662,7 +662,7 @@ useEffect(() => {
     const codigoProdutoTexto = formProduto.codigoProduto.trim()
     const codigoProduto = codigoProdutoTexto === "" ? null : Number(codigoProdutoTexto.replace(/\D/g, ""))
 
-    if (codigoProdutoTexto !== "" && (!Number.isInteger(codigoProduto) || codigoProduto < 0)) {
+    if (codigoProdutoTexto !== "" && (codigoProduto === null || !Number.isInteger(codigoProduto) || codigoProduto < 0)) {
       alert("Informe um código de produto numérico válido.")
       setSalvando(false)
       return
