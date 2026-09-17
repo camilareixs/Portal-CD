@@ -186,6 +186,9 @@ export default function Clientes({
       return
     }
 
+    const referenciaAutomatica =
+      `CLI-${Date.now()}`
+
     const { error } = await supabase
       .from("clientes")
       .insert([
@@ -200,7 +203,7 @@ export default function Clientes({
           complemento: novo.Complemento || "",
           dataNascimento:
             novo["Data de Nascimento"] || null,
-          clienteRef: novo.clienteRef || "",
+          clienteRef: referenciaAutomatica,
           observacao: novo.observacao || "",
           cintura: novo.cintura || "",
           pontos: 0,
@@ -1374,17 +1377,24 @@ ${
                       }
                     />
 
-                    <input
-                      style={inputSpacing}
-                      placeholder="Referência"
-                      value={form.clienteRef || ""}
-                      onChange={e =>
-                        setForm({
-                          ...form,
-                          clienteRef: e.target.value
-                        })
-                      }
-                    />
+                    <div style={{
+                      marginBottom: 14,
+                      padding: "10px 12px",
+                      background: "#fafafa",
+                      border: "1px solid #eee",
+                      borderRadius: 8
+                    }}>
+                      <div style={fieldLabel}>
+                        Código de referência
+                      </div>
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: "#333"
+                      }}>
+                        {form.clienteRef || "-"}
+                      </div>
+                    </div>
 
                     <textarea
                       style={{ ...inputSpacing, minHeight: 80, resize: "vertical" as const }}
@@ -1398,9 +1408,12 @@ ${
                       }
                     />
 
+                    <div style={fieldLabel}>
+                      Data de nascimento
+                    </div>
+
                     <input
                       style={inputSpacing}
-                      placeholder="Data de nascimento (opcional)"
                       type="date"
                       value={
                         form[
@@ -1684,18 +1697,6 @@ ${
                   }
                 />
 
-                <input
-                  style={inputSpacing}
-                  placeholder="Referência"
-                  value={novo.clienteRef || ""}
-                  onChange={e =>
-                    setNovo({
-                      ...novo,
-                      clienteRef: e.target.value
-                    })
-                  }
-                />
-
                 <textarea
                   style={{ ...inputSpacing, minHeight: 80, resize: "vertical" as const }}
                   placeholder="Observação"
@@ -1708,9 +1709,12 @@ ${
                   }
                 />
 
+                <div style={fieldLabel}>
+                  Data de nascimento
+                </div>
+
                 <input
                   style={inputSpacing}
-                  placeholder="Data de nascimento (opcional)"
                   type="date"
                   value={
                     novo[
@@ -2231,6 +2235,14 @@ const input = {
 const inputSpacing = {
   ...input,
   marginBottom: 12
+}
+
+const fieldLabel = {
+  fontSize: 12,
+  fontWeight: 500,
+  color: "#777",
+  marginBottom: 6,
+  marginTop: 2
 }
 
 const select = {
