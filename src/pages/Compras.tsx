@@ -2192,8 +2192,6 @@ const dashValue = {
     "break-word" as const
 }
 
-
-
 const emptyText = {
   color: "#888",
   fontSize: 14,
