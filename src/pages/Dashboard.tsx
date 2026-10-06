@@ -3009,42 +3009,6 @@ const vazio: React.CSSProperties = {
   fontSize: 13,
 }
 
-const estoqueResumo: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(3, minmax(0, 1fr))",
-  gap: 10,
-  marginBottom: 12,
-}
-
-const estoqueItem: React.CSSProperties = {
-  minWidth: 0,
-  padding: 12,
-  background: "#faf8f3",
-  borderRadius: 9,
-}
-
-const estoqueNumero: React.CSSProperties = {
-  display: "block",
-  fontSize: 22,
-  fontWeight: 700,
-  color: "#222",
-}
-
-const estoqueNumeroPequeno: React.CSSProperties = {
-  display: "block",
-  fontSize: 16,
-  fontWeight: 700,
-  overflowWrap: "anywhere",
-}
-
-const estoqueLabel: React.CSSProperties = {
-  display: "block",
-  marginTop: 3,
-  fontSize: 10,
-  color: "#888",
-}
-
 const pagamentoItem: React.CSSProperties = {
   padding: "11px 0",
   borderBottom: "1px solid #eee9df",
