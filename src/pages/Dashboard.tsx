@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Periodo = "7" | "30" | "90" | "365" | "all"
+type FiltroMes = "all" | string
+type FiltroAno = "all" | string
 
 type Cliente = {
   id: string
   nome: string
   cpf?: string | null
   pontos?: number | null
+  dataNascimento?: string | null
 }
 
 type Compra = {
@@ -190,13 +193,29 @@ const inicioDoPeriodo = (periodo: Periodo) => {
 const estaNoPeriodo = (
   data: string | null | undefined,
   periodo: Periodo,
+  mesFiltro: FiltroMes = "all",
+  anoFiltro: FiltroAno = "all",
 ) => {
-  if (periodo === "all") return true
   if (!data) return false
 
   const dataObj = new Date(data)
 
   if (Number.isNaN(dataObj.getTime())) return false
+
+  const temFiltroMes = mesFiltro !== "all"
+  const temFiltroAno = anoFiltro !== "all"
+
+  if (temFiltroMes && dataObj.getMonth() + 1 !== Number(mesFiltro)) {
+    return false
+  }
+
+  if (temFiltroAno && dataObj.getFullYear() !== Number(anoFiltro)) {
+    return false
+  }
+
+  if (temFiltroMes || temFiltroAno) return true
+
+  if (periodo === "all") return true
 
   return dataObj >= inicioDoPeriodo(periodo)
 }
@@ -209,6 +228,8 @@ const percentual = (valor: number, total: number) => {
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("30")
+  const [mesFiltro, setMesFiltro] = useState<FiltroMes>("all")
+  const [anoFiltro, setAnoFiltro] = useState<FiltroAno>("all")
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
@@ -247,7 +268,7 @@ export default function Dashboard() {
       ] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id,nome,cpf,pontos"),
+          .select("id,nome,cpf,pontos,dataNascimento"),
 
         supabase
           .from("compras")
@@ -365,27 +386,31 @@ export default function Dashboard() {
 
   const comprasPeriodo = useMemo(() => {
     return compras.filter(compra =>
-      estaNoPeriodo(compra.criadoem, periodo),
+      estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro),
     )
-  }, [compras, periodo])
+  }, [compras, periodo, mesFiltro, anoFiltro])
 
   const receitasPeriodo = useMemo(() => {
     return receitas.filter(receita =>
       estaNoPeriodo(
         receita.dataCompetencia,
         periodo,
+        mesFiltro,
+        anoFiltro,
       ),
     )
-  }, [receitas, periodo])
+  }, [receitas, periodo, mesFiltro, anoFiltro])
 
   const despesasPeriodo = useMemo(() => {
     return despesas.filter(despesa =>
       estaNoPeriodo(
         despesa.dataCompetencia,
         periodo,
+        mesFiltro,
+        anoFiltro,
       ),
     )
-  }, [despesas, periodo])
+  }, [despesas, periodo, mesFiltro, anoFiltro])
 
   const faturamento = useMemo(() => {
     return comprasPeriodo
@@ -494,7 +519,7 @@ export default function Dashboard() {
 
       if (
         !compra ||
-        !estaNoPeriodo(compra.criadoem, periodo)
+        !estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)
       ) {
         return total
       }
@@ -507,7 +532,7 @@ export default function Dashboard() {
         numero(item.custoUnitario) * quantidade
       )
     }, 0)
-  }, [vendaItens, compras, periodo])
+  }, [vendaItens, compras, periodo, mesFiltro, anoFiltro])
 
   const lucroBruto =
     faturamento - custoProdutosVendidos
@@ -525,37 +550,6 @@ export default function Dashboard() {
       ? (resultadoLiquido / faturamento) * 100
       : 0
 
-  const valorEstoque = useMemo(() => {
-    return variantes.reduce((total, variante) => {
-      if (variante.ativo === false) return total
-
-      return (
-        total +
-        numero(variante.estoqueAtual) *
-          numero(variante.custoUnitario)
-      )
-    }, 0)
-  }, [variantes])
-
-  const estoqueBaixo = useMemo(() => {
-    return variantes.filter(variante => {
-      if (variante.ativo === false) return false
-
-      const estoque = numero(variante.estoqueAtual)
-      const minimo = numero(variante.estoqueMinimo)
-
-      return estoque > 0 && estoque <= minimo
-    }).length
-  }, [variantes])
-
-  const estoqueZerado = useMemo(() => {
-    return variantes.filter(variante => {
-      if (variante.ativo === false) return false
-
-      return numero(variante.estoqueAtual) <= 0
-    }).length
-  }, [variantes])
-
   const vendasPorProduto = useMemo(() => {
     const mapa = new Map<string, VendaProduto>()
 
@@ -566,7 +560,7 @@ export default function Dashboard() {
 
       if (
         !compra ||
-        !estaNoPeriodo(compra.criadoem, periodo)
+        !estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)
       ) {
         return
       }
@@ -722,6 +716,104 @@ export default function Dashboard() {
     cliente => numero(cliente.pontos) >= 10,
   )
 
+
+  const inicioMesAtual = useMemo(() => {
+    const data = new Date()
+    return new Date(data.getFullYear(), data.getMonth(), 1)
+  }, [])
+
+  const aniversariantesDoMes = useMemo(() => {
+    const mesAtual = inicioMesAtual.getMonth()
+
+    return clientes
+      .filter(cliente => {
+        if (!cliente.dataNascimento) return false
+
+        const data = new Date(`${cliente.dataNascimento}T12:00:00`)
+        if (Number.isNaN(data.getTime())) return false
+
+        return data.getMonth() === mesAtual
+      })
+      .sort((a, b) => {
+        const dataA = new Date(`${a.dataNascimento}T12:00:00`)
+        const dataB = new Date(`${b.dataNascimento}T12:00:00`)
+        return dataA.getDate() - dataB.getDate()
+      })
+  }, [clientes, inicioMesAtual])
+
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set<number>()
+
+    const adicionarAno = (data?: string | null) => {
+      if (!data) return
+
+      const objeto = new Date(data)
+      if (!Number.isNaN(objeto.getTime())) {
+        anos.add(objeto.getFullYear())
+      }
+    }
+
+    compras.forEach(compra => adicionarAno(compra.criadoem))
+    receitas.forEach(receita => adicionarAno(receita.dataCompetencia))
+    despesas.forEach(despesa => adicionarAno(despesa.dataCompetencia))
+
+    anos.add(new Date().getFullYear())
+
+    return Array.from(anos).sort((a, b) => b - a)
+  }, [compras, receitas, despesas])
+
+  const clientesParaReativar = useMemo(() => {
+    const ultimaCompraPorCliente = new Map<string, number>()
+
+    compras
+      .filter(compra => {
+        const status = normalizarTexto(compra.status)
+        return (
+          compra.clienteid &&
+          status !== "cancelada" &&
+          status !== "cancelado"
+        )
+      })
+      .forEach(compra => {
+        if (!compra.clienteid) return
+
+        const data = new Date(compra.criadoem).getTime()
+        if (Number.isNaN(data)) return
+
+        const atual = ultimaCompraPorCliente.get(compra.clienteid)
+        if (!atual || data > atual) {
+          ultimaCompraPorCliente.set(compra.clienteid, data)
+        }
+      })
+
+    const limite = new Date()
+    limite.setDate(limite.getDate() - 90)
+
+    return clientes
+      .map(cliente => {
+        const ultimaCompra = ultimaCompraPorCliente.get(cliente.id)
+
+        return {
+          cliente,
+          ultimaCompra: ultimaCompra
+            ? new Date(ultimaCompra)
+            : null,
+        }
+      })
+      .filter(item => {
+        if (!item.ultimaCompra) return true
+        return item.ultimaCompra < limite
+      })
+      .sort((a, b) => {
+        if (!a.ultimaCompra && !b.ultimaCompra) return 0
+        if (!a.ultimaCompra) return -1
+        if (!b.ultimaCompra) return 1
+        return a.ultimaCompra.getTime() - b.ultimaCompra.getTime()
+      })
+      .slice(0, 5)
+  }, [clientes, compras])
+
+
   const vendasUltimos7Dias = useMemo(() => {
     const mapa = new Map<string, number>()
 
@@ -791,7 +883,7 @@ export default function Dashboard() {
         return
       }
 
-      if (!estaNoPeriodo(compra.criadoem, periodo)) {
+      if (!estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)) {
         return
       }
 
@@ -815,7 +907,7 @@ export default function Dashboard() {
     })
 
     return Array.from(mapa.entries())
-  }, [compras, periodo])
+  }, [compras, periodo, mesFiltro, anoFiltro])
 
   const movimentacoesRecentes = useMemo(() => {
     const movimentacoes: Array<{
@@ -892,34 +984,16 @@ export default function Dashboard() {
 
   const alertas = useMemo(() => {
     const lista: Array<{
-      tipo: "estoque" | "financeiro" | "cliente"
+      tipo: "financeiro" | "cliente"
       titulo: string
       texto: string
     }> = []
-
-    if (estoqueZerado > 0) {
-      lista.push({
-        tipo: "estoque",
-        titulo: "Produtos sem estoque",
-        texto: `${estoqueZerado} variante(s) estão sem estoque.`,
-      })
-    }
-
-    if (estoqueBaixo > 0) {
-      lista.push({
-        tipo: "estoque",
-        titulo: "Estoque baixo",
-        texto: `${estoqueBaixo} variante(s) estão abaixo do estoque mínimo.`,
-      })
-    }
 
     if (totalReceitasPendentes > 0) {
       lista.push({
         tipo: "financeiro",
         titulo: "Valores a receber",
-        texto: `${moeda(
-          totalReceitasPendentes,
-        )} em receitas pendentes.`,
+        texto: `${moeda(totalReceitasPendentes)} em receitas pendentes.`,
       })
     }
 
@@ -927,9 +1001,7 @@ export default function Dashboard() {
       lista.push({
         tipo: "financeiro",
         titulo: "Despesas pendentes",
-        texto: `${moeda(
-          totalDespesasPendentes,
-        )} em despesas pendentes.`,
+        texto: `${moeda(totalDespesasPendentes)} em despesas pendentes.`,
       })
     }
 
@@ -941,13 +1013,29 @@ export default function Dashboard() {
       })
     }
 
+    if (aniversariantesDoMes.length > 0) {
+      lista.push({
+        tipo: "cliente",
+        titulo: "Aniversariantes do mês",
+        texto: `${aniversariantesDoMes.length} cliente(s) fazem aniversário este mês.`,
+      })
+    }
+
+    if (clientesParaReativar.length > 0) {
+      lista.push({
+        tipo: "cliente",
+        titulo: "Clientes para reativar",
+        texto: `${clientesParaReativar.length} cliente(s) estão há pelo menos 90 dias sem comprar ou ainda não possuem compra.`,
+      })
+    }
+
     return lista
   }, [
-    estoqueZerado,
-    estoqueBaixo,
     totalReceitasPendentes,
     totalDespesasPendentes,
     clientesComCupom.length,
+    aniversariantesDoMes.length,
+    clientesParaReativar.length,
   ])
 
   const progressoMeta = percentual(
@@ -955,8 +1043,35 @@ export default function Dashboard() {
     meta,
   )
 
-  const periodoLabel =
-    periodo === "7"
+  const periodoLabel = useMemo(() => {
+    const meses = [
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+    ]
+
+    if (mesFiltro !== "all" && anoFiltro !== "all") {
+      return `${meses[Number(mesFiltro) - 1]} de ${anoFiltro}`
+    }
+
+    if (mesFiltro !== "all") {
+      return `${meses[Number(mesFiltro) - 1]} de todos os anos`
+    }
+
+    if (anoFiltro !== "all") {
+      return `Ano de ${anoFiltro}`
+    }
+
+    return periodo === "7"
       ? "Últimos 7 dias"
       : periodo === "30"
         ? "Últimos 30 dias"
@@ -965,6 +1080,7 @@ export default function Dashboard() {
           : periodo === "365"
             ? "Último ano"
             : "Todos os meses"
+  }, [periodo, mesFiltro, anoFiltro])
 
   function salvarMeta() {
     const valor = numero(novaMeta)
@@ -1114,6 +1230,17 @@ export default function Dashboard() {
             }
           }
 
+          @media (max-width: 600px) {
+            .dashboard-action-row {
+              flex-direction: column;
+              align-items: stretch;
+            }
+
+            .dashboard-action-button {
+              width: 100%;
+            }
+          }
+
           @media (max-width: 420px) {
             .dashboard-list-row {
               flex-direction: column;
@@ -1141,39 +1268,108 @@ export default function Dashboard() {
           </div>
 
           <div style={filtroContainer}>
-            <span style={filtroLabel}>
-              Período
-            </span>
+            <div style={filtroGrupo}>
+              <span style={filtroLabel}>
+                Período
+              </span>
 
-            <select
-              value={periodo}
-              onChange={e =>
-                setPeriodo(
-                  e.target.value as Periodo,
-                )
-              }
-              style={select}
-            >
-              <option value="7">
-                7 dias
-              </option>
+              <select
+                value={periodo}
+                onChange={e =>
+                  setPeriodo(
+                    e.target.value as Periodo,
+                  )
+                }
+                style={select}
+              >
+                <option value="7">
+                  7 dias
+                </option>
 
-              <option value="30">
-                30 dias
-              </option>
+                <option value="30">
+                  30 dias
+                </option>
 
-              <option value="90">
-                90 dias
-              </option>
+                <option value="90">
+                  90 dias
+                </option>
 
-              <option value="365">
-                1 ano
-              </option>
+                <option value="365">
+                  1 ano
+                </option>
 
-              <option value="all">
-                Todos os meses
-              </option>
-            </select>
+                <option value="all">
+                  Todos
+                </option>
+              </select>
+            </div>
+
+            <div style={filtroGrupo}>
+              <span style={filtroLabel}>
+                Mês
+              </span>
+
+              <select
+                value={mesFiltro}
+                onChange={e =>
+                  setMesFiltro(e.target.value)
+                }
+                style={select}
+              >
+                <option value="all">
+                  Todos os meses
+                </option>
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+              </select>
+            </div>
+
+            <div style={filtroGrupo}>
+              <span style={filtroLabel}>
+                Ano
+              </span>
+
+              <select
+                value={anoFiltro}
+                onChange={e =>
+                  setAnoFiltro(e.target.value)
+                }
+                style={selectAno}
+              >
+                <option value="all">
+                  Todos
+                </option>
+
+                {anosDisponiveis.map(ano => (
+                  <option key={ano} value={ano}>
+                    {ano}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(mesFiltro !== "all" || anoFiltro !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMesFiltro("all")
+                  setAnoFiltro("all")
+                }}
+                style={botaoLimparFiltro}
+              >
+                Limpar mês/ano
+              </button>
+            )}
           </div>
         </div>
 
@@ -1222,12 +1418,6 @@ export default function Dashboard() {
             label="A receber"
             value={moeda(totalReceitasPendentes)}
             detalhe="Receitas pendentes"
-          />
-
-          <Kpi
-            label="Estoque"
-            value={moeda(valorEstoque)}
-            detalhe={`${estoqueBaixo} baixo / ${estoqueZerado} zerado`}
           />
         </div>
 
@@ -1671,228 +1861,265 @@ export default function Dashboard() {
             </div>
           </section>
         </div>
+        {/* PAGAMENTOS */}
 
-        {/* ESTOQUE + PAGAMENTOS */}
+        <section style={card}>
+          <div style={cardTitulo}>
+            Formas de pagamento
+          </div>
 
-        <div
-          className="dashboard-grid-2"
-          style={grid2Fallback}
-        >
-          <section style={card}>
-            <div style={cardTitulo}>
-              Atenção ao estoque
+          <div style={cardSubtitulo}>
+            Faturamento por forma de pagamento
+          </div>
+
+          <div style={lista}>
+            {vendasPorPagamento.map(
+              ([pagamento, total]) => {
+                const porcentagem = percentual(
+                  total,
+                  faturamento,
+                )
+
+                return (
+                  <div
+                    key={pagamento}
+                    style={pagamentoItem}
+                  >
+                    <div
+                      className="dashboard-list-row"
+                      style={{
+                        ...listaLinha,
+                        borderBottom: "none",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          minWidth: 0,
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {pagamento}
+                      </strong>
+
+                      <strong
+                        className="dashboard-money dashboard-list-value"
+                        style={{ color: "#171717" }}
+                      >
+                        {moeda(total)}
+                      </strong>
+                    </div>
+
+                    <div style={barraMetaFundo}>
+                      <div
+                        style={{
+                          ...barraMeta,
+                          width: `${porcentagem}%`,
+                        }}
+                      />
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "#777",
+                      }}
+                    >
+                      {porcentagem.toFixed(1)}%
+                    </span>
+                  </div>
+                )
+              },
+            )}
+
+            {vendasPorPagamento.length === 0 && (
+              <div style={vazio}>
+                Nenhuma venda encontrada.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* RELACIONAMENTO COM CLIENTES */}
+
+        <section style={card}>
+          <div style={cardTopoLinha}>
+            <div style={{ minWidth: 0 }}>
+              <div style={cardTitulo}>
+                Relacionamento com clientes
+              </div>
+
+              <div style={cardSubtitulo}>
+                Ações estratégicas para manter a loja próxima das clientes
+              </div>
             </div>
 
-            <div style={cardSubtitulo}>
-              Situação atual das variantes
-            </div>
+            <span style={tagInformativa}>
+              Ações futuras
+            </span>
+          </div>
 
-            <div style={estoqueResumo}>
-              <div style={estoqueItem}>
-                <span style={estoqueNumero}>
-                  {estoqueZerado}
+          <div
+            className="dashboard-grid-3"
+            style={grid3Fallback}
+          >
+            <div style={acaoCard}>
+              <div style={acaoCardTopo}>
+                <span style={acaoNumero}>
+                  {aniversariantesDoMes.length}
                 </span>
 
-                <span style={estoqueLabel}>
-                  Sem estoque
+                <span style={acaoLabel}>
+                  Aniversariantes do mês
                 </span>
               </div>
 
-              <div style={estoqueItem}>
-                <span style={estoqueNumero}>
-                  {estoqueBaixo}
-                </span>
-
-                <span style={estoqueLabel}>
-                  Estoque baixo
-                </span>
-              </div>
-
-              <div style={estoqueItem}>
-                <span
-                  className="dashboard-money"
-                  style={estoqueNumeroPequeno}
-                >
-                  {moeda(valorEstoque)}
-                </span>
-
-                <span style={estoqueLabel}>
-                  Valor em estoque
-                </span>
-              </div>
-            </div>
-
-            <div style={lista}>
-              {variantes
-                .filter(variante => {
-                  const estoque =
-                    numero(
-                      variante.estoqueAtual,
-                    )
-
-                  const minimo =
-                    numero(
-                      variante.estoqueMinimo,
-                    )
-
-                  return (
-                    variante.ativo !== false &&
-                    estoque <= minimo
-                  )
-                })
-                .slice(0, 5)
-                .map(variante => {
-                  const produto =
-                    variante.produtoId
-                      ? produtosMap.get(
-                          variante.produtoId,
-                        )
-                      : undefined
+              <div style={acaoLista}>
+                {aniversariantesDoMes.slice(0, 3).map(cliente => {
+                  const data = cliente.dataNascimento
+                    ? new Date(`${cliente.dataNascimento}T12:00:00`)
+                    : null
 
                   return (
                     <div
-                      key={variante.id}
-                      className="dashboard-list-row"
-                      style={listaLinha}
+                      key={cliente.id}
+                      className="dashboard-action-row" style={acaoLinha}
                     >
-                      <div
-                        className="dashboard-list-main"
-                        style={listaPrincipal}
-                      >
-                        <div
-                          style={{
-                            minWidth: 0,
-                          }}
-                        >
-                          <strong
-                            style={listaTitulo}
-                          >
-                            {produto?.nome ||
-                              variante.sku ||
-                              "Variante"}
-                          </strong>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={listaTitulo}>
+                          {cliente.nome}
+                        </strong>
 
-                          <div
-                            style={listaSubtitulo}
-                          >
-                            {[
-                              variante.cor,
-                              variante.tamanho,
-                            ]
-                              .filter(Boolean)
-                              .join(
-                                " • ",
-                              ) ||
-                              variante.sku ||
-                              "Sem identificação"}
-                          </div>
+                        <div style={listaSubtitulo}>
+                          {data
+                            ? `${String(data.getDate()).padStart(2, "0")}/${String(data.getMonth() + 1).padStart(2, "0")}`
+                            : ""}
                         </div>
                       </div>
 
-                      <strong
-                        style={{
-                          ...listaValor,
-                          fontSize: 14,
-                        }}
+                      <button
+                        type="button"
+                        className="dashboard-action-button" style={botaoAcaoDesabilitado}
+                        disabled
+                        title="Disponível em uma próxima etapa"
                       >
-                        {numero(
-                          variante.estoqueAtual,
-                        )}{" "}
-                        un.
-                      </strong>
+                        Parabenizar
+                      </button>
                     </div>
                   )
                 })}
-            </div>
-          </section>
 
-          <section style={card}>
-            <div style={cardTitulo}>
-              Formas de pagamento
-            </div>
-
-            <div style={cardSubtitulo}>
-              Faturamento por forma de pagamento
+                {aniversariantesDoMes.length === 0 && (
+                  <div style={vazio}>
+                    Nenhum aniversariante cadastrado neste mês.
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div style={lista}>
-              {vendasPorPagamento.map(
-                ([pagamento, total]) => {
-                  const porcentagem =
-                    percentual(
-                      total,
-                      faturamento,
-                    )
+            <div style={acaoCard}>
+              <div style={acaoCardTopo}>
+                <span style={acaoNumero}>
+                  {clientesParaReativar.length}
+                </span>
 
-                  return (
-                    <div
-                      key={pagamento}
-                      style={pagamentoItem}
-                    >
-                      <div
-                        className="dashboard-list-row"
-                        style={{
-                          ...listaLinha,
-                          borderBottom: "none",
-                        }}
-                      >
-                        <strong
-                          style={{
-                            minWidth: 0,
-                            overflowWrap:
-                              "anywhere",
-                          }}
-                        >
-                          {pagamento}
-                        </strong>
+                <span style={acaoLabel}>
+                  Clientes para reativar
+                </span>
+              </div>
 
-                        <strong
-                          className="dashboard-money dashboard-list-value"
-                          style={{
-                            color:
-                              "#171717",
-                          }}
-                        >
-                          {moeda(total)}
-                        </strong>
+              <div style={acaoLista}>
+                {clientesParaReativar.slice(0, 3).map(item => (
+                  <div
+                    key={item.cliente.id}
+                    className="dashboard-action-row" style={acaoLinha}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={listaTitulo}>
+                        {item.cliente.nome}
+                      </strong>
+
+                      <div style={listaSubtitulo}>
+                        {item.ultimaCompra
+                          ? `Última compra: ${formatarDataHora(item.ultimaCompra.toISOString())}`
+                          : "Ainda não possui compra registrada"}
                       </div>
-
-                      <div
-                        style={barraMetaFundo}
-                      >
-                        <div
-                          style={{
-                            ...barraMeta,
-                            width: `${porcentagem}%`,
-                          }}
-                        />
-                      </div>
-
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: "#777",
-                        }}
-                      >
-                        {porcentagem.toFixed(
-                          1,
-                        )}
-                        %
-                      </span>
                     </div>
-                  )
-                },
-              )}
 
-              {vendasPorPagamento.length ===
-                0 && (
-                <div style={vazio}>
-                  Nenhuma venda encontrada.
-                </div>
-              )}
+                    <button
+                      type="button"
+                      className="dashboard-action-button" style={botaoAcaoDesabilitado}
+                      disabled
+                      title="Disponível em uma próxima etapa"
+                    >
+                      Mandar mensagem
+                    </button>
+                  </div>
+                ))}
+
+                {clientesParaReativar.length === 0 && (
+                  <div style={vazio}>
+                    Nenhum cliente precisa de reativação no momento.
+                  </div>
+                )}
+              </div>
             </div>
-          </section>
-        </div>
+
+            <div style={acaoCard}>
+              <div style={acaoCardTopo}>
+                <span style={acaoNumero}>
+                  {clientesComCupom.length}
+                </span>
+
+                <span style={acaoLabel}>
+                  Clientes com benefício
+                </span>
+              </div>
+
+              <div style={acaoLista}>
+                <div className="dashboard-action-row" style={acaoLinha}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={listaTitulo}>
+                      Cupons disponíveis
+                    </strong>
+
+                    <div style={listaSubtitulo}>
+                      Clientes com 10 ou mais pontos
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPopupCupons(true)}
+                    className="dashboard-action-button" style={botaoAcao}
+                  >
+                    Ver clientes
+                  </button>
+                </div>
+
+                <div className="dashboard-action-row" style={acaoLinha}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={listaTitulo}>
+                      Campanha de relacionamento
+                    </strong>
+
+                    <div style={listaSubtitulo}>
+                      Criar campanha para clientes selecionados
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="dashboard-action-button" style={botaoAcaoDesabilitado}
+                    disabled
+                    title="Disponível em uma próxima etapa"
+                  >
+                    Criar campanha
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* FINANCEIRO */}
 
@@ -2141,17 +2368,8 @@ export default function Dashboard() {
             />
 
             <Indicador
-              label="Variantes cadastradas"
-              valor={String(
-                variantes.length,
-              )}
-            />
-
-            <Indicador
               label="Clientes cadastrados"
-              valor={String(
-                clientes.length,
-              )}
+              valor={String(clientes.length)}
             />
 
             <Indicador
@@ -2160,17 +2378,18 @@ export default function Dashboard() {
             />
 
             <Indicador
-              label="Receitas registradas"
-              valor={String(
-                receitas.length,
-              )}
+              label="Aniversariantes do mês"
+              valor={String(aniversariantesDoMes.length)}
             />
 
             <Indicador
-              label="Despesas registradas"
-              valor={String(
-                despesas.length,
-              )}
+              label="Clientes para reativar"
+              valor={String(clientesParaReativar.length)}
+            />
+
+            <Indicador
+              label="Clientes com cupom"
+              valor={String(clientesComCupom.length)}
             />
           </div>
         </section>
@@ -2423,12 +2642,18 @@ const filtroContainer: React.CSSProperties = {
 }
 
 const filtroLabel: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 12,
   color: "#666",
 }
 
+const filtroGrupo: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+}
+
 const select: React.CSSProperties = {
-  minWidth: 150,
+  minWidth: 145,
   maxWidth: "100%",
   padding: "10px 12px",
   border: "1px solid #ddd5c6",
@@ -2436,6 +2661,23 @@ const select: React.CSSProperties = {
   background: "#fff",
   color: "#222",
   outline: "none",
+}
+
+const selectAno: React.CSSProperties = {
+  ...select,
+  minWidth: 105,
+}
+
+const botaoLimparFiltro: React.CSSProperties = {
+  alignSelf: "flex-end",
+  marginBottom: 1,
+  padding: "9px 11px",
+  border: "1px solid #ddd5c6",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#666",
+  cursor: "pointer",
+  fontSize: 12,
 }
 
 const periodoAtual: React.CSSProperties = {
