@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
 type Periodo = "7" | "30" | "90" | "365" | "all"
-type FiltroMes = "all" | string
-type FiltroAno = "all" | string
 
 type Cliente = {
   id: string
@@ -193,29 +191,13 @@ const inicioDoPeriodo = (periodo: Periodo) => {
 const estaNoPeriodo = (
   data: string | null | undefined,
   periodo: Periodo,
-  mesFiltro: FiltroMes = "all",
-  anoFiltro: FiltroAno = "all",
 ) => {
+  if (periodo === "all") return true
   if (!data) return false
 
   const dataObj = new Date(data)
 
   if (Number.isNaN(dataObj.getTime())) return false
-
-  const temFiltroMes = mesFiltro !== "all"
-  const temFiltroAno = anoFiltro !== "all"
-
-  if (temFiltroMes && dataObj.getMonth() + 1 !== Number(mesFiltro)) {
-    return false
-  }
-
-  if (temFiltroAno && dataObj.getFullYear() !== Number(anoFiltro)) {
-    return false
-  }
-
-  if (temFiltroMes || temFiltroAno) return true
-
-  if (periodo === "all") return true
 
   return dataObj >= inicioDoPeriodo(periodo)
 }
@@ -228,8 +210,6 @@ const percentual = (valor: number, total: number) => {
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("30")
-  const [mesFiltro, setMesFiltro] = useState<FiltroMes>("all")
-  const [anoFiltro, setAnoFiltro] = useState<FiltroAno>("all")
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
@@ -386,31 +366,27 @@ export default function Dashboard() {
 
   const comprasPeriodo = useMemo(() => {
     return compras.filter(compra =>
-      estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro),
+      estaNoPeriodo(compra.criadoem, periodo),
     )
-  }, [compras, periodo, mesFiltro, anoFiltro])
+  }, [compras, periodo])
 
   const receitasPeriodo = useMemo(() => {
     return receitas.filter(receita =>
       estaNoPeriodo(
         receita.dataCompetencia,
         periodo,
-        mesFiltro,
-        anoFiltro,
       ),
     )
-  }, [receitas, periodo, mesFiltro, anoFiltro])
+  }, [receitas, periodo])
 
   const despesasPeriodo = useMemo(() => {
     return despesas.filter(despesa =>
       estaNoPeriodo(
         despesa.dataCompetencia,
         periodo,
-        mesFiltro,
-        anoFiltro,
       ),
     )
-  }, [despesas, periodo, mesFiltro, anoFiltro])
+  }, [despesas, periodo])
 
   const faturamento = useMemo(() => {
     return comprasPeriodo
@@ -519,7 +495,7 @@ export default function Dashboard() {
 
       if (
         !compra ||
-        !estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)
+        !estaNoPeriodo(compra.criadoem, periodo)
       ) {
         return total
       }
@@ -532,7 +508,7 @@ export default function Dashboard() {
         numero(item.custoUnitario) * quantidade
       )
     }, 0)
-  }, [vendaItens, compras, periodo, mesFiltro, anoFiltro])
+  }, [vendaItens, compras, periodo])
 
   const lucroBruto =
     faturamento - custoProdutosVendidos
@@ -560,7 +536,7 @@ export default function Dashboard() {
 
       if (
         !compra ||
-        !estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)
+        !estaNoPeriodo(compra.criadoem, periodo)
       ) {
         return
       }
@@ -741,27 +717,6 @@ export default function Dashboard() {
       })
   }, [clientes, inicioMesAtual])
 
-  const anosDisponiveis = useMemo(() => {
-    const anos = new Set<number>()
-
-    const adicionarAno = (data?: string | null) => {
-      if (!data) return
-
-      const objeto = new Date(data)
-      if (!Number.isNaN(objeto.getTime())) {
-        anos.add(objeto.getFullYear())
-      }
-    }
-
-    compras.forEach(compra => adicionarAno(compra.criadoem))
-    receitas.forEach(receita => adicionarAno(receita.dataCompetencia))
-    despesas.forEach(despesa => adicionarAno(despesa.dataCompetencia))
-
-    anos.add(new Date().getFullYear())
-
-    return Array.from(anos).sort((a, b) => b - a)
-  }, [compras, receitas, despesas])
-
   const clientesParaReativar = useMemo(() => {
     const ultimaCompraPorCliente = new Map<string, number>()
 
@@ -883,7 +838,7 @@ export default function Dashboard() {
         return
       }
 
-      if (!estaNoPeriodo(compra.criadoem, periodo, mesFiltro, anoFiltro)) {
+      if (!estaNoPeriodo(compra.criadoem, periodo)) {
         return
       }
 
@@ -907,7 +862,7 @@ export default function Dashboard() {
     })
 
     return Array.from(mapa.entries())
-  }, [compras, periodo, mesFiltro, anoFiltro])
+  }, [compras, periodo])
 
   const movimentacoesRecentes = useMemo(() => {
     const movimentacoes: Array<{
@@ -1043,35 +998,8 @@ export default function Dashboard() {
     meta,
   )
 
-  const periodoLabel = useMemo(() => {
-    const meses = [
-      "Janeiro",
-      "Fevereiro",
-      "Março",
-      "Abril",
-      "Maio",
-      "Junho",
-      "Julho",
-      "Agosto",
-      "Setembro",
-      "Outubro",
-      "Novembro",
-      "Dezembro",
-    ]
-
-    if (mesFiltro !== "all" && anoFiltro !== "all") {
-      return `${meses[Number(mesFiltro) - 1]} de ${anoFiltro}`
-    }
-
-    if (mesFiltro !== "all") {
-      return `${meses[Number(mesFiltro) - 1]} de todos os anos`
-    }
-
-    if (anoFiltro !== "all") {
-      return `Ano de ${anoFiltro}`
-    }
-
-    return periodo === "7"
+  const periodoLabel =
+    periodo === "7"
       ? "Últimos 7 dias"
       : periodo === "30"
         ? "Últimos 30 dias"
@@ -1080,7 +1008,6 @@ export default function Dashboard() {
           : periodo === "365"
             ? "Último ano"
             : "Todos os meses"
-  }, [periodo, mesFiltro, anoFiltro])
 
   function salvarMeta() {
     const valor = numero(novaMeta)
@@ -1268,108 +1195,39 @@ export default function Dashboard() {
           </div>
 
           <div style={filtroContainer}>
-            <div style={filtroGrupo}>
-              <span style={filtroLabel}>
-                Período
-              </span>
+            <span style={filtroLabel}>
+              Período
+            </span>
 
-              <select
-                value={periodo}
-                onChange={e =>
-                  setPeriodo(
-                    e.target.value as Periodo,
-                  )
-                }
-                style={select}
-              >
-                <option value="7">
-                  7 dias
-                </option>
+            <select
+              value={periodo}
+              onChange={e =>
+                setPeriodo(
+                  e.target.value as Periodo,
+                )
+              }
+              style={select}
+            >
+              <option value="7">
+                7 dias
+              </option>
 
-                <option value="30">
-                  30 dias
-                </option>
+              <option value="30">
+                30 dias
+              </option>
 
-                <option value="90">
-                  90 dias
-                </option>
+              <option value="90">
+                90 dias
+              </option>
 
-                <option value="365">
-                  1 ano
-                </option>
+              <option value="365">
+                1 ano
+              </option>
 
-                <option value="all">
-                  Todos
-                </option>
-              </select>
-            </div>
-
-            <div style={filtroGrupo}>
-              <span style={filtroLabel}>
-                Mês
-              </span>
-
-              <select
-                value={mesFiltro}
-                onChange={e =>
-                  setMesFiltro(e.target.value)
-                }
-                style={select}
-              >
-                <option value="all">
-                  Todos os meses
-                </option>
-                <option value="1">Janeiro</option>
-                <option value="2">Fevereiro</option>
-                <option value="3">Março</option>
-                <option value="4">Abril</option>
-                <option value="5">Maio</option>
-                <option value="6">Junho</option>
-                <option value="7">Julho</option>
-                <option value="8">Agosto</option>
-                <option value="9">Setembro</option>
-                <option value="10">Outubro</option>
-                <option value="11">Novembro</option>
-                <option value="12">Dezembro</option>
-              </select>
-            </div>
-
-            <div style={filtroGrupo}>
-              <span style={filtroLabel}>
-                Ano
-              </span>
-
-              <select
-                value={anoFiltro}
-                onChange={e =>
-                  setAnoFiltro(e.target.value)
-                }
-                style={selectAno}
-              >
-                <option value="all">
-                  Todos
-                </option>
-
-                {anosDisponiveis.map(ano => (
-                  <option key={ano} value={ano}>
-                    {ano}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {(mesFiltro !== "all" || anoFiltro !== "all") && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMesFiltro("all")
-                  setAnoFiltro("all")
-                }}
-                style={botaoLimparFiltro}
-              >
-                Limpar mês/ano
-              </button>
-            )}
+              <option value="all">
+                Todos os meses
+              </option>
+            </select>
           </div>
         </div>
 
@@ -2642,18 +2500,12 @@ const filtroContainer: React.CSSProperties = {
 }
 
 const filtroLabel: React.CSSProperties = {
-  fontSize: 12,
+  fontSize: 13,
   color: "#666",
 }
 
-const filtroGrupo: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 5,
-}
-
 const select: React.CSSProperties = {
-  minWidth: 145,
+  minWidth: 150,
   maxWidth: "100%",
   padding: "10px 12px",
   border: "1px solid #ddd5c6",
@@ -2661,23 +2513,6 @@ const select: React.CSSProperties = {
   background: "#fff",
   color: "#222",
   outline: "none",
-}
-
-const selectAno: React.CSSProperties = {
-  ...select,
-  minWidth: 105,
-}
-
-const botaoLimparFiltro: React.CSSProperties = {
-  alignSelf: "flex-end",
-  marginBottom: 1,
-  padding: "9px 11px",
-  border: "1px solid #ddd5c6",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#666",
-  cursor: "pointer",
-  fontSize: 12,
 }
 
 const periodoAtual: React.CSSProperties = {
@@ -3007,6 +2842,84 @@ const vazio: React.CSSProperties = {
   textAlign: "center",
   color: "#888",
   fontSize: 13,
+}
+
+const acaoCard: React.CSSProperties = {
+  minWidth: 0,
+  padding: 16,
+  borderRadius: 10,
+  border: "1px solid #eee6d8",
+  background: "#fdfbf6",
+}
+
+const acaoCardTopo: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  marginBottom: 10,
+}
+
+const acaoNumero: React.CSSProperties = {
+  fontSize: 26,
+  lineHeight: 1,
+  fontWeight: 700,
+  color: "#222",
+}
+
+const acaoLabel: React.CSSProperties = {
+  fontSize: 12,
+  color: "#777",
+}
+
+const acaoLista: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  minWidth: 0,
+}
+
+const acaoLinha: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "11px 0",
+  borderBottom: "1px solid #eee9df",
+  minWidth: 0,
+}
+
+const botaoAcao: React.CSSProperties = {
+  flex: "0 0 auto",
+  padding: "7px 10px",
+  border: "1px solid #d5c08b",
+  borderRadius: 7,
+  background: "#fffaf0",
+  color: "#735b15",
+  cursor: "pointer",
+  fontSize: 12,
+  whiteSpace: "nowrap",
+}
+
+const botaoAcaoDesabilitado: React.CSSProperties = {
+  flex: "0 0 auto",
+  padding: "7px 10px",
+  border: "1px solid #e2ddd2",
+  borderRadius: 7,
+  background: "#f4f2ed",
+  color: "#999",
+  cursor: "not-allowed",
+  fontSize: 12,
+  whiteSpace: "nowrap",
+}
+
+const tagInformativa: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "5px 8px",
+  borderRadius: 20,
+  background: "#f5efdf",
+  color: "#806b32",
+  fontSize: 10,
+  fontWeight: 600,
 }
 
 const pagamentoItem: React.CSSProperties = {
