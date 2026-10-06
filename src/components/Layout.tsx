@@ -205,12 +205,14 @@ export default function Layout({ children, setPage }: Props) {
           collapsed={!menuOpen}
         />
 
-        <NavItem
-          label="Estoque"
-          active={active === "produtos"}
-          onClick={() => nav("produtos")}
-          collapsed={!menuOpen}
-        />
+        {/* 
+<NavItem
+  label="Estoque"
+  active={active === "produtos"}
+  onClick={() => nav("produtos")}
+  collapsed={!menuOpen}
+/>
+*/}
 
         <NavItem
           label="Financeiro"
