@@ -596,7 +596,7 @@ ${comprasCliente.length
       <div className="clientes-header" style={styles.header}>
         <h1 className="clientes-header-title" style={styles.title}>Clientes</h1>
         <button className="clientes-header-button" style={styles.primaryBtn} onClick={() => { setCreating(true); setNovo({}) }}>
-          + Novo cliente
+          Novo cliente
         </button>
       </div>
 
