@@ -89,8 +89,14 @@ export default function Compras({
   const [buscaVenda, setBuscaVenda] =
     useState("")
 
-  const [filtroAno, setFiltroAno] = useState("todos")
-  const [filtroMes, setFiltroMes] = useState("todos")
+ // Ao abrir a página, exibe o mês e o ano atuais.
+const [filtroAno, setFiltroAno] = useState(
+  String(new Date().getFullYear())
+)
+
+const [filtroMes, setFiltroMes] = useState(
+  String(new Date().getMonth() + 1).padStart(2, "0")
+)
 
   const [filtroPagamento, setFiltroPagamento] =
     useState("todos")
@@ -784,15 +790,19 @@ export default function Compras({
    */
 
   const anosDisponiveis = useMemo(() => {
-    const anos = new Set<string>()
-    compras.forEach(compra => {
-      const data = new Date(compra.criadoem)
-      if (!Number.isNaN(data.getTime())) {
-        anos.add(String(data.getFullYear()))
-      }
-    })
-    return Array.from(anos).sort((a, b) => b.localeCompare(a))
-  }, [compras])
+  const anoAtual = String(new Date().getFullYear())
+  const anos = new Set<string>([anoAtual])
+
+  compras.forEach(compra => {
+    const data = new Date(compra.criadoem)
+
+    if (!Number.isNaN(data.getTime())) {
+      anos.add(String(data.getFullYear()))
+    }
+  })
+
+  return Array.from(anos).sort((a, b) => b.localeCompare(a))
+}, [compras])
 
   const mesesDisponiveis = [
     { valor: "01", nome: "Janeiro" },
