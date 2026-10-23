@@ -263,7 +263,7 @@ export default function Financeiro() {
   const despesasPagas = useMemo(() => despesas.filter(d => d.status === "PAGA" && dentroDoPeriodo(d.dataPagamento || d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const despesasPendentes = useMemo(() => despesas.filter(d => d.status === "PENDENTE" && dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const totalDespesas = useMemo(() => despesasPagas.reduce((t, d) => t + d.valor, 0), [despesasPagas])
-  const totalDespesasPendentes = useMemo(() => despesasPendentes.reduce((t, d) => t + d.valor, 0), [despesasPendentes])
+ 
 
   const custoProdutosVendidos = useMemo(() => {
     const ids = new Set(vendasPeriodo.map(c => c.id))
@@ -634,7 +634,6 @@ const sectionTitle={marginTop:0,marginBottom:16,fontSize:17}
 const sectionTitleNoMargin={margin:0,fontSize:18}
 const resumoLinha={display:"flex",justifyContent:"space-between",alignItems:"center",gap:15,padding:"13px 0",borderBottom:"1px solid #eee",fontSize:14}
 const resumoLinhaDestaque={color:"#80691f",fontSize:15,fontWeight:700}
-const indicator={display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0",borderBottom:"1px solid #eee",fontSize:13}
 const statusBadge={display:"inline-block",padding:"5px 8px",borderRadius:7,fontSize:10,fontWeight:600,whiteSpace:"nowrap" as const}
 const statusRecebido={background:"#edf5e7",color:"#66834e"}
 const statusPendente={background:"#fff6d6",color:"#9b7b2f"}
