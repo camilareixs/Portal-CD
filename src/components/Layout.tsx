@@ -16,7 +16,20 @@ type Props = {
 }
 
 export default function Layout({ children, setPage }: Props) {
-  const [active, setActive] = useState<Page>("clientes")
+  const [active, setActive] = useState<Page>("dashboard")
+
+  function sair() {
+    localStorage.removeItem("camiduda_auth")
+    localStorage.removeItem("camiduda_user")
+    localStorage.removeItem("camiduda_perfil")
+
+    window.location.reload()
+  }
+
+const perfil =
+  localStorage.getItem("camiduda_perfil") || ""
+
+const isAdm = perfil === "ADM"
   const [menuOpen, setMenuOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -42,14 +55,35 @@ export default function Layout({ children, setPage }: Props) {
     }
   }, [])
 
-  function nav(p: Page) {
-    setActive(p)
-    setPage(p)
+useEffect(() => {
+  function sincronizarPagina() {
+    // Mantém o menu coerente com a página selecionada
+    const paginaAtual =
+      document.querySelector("[data-pagina-atual]")
 
-    if (isMobile) {
-      setMenuOpen(false)
+    if (paginaAtual) {
+      return
     }
   }
+
+  sincronizarPagina()
+}, [])
+
+ function nav(p: Page) {
+  if (
+    !isAdm &&
+    (p === "dashboard" || p === "financeiro")
+  ) {
+    return
+  }
+
+  setActive(p)
+  setPage(p)
+
+  if (isMobile) {
+    setMenuOpen(false)
+  }
+}
 
   return (
     <div style={layout}>
@@ -177,12 +211,7 @@ export default function Layout({ children, setPage }: Props) {
 
         <div style={divider} />
 
-        <NavItem
-          label="Dashboard"
-          active={active === "dashboard"}
-          onClick={() => nav("dashboard")}
-          collapsed={!menuOpen}
-        />
+        
 
         <NavItem
           label="Clientes"
@@ -192,14 +221,14 @@ export default function Layout({ children, setPage }: Props) {
         />
 
         <NavItem
-          label="Compras"
+          label="Vendas"
           active={active === "compra"}
           onClick={() => nav("compra")}
           collapsed={!menuOpen}
         />
 
         <NavItem
-          label="Troca de Pontos"
+          label="Histórico Vale Compras"
           active={active === "troca"}
           onClick={() => nav("troca")}
           collapsed={!menuOpen}
@@ -214,14 +243,69 @@ export default function Layout({ children, setPage }: Props) {
 />
 */}
 
-        <NavItem
-          label="Financeiro"
-          active={active === "financeiro"}
-          onClick={() => nav("financeiro")}
-          collapsed={!menuOpen}
-        />
+{isAdm && (
+  <NavItem
+    label="Dashboard"
+    active={active === "dashboard"}
+    onClick={() => nav("dashboard")}
+    collapsed={!menuOpen}
+  />
+)}
+
+        {isAdm && (
+  <NavItem
+    label="Financeiro"
+    active={active === "financeiro"}
+    onClick={() => nav("financeiro")}
+    collapsed={!menuOpen}
+  />
+)}
+
+<div style={{
+  height: 1,
+  background: "linear-gradient(90deg, transparent, #e7d39b, transparent)",
+  margin: "16px 24px 12px"
+}} />
+
+<button
+  onClick={sair}
+  title={!menuOpen ? "Sair" : undefined}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: menuOpen ? "flex-start" : "center",
+    gap: 13,
+    width: "calc(100% - 20px)",
+   margin: "8px 10px 16px",
+padding: menuOpen ? "11px 26px" : "11px 0",
+    border: "none",
+    borderRadius: 10,
+    background: "transparent",
+    color: "#8a766c",
+    fontSize: 14,
+    fontWeight: 500,
+    textAlign: "left",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    boxSizing: "border-box"
+  }}
+  onMouseEnter={e => {
+    e.currentTarget.style.background = "#f8eeeb"
+    e.currentTarget.style.color = "#a45c54"
+  }}
+  onMouseLeave={e => {
+    e.currentTarget.style.background = "transparent"
+    e.currentTarget.style.color = "#8a766c"
+  }}
+>
+  <span style={{ fontSize: 18, lineHeight: 1 }}>↪</span>
+  {menuOpen && <span>Sair</span>}
+</button>
+
 
       </aside>
+
+     
 
       {/* CONTEÚDO */}
       <main
@@ -292,9 +376,7 @@ function NavItem({
           ? 600
           : 500,
 
-        boxShadow: active
-          ? "0 4px 12px rgba(216,191,122,0.12)"
-          : "none"
+        boxShadow: "none"
       }}
     >
       {collapsed ? (
@@ -332,7 +414,7 @@ const sidebar = {
   minHeight: "100vh",
   background: "#fffdfa",
   borderRight: "1px solid #efe3bf",
-  paddingTop: 46,
+  paddingTop: 28,
   display: "flex",
   flexDirection: "column" as const,
   boxShadow: "4px 0 18px rgba(216,191,122,0.08)",
@@ -362,20 +444,20 @@ const divider = {
   height: 1,
   background:
     "linear-gradient(90deg, transparent, #e7d39b, transparent)",
-  margin: "0 24px 26px"
+  margin: "0 24px 18px"
 }
 
 const navBtn = {
-  padding: "16px 36px",
+  padding: "13px 28px",
   border: "none",
   background: "transparent",
   textAlign: "left" as const,
-  fontSize: 15,
+  fontSize: 14,
   cursor: "pointer",
-  transition: "all 0.25s ease",
-  marginBottom: 8,
-  borderRadius: "0 14px 14px 0",
-  width: "100%",
+  transition: "all 0.2s ease",
+  margin: "3px 10px",
+  borderRadius: 9,
+  width: "calc(100% - 20px)",
   boxSizing: "border-box" as const
 }
 
@@ -396,7 +478,7 @@ const content = {
   minWidth: 0,
   width: "100%",
   padding: "50px 70px",
-  background: "#f6f6f7",
+  background: "#faf9f6",
   boxSizing: "border-box" as const
 }
 

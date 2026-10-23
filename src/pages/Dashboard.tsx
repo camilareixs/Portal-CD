@@ -9,6 +9,7 @@ type Cliente = {
   cpf?: string | null
   pontos?: number | null
   dataNascimento?: string | null
+  celular?: string | null
 }
 
 type Compra = {
@@ -227,6 +228,9 @@ export default function Dashboard() {
   const [novaMeta, setNovaMeta] = useState("10000")
 
   const [popupCupons, setPopupCupons] = useState(false)
+  const [mensagemAniversario, setMensagemAniversario] = useState(
+    "Olá, {nome}! A equipe Cami&Duda deseja um feliz aniversário, com muita saúde, alegria e um novo ciclo cheio de coisas boas. Esperamos te ver em breve!"
+  )
 
   useEffect(() => {
     carregarDados()
@@ -248,7 +252,7 @@ export default function Dashboard() {
       ] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id,nome,cpf,pontos,dataNascimento"),
+          .select("id,nome,cpf,pontos,dataNascimento,celular"),
 
         supabase
           .from("compras")
@@ -769,100 +773,39 @@ export default function Dashboard() {
   }, [clientes, compras])
 
 
-  const vendasUltimos7Dias = useMemo(() => {
-    const mapa = new Map<string, number>()
+  const vendasPorMes = useMemo(() => {
+    const mapa = new Map<string, { rotulo: string; total: number; ordem: number }>()
+    const agora = new Date()
 
-    for (let i = 6; i >= 0; i--) {
-      const data = new Date()
-
-      data.setHours(0, 0, 0, 0)
-      data.setDate(data.getDate() - i)
-
-      const chave = data
-        .toISOString()
-        .slice(0, 10)
-
-      mapa.set(chave, 0)
+    // Sempre exibe os seis meses mais recentes, inclusive meses sem vendas.
+    for (let i = 5; i >= 0; i--) {
+      const data = new Date(agora.getFullYear(), agora.getMonth() - i, 1)
+      const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`
+      const rotulo = data.toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
+      mapa.set(chave, { rotulo, total: 0, ordem: data.getTime() })
     }
 
     compras.forEach(compra => {
       const status = normalizarTexto(compra.status)
-
-      if (
-        status === "cancelada" ||
-        status === "cancelado"
-      ) {
-        return
-      }
+      if (status === "cancelada" || status === "cancelado") return
+      if (!compra.criadoem) return
 
       const data = new Date(compra.criadoem)
-
       if (Number.isNaN(data.getTime())) return
-
-      const chave = data
-        .toISOString()
-        .slice(0, 10)
-
-      if (mapa.has(chave)) {
-        mapa.set(
-          chave,
-          (mapa.get(chave) ?? 0) +
-            numero(compra.valor),
-        )
-      }
+      const chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`
+      const mes = mapa.get(chave)
+      if (mes) mes.total += numero(compra.valor)
     })
 
-    return Array.from(mapa.entries()).map(
-      ([data, total]) => ({
-        data,
-        total,
-      }),
-    )
+    return Array.from(mapa.entries()).map(([chave, item]) => ({
+      chave,
+      mes: item.rotulo,
+      total: item.total,
+      ordem: item.ordem,
+    }))
   }, [compras])
 
-  const maiorVendaDia = Math.max(
-    ...vendasUltimos7Dias.map(venda => venda.total),
-    0,
-  )
-
-  const vendasPorMes = useMemo(() => {
-    const mapa = new Map<string, number>()
-
-    compras.forEach(compra => {
-      const status = normalizarTexto(compra.status)
-
-      if (
-        status === "cancelada" ||
-        status === "cancelado"
-      ) {
-        return
-      }
-
-      if (!estaNoPeriodo(compra.criadoem, periodo)) {
-        return
-      }
-
-      const data = new Date(compra.criadoem)
-
-      if (Number.isNaN(data.getTime())) return
-
-      const chave = data.toLocaleDateString(
-        "pt-BR",
-        {
-          month: "short",
-          year: "numeric",
-        },
-      )
-
-      mapa.set(
-        chave,
-        (mapa.get(chave) ?? 0) +
-          numero(compra.valor),
-      )
-    })
-
-    return Array.from(mapa.entries())
-  }, [compras, periodo])
+  const maiorVendaMes = Math.max(...vendasPorMes.map(mes => mes.total), 0)
 
   const movimentacoesRecentes = useMemo(() => {
     const movimentacoes: Array<{
@@ -1019,6 +962,16 @@ export default function Dashboard() {
     setEditandoMeta(false)
   }
 
+  // Auxiliares legados mantidos para evitar mudanças desnecessárias no restante do módulo.
+  void [
+    totalReceitasRecebidas, margemBruta, margemLiquida,
+    produtoMaisVendido, produtoMaisFaturado, vendasPorPagamento,
+    movimentacoesRecentes, alertas, ResumoFinanceiro, Indicador,
+    destaqueCard, destaqueLabel, destaqueTitulo, destaqueNumero,
+    destaqueNumeroGrande, destaqueValor, botaoAcaoDesabilitado,
+    tagInformativa, pagamentoItem, alertaItem, mesesGrid, mesCard, mesValor,
+  ]
+
   if (carregando) {
     return (
       <div style={pagina}>
@@ -1045,14 +998,51 @@ export default function Dashboard() {
 
           .dashboard-kpis {
             display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: clamp(8px, 1.2vw, 14px);
+            width: 100%;
+            min-width: 0;
+          }
+
+          .dashboard-kpis > .dashboard-card {
+            min-width: 0;
+            max-width: 100%;
+            padding: clamp(9px, 1.2vw, 17px);
+          }
+
+          .dashboard-kpis > .dashboard-card > span,
+          .dashboard-kpis > .dashboard-card > strong {
+            display: block;
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: normal;
+          }
+
+          .dashboard-kpis > .dashboard-card > span:first-child {
+            font-size: clamp(10px, 0.9vw, 12px);
+            line-height: 1.35;
+          }
+
+          .dashboard-kpis > .dashboard-card > strong {
+            font-size: clamp(12px, 1.35vw, 25px) !important;
+            line-height: 1.2;
+            letter-spacing: -0.03em;
+          }
+
+          .dashboard-kpis > .dashboard-card > span:last-child {
+            font-size: clamp(9px, 0.8vw, 11px);
+            line-height: 1.4;
           }
 
           .dashboard-grid-2 {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
+          }
+
+          .dashboard-sales-grid {
+            grid-template-columns: minmax(0, 1.65fr) minmax(230px, 0.75fr);
           }
 
           .dashboard-grid-3 {
@@ -1122,6 +1112,10 @@ export default function Dashboard() {
             .dashboard-kpis {
               grid-template-columns: repeat(3, minmax(0, 1fr));
             }
+
+            .dashboard-kpis > .dashboard-card > strong {
+              font-size: clamp(15px, 1.8vw, 23px) !important;
+            }
           }
 
           @media (max-width: 900px) {
@@ -1129,8 +1123,13 @@ export default function Dashboard() {
               grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
+            .dashboard-kpis > .dashboard-card > strong {
+              font-size: clamp(14px, 2.5vw, 21px) !important;
+            }
+
             .dashboard-grid-2,
-            .dashboard-grid-3 {
+            .dashboard-grid-3,
+            .dashboard-sales-grid {
               grid-template-columns: 1fr;
             }
 
@@ -1141,7 +1140,25 @@ export default function Dashboard() {
 
           @media (max-width: 600px) {
             .dashboard-kpis {
-              grid-template-columns: 1fr;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 8px;
+            }
+
+            .dashboard-kpis > .dashboard-card {
+              padding: 10px;
+            }
+
+            .dashboard-kpis > .dashboard-card > strong {
+              font-size: clamp(12px, 3.5vw, 18px) !important;
+              letter-spacing: -0.04em;
+            }
+
+            .dashboard-kpis > .dashboard-card > span:first-child {
+              font-size: 10px;
+            }
+
+            .dashboard-kpis > .dashboard-card > span:last-child {
+              font-size: 9px;
             }
 
             .dashboard-months {
@@ -1154,6 +1171,20 @@ export default function Dashboard() {
 
             .dashboard-list-value {
               max-width: 45%;
+            }
+          }
+
+          @media (max-width: 360px) {
+            .dashboard-kpis {
+              gap: 6px;
+            }
+
+            .dashboard-kpis > .dashboard-card {
+              padding: 8px;
+            }
+
+            .dashboard-kpis > .dashboard-card > strong {
+              font-size: 12px !important;
             }
           }
 
@@ -1186,7 +1217,7 @@ export default function Dashboard() {
         <div style={cabecalho}>
           <div style={cabecalhoTexto}>
             <div style={titulo}>
-              Dashboard
+              Dashboard - Fazer levantamento do que deseja
             </div>
 
             <div style={subtitulo}>
@@ -1248,17 +1279,6 @@ export default function Dashboard() {
           className="dashboard-kpis"
           style={kpisFallback}
         >
-          <Kpi
-            label="Faturamento"
-            value={moeda(faturamento)}
-            detalhe={`${pedidos} pedido(s)`}
-          />
-
-          <Kpi
-            label="Resultado líquido"
-            value={moeda(resultadoLiquido)}
-            detalhe={`${margemLiquida.toFixed(1)}% de margem`}
-          />
 
           <Kpi
             label="Pedidos"
@@ -1279,114 +1299,53 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* VENDAS + META */}
+        {/* VENDAS MENSAIS + META */}
 
         <div
-          className="dashboard-grid-2"
+          className="dashboard-grid-2 dashboard-sales-grid"
           style={grid2Fallback}
         >
           <section style={card}>
-            <div style={cardTitulo}>
-              Vendas dos últimos 7 dias
-            </div>
-
-            <div style={cardSubtitulo}>
-              Evolução diária do faturamento
-            </div>
+            <div style={cardTitulo}>Vendas dos últimos 6 meses</div>
+            <div style={cardSubtitulo}>Acompanhe a evolução do faturamento mês a mês</div>
 
             <div className="dashboard-chart-scroll">
-              <div
-                className="dashboard-chart"
-                style={grafico}
-              >
-                {vendasUltimos7Dias.map(
-                  (venda) => {
-                    const altura =
-                      maiorVendaDia > 0
-                        ? Math.max(
-                            8,
-                            (venda.total /
-                              maiorVendaDia) *
-                              150,
-                          )
-                        : 8
+              <div className="dashboard-chart" style={{ ...grafico, minWidth: 0, gap: 12 }}>
+                {vendasPorMes.map(venda => {
+                  const altura = maiorVendaMes > 0
+                    ? Math.max(venda.total > 0 ? 8 : 3, (venda.total / maiorVendaMes) * 145)
+                    : 3
 
-                    const data = new Date(
-                      `${venda.data}T12:00:00`,
-                    )
-
-                    return (
+                  return (
+                    <div key={venda.chave} style={barraColuna}>
+                      <span style={barraValor}>{venda.total > 0 ? moeda(venda.total) : "R$ 0"}</span>
                       <div
-                        key={venda.data}
-                        style={barraColuna}
-                      >
-                        <div
-                          style={{
-                            ...barra,
-                            height: `${altura}px`,
-                          }}
-                          title={moeda(
-                            venda.total,
-                          )}
-                        />
-
-                        <span
-                          style={barraValor}
-                        >
-                          {venda.total > 0
-                            ? moeda(
-                                venda.total,
-                              ).replace(
-                                "R$",
-                                "",
-                              )
-                            : "0"}
-                        </span>
-
-                        <span
-                          style={barraData}
-                        >
-                          {data.toLocaleDateString(
-                            "pt-BR",
-                            {
-                              weekday:
-                                "short",
-                            },
-                          ).replace(
-                            ".",
-                            "",
-                          )}
-                        </span>
-                      </div>
-                    )
-                  },
-                )}
+                        style={{
+                          ...barra,
+                          height: `${altura}px`,
+                          background: venda.total > 0 ? "#c9a227" : "#e9e4d8",
+                          opacity: venda.total > 0 ? 1 : 0.75,
+                        }}
+                        title={`${venda.mes}: ${moeda(venda.total)}`}
+                      />
+                      <span style={barraData}>{venda.mes}</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </section>
 
-          <section style={card}>
+          <section style={{ ...card, padding: 16 }}>
             <div style={cardTopoLinha}>
-              <div
-                style={{
-                  minWidth: 0,
-                }}
-              >
-                <div style={cardTitulo}>
-                  Meta de faturamento
-                </div>
-
-                <div style={cardSubtitulo}>
-                  Acompanhamento do período
-                </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={cardTitulo}>Meta de faturamento</div>
+                <div style={cardSubtitulo}>Meta do período selecionado</div>
               </div>
-
               <button
                 type="button"
                 onClick={() => {
-                  setNovaMeta(
-                    String(meta),
-                  )
+                  setNovaMeta(String(meta))
                   setEditandoMeta(true)
                 }}
                 style={botaoPequeno}
@@ -1395,860 +1354,175 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div style={metaValor}>
-              <strong className="dashboard-money">
+            <div style={{ ...metaValor, margin: "8px 0 10px", display: "block" }}>
+              <strong className="dashboard-money" style={{ display: "block", fontSize: 22, color: "#222" }}>
                 {moeda(faturamento)}
               </strong>
-
-              <span>
-                de {moeda(meta)}
-              </span>
+              <span>de {moeda(meta)}</span>
             </div>
 
             <div style={barraMetaFundo}>
-              <div
-                style={{
-                  ...barraMeta,
-                  width: `${progressoMeta}%`,
-                }}
-              />
+              <div style={{ ...barraMeta, width: `${progressoMeta}%` }} />
             </div>
 
             <div style={metaRodape}>
-              <span>
-                {progressoMeta.toFixed(0)}%
-              </span>
-
-              <span className="dashboard-money">
-                Falta{" "}
-                {moeda(
-                  Math.max(
-                    0,
-                    meta - faturamento,
-                  ),
-                )}
-              </span>
+              <span>{progressoMeta.toFixed(0)}%</span>
+              <span className="dashboard-money">Falta {moeda(Math.max(0, meta - faturamento))}</span>
             </div>
 
             {editandoMeta && (
               <div style={metaEdicao}>
                 <input
                   value={novaMeta}
-                  onChange={e =>
-                    setNovaMeta(
-                      e.target.value,
-                    )
-                  }
+                  onChange={e => setNovaMeta(e.target.value)}
                   style={input}
                   placeholder="Meta em R$"
                 />
-
                 <div style={botoesLinha}>
-                  <button
-                    type="button"
-                    onClick={salvarMeta}
-                    style={botaoPrincipal}
-                  >
-                    Salvar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditandoMeta(false)
-                    }
-                    style={botaoSecundario}
-                  >
-                    Cancelar
-                  </button>
+                  <button type="button" onClick={salvarMeta} style={botaoPrincipal}>Salvar</button>
+                  <button type="button" onClick={() => setEditandoMeta(false)} style={botaoSecundario}>Cancelar</button>
                 </div>
               </div>
             )}
           </section>
         </div>
 
-        {/* PRODUTOS */}
-
-        <section style={card}>
-          <div style={cardTitulo}>
-            Produtos
-          </div>
-
-          <div style={cardSubtitulo}>
-            O que está movimentando as vendas
-          </div>
-
-          <div
-            className="dashboard-grid-3"
-            style={grid3Fallback}
-          >
-            <div style={destaqueCard}>
-              <span style={destaqueLabel}>
-                Produto mais vendido
-              </span>
-
-              <strong style={destaqueTitulo}>
-                {produtoMaisVendido?.nome ||
-                  "Nenhuma venda"}
-              </strong>
-
-              {produtoMaisVendido && (
-                <>
-                  <span style={destaqueNumero}>
-                    {produtoMaisVendido.quantidade}{" "}
-                    unidade(s)
-                  </span>
-
-                  <span
-                    className="dashboard-money"
-                    style={destaqueValor}
-                  >
-                    {moeda(
-                      produtoMaisVendido.faturamento,
-                    )}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div style={destaqueCard}>
-              <span style={destaqueLabel}>
-                Produto que mais faturou
-              </span>
-
-              <strong style={destaqueTitulo}>
-                {produtoMaisFaturado?.nome ||
-                  "Nenhuma venda"}
-              </strong>
-
-              {produtoMaisFaturado && (
-                <>
-                  <span style={destaqueNumero}>
-                    {produtoMaisFaturado.quantidade}{" "}
-                    unidade(s)
-                  </span>
-
-                  <span
-                    className="dashboard-money"
-                    style={destaqueValor}
-                  >
-                    {moeda(
-                      produtoMaisFaturado.faturamento,
-                    )}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div style={destaqueCard}>
-              <span style={destaqueLabel}>
-                Margem bruta
-              </span>
-
-              <strong style={destaqueNumeroGrande}>
-                {margemBruta.toFixed(1)}%
-              </strong>
-
-              <span style={destaqueNumero}>
-                Lucro bruto{" "}
-                <span className="dashboard-money">
-                  {moeda(lucroBruto)}
-                </span>
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* TOP PRODUTOS + CLIENTES */}
-
-        <div
-          className="dashboard-grid-2"
-          style={grid2Fallback}
-        >
-          <section style={card}>
-            <div style={cardTitulo}>
-              Top 5 produtos
-            </div>
-
-            <div style={cardSubtitulo}>
-              Produtos mais vendidos no período
-            </div>
-
-            <div
-              className="dashboard-list"
-              style={lista}
-            >
-              {vendasPorProduto
-                .slice(0, 5)
-                .map(
-                  (produto, index) => (
-                    <div
-                      key={`${produto.nome}-${index}`}
-                      className="dashboard-list-row"
-                      style={listaLinha}
-                    >
-                      <div
-                        className="dashboard-list-main"
-                        style={listaPrincipal}
-                      >
-                        <span style={ranking}>
-                          {index + 1}
-                        </span>
-
-                        <div
-                          style={{
-                            minWidth: 0,
-                          }}
-                        >
-                          <strong
-                            style={listaTitulo}
-                          >
-                            {produto.nome}
-                          </strong>
-
-                          <div
-                            style={listaSubtitulo}
-                          >
-                            {produto.quantidade}{" "}
-                            unidade(s)
-                          </div>
-                        </div>
-                      </div>
-
-                      <strong
-                        className="dashboard-list-value dashboard-money"
-                        style={listaValor}
-                      >
-                        {moeda(
-                          produto.faturamento,
-                        )}
-                      </strong>
-                    </div>
-                  ),
-                )}
-
-              {vendasPorProduto.length ===
-                0 && (
-                <div style={vazio}>
-                  Nenhuma venda encontrada.
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section style={card}>
-            <div style={cardTopoLinha}>
-              <div
-                style={{
-                  minWidth: 0,
-                }}
-              >
-                <div style={cardTitulo}>
-                  Principais clientes
-                </div>
-
-                <div style={cardSubtitulo}>
-                  Clientes por valor comprado
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setPopupCupons(true)
-                }
-                style={botaoPequeno}
-              >
-                {clientesComCupom.length} com cupom
-              </button>
-            </div>
-
-            <div
-              className="dashboard-list"
-              style={lista}
-            >
-              {topClientes.map(
-                (item, index) => (
-                  <div
-                    key={item.cliente.id}
-                    className="dashboard-list-row"
-                    style={listaLinha}
-                  >
-                    <div
-                      className="dashboard-list-main"
-                      style={listaPrincipal}
-                    >
-                      <span style={ranking}>
-                        {index + 1}
-                      </span>
-
-                      <div
-                        style={{
-                          minWidth: 0,
-                        }}
-                      >
-                        <strong
-                          style={listaTitulo}
-                        >
-                          {item.cliente.nome}
-                        </strong>
-
-                        <div
-                          style={listaSubtitulo}
-                        >
-                          {item.compras} compra(s)
-                        </div>
-                      </div>
-                    </div>
-
-                    <strong
-                      className="dashboard-list-value dashboard-money"
-                      style={listaValor}
-                    >
-                      {moeda(item.total)}
-                    </strong>
-                  </div>
-                ),
-              )}
-
-              {topClientes.length === 0 && (
-                <div style={vazio}>
-                  Nenhum cliente encontrado.
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-        {/* PAGAMENTOS */}
-
-        <section style={card}>
-          <div style={cardTitulo}>
-            Formas de pagamento
-          </div>
-
-          <div style={cardSubtitulo}>
-            Faturamento por forma de pagamento
-          </div>
-
-          <div style={lista}>
-            {vendasPorPagamento.map(
-              ([pagamento, total]) => {
-                const porcentagem = percentual(
-                  total,
-                  faturamento,
-                )
-
-                return (
-                  <div
-                    key={pagamento}
-                    style={pagamentoItem}
-                  >
-                    <div
-                      className="dashboard-list-row"
-                      style={{
-                        ...listaLinha,
-                        borderBottom: "none",
-                      }}
-                    >
-                      <strong
-                        style={{
-                          minWidth: 0,
-                          overflowWrap: "anywhere",
-                        }}
-                      >
-                        {pagamento}
-                      </strong>
-
-                      <strong
-                        className="dashboard-money dashboard-list-value"
-                        style={{ color: "#171717" }}
-                      >
-                        {moeda(total)}
-                      </strong>
-                    </div>
-
-                    <div style={barraMetaFundo}>
-                      <div
-                        style={{
-                          ...barraMeta,
-                          width: `${porcentagem}%`,
-                        }}
-                      />
-                    </div>
-
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "#777",
-                      }}
-                    >
-                      {porcentagem.toFixed(1)}%
-                    </span>
-                  </div>
-                )
-              },
-            )}
-
-            {vendasPorPagamento.length === 0 && (
-              <div style={vazio}>
-                Nenhuma venda encontrada.
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* RELACIONAMENTO COM CLIENTES */}
+        {/* PRINCIPAIS CLIENTES */}
 
         <section style={card}>
           <div style={cardTopoLinha}>
             <div style={{ minWidth: 0 }}>
-              <div style={cardTitulo}>
-                Relacionamento com clientes
-              </div>
-
-              <div style={cardSubtitulo}>
-                Ações estratégicas para manter a loja próxima das clientes
-              </div>
+              <div style={cardTitulo}>Principais clientes</div>
+              <div style={cardSubtitulo}>Clientes por valor comprado no período</div>
             </div>
-
-            <span style={tagInformativa}>
-              Ações futuras
-            </span>
+            <button type="button" onClick={() => setPopupCupons(true)} style={botaoPequeno}>
+              {clientesComCupom.length} com cupom
+            </button>
           </div>
 
-          <div
-            className="dashboard-grid-3"
-            style={grid3Fallback}
-          >
+          <div className="dashboard-list" style={lista}>
+            {topClientes.map((item, index) => (
+              <div key={item.cliente.id} className="dashboard-list-row" style={listaLinha}>
+                <div className="dashboard-list-main" style={listaPrincipal}>
+                  <span style={ranking}>{index + 1}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={listaTitulo}>{item.cliente.nome}</strong>
+                    <div style={listaSubtitulo}>{item.compras} compra(s)</div>
+                  </div>
+                </div>
+                <strong className="dashboard-list-value dashboard-money" style={listaValor}>
+                  {moeda(item.total)}
+                </strong>
+              </div>
+            ))}
+            {topClientes.length === 0 && <div style={vazio}>Nenhum cliente encontrado.</div>}
+          </div>
+        </section>
+
+        {/* ATALHOS DO DIA A DIA */}
+
+        <section style={card}>
+          <div style={cardTitulo}>Facilitadores do dia a dia</div>
+          <div style={cardSubtitulo}>Ações rápidas para cuidar das clientes e agilizar a rotina da loja</div>
+
+          <div className="dashboard-grid-3" style={grid3Fallback}>
             <div style={acaoCard}>
               <div style={acaoCardTopo}>
-                <span style={acaoNumero}>
-                  {aniversariantesDoMes.length}
-                </span>
-
-                <span style={acaoLabel}>
-                  Aniversariantes do mês
-                </span>
+                <span style={acaoNumero}>{aniversariantesDoMes.length}</span>
+                <span style={acaoLabel}>Aniversariantes do mês</span>
               </div>
-
-              <div style={acaoLista}>
-                {aniversariantesDoMes.slice(0, 3).map(cliente => {
-                  const data = cliente.dataNascimento
-                    ? new Date(`${cliente.dataNascimento}T12:00:00`)
-                    : null
-
+              <label style={{ ...listaSubtitulo, display: "block", margin: "12px 0 6px" }}>
+                Mensagem personalizável (use {"{nome}"} para inserir o nome)
+              </label>
+              <textarea
+                value={mensagemAniversario}
+                onChange={e => setMensagemAniversario(e.target.value)}
+                rows={4}
+                style={{ ...input, maxWidth: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.45 }}
+              />
+              <div style={{ ...acaoLista, marginTop: 12 }}>
+                {aniversariantesDoMes.slice(0, 5).map(cliente => {
+                  const data = cliente.dataNascimento ? new Date(`${cliente.dataNascimento}T12:00:00`) : null
                   return (
-                    <div
-                      key={cliente.id}
-                      className="dashboard-action-row" style={acaoLinha}
-                    >
+                    <div key={cliente.id} className="dashboard-action-row" style={acaoLinha}>
                       <div style={{ minWidth: 0 }}>
-                        <strong style={listaTitulo}>
-                          {cliente.nome}
-                        </strong>
-
+                        <strong style={listaTitulo}>{cliente.nome}</strong>
                         <div style={listaSubtitulo}>
-                          {data
-                            ? `${String(data.getDate()).padStart(2, "0")}/${String(data.getMonth() + 1).padStart(2, "0")}`
-                            : ""}
+                          {data ? `${String(data.getDate()).padStart(2, "0")}/${String(data.getMonth() + 1).padStart(2, "0")}` : ""}
                         </div>
                       </div>
-
                       <button
                         type="button"
-                        className="dashboard-action-button" style={botaoAcaoDesabilitado}
-                        disabled
-                        title="Disponível em uma próxima etapa"
+                        className="dashboard-action-button"
+                        style={botaoAcao}
+                        onClick={() => {
+                          const telefone = String(cliente.celular ?? "").replace(/\D/g, "")
+                          if (!telefone) {
+                            alert(`Cadastre o celular de ${cliente.nome} para abrir o WhatsApp.`)
+                            return
+                          }
+                          const mensagem = mensagemAniversario.replaceAll("{nome}", cliente.nome)
+                          const telefoneComPais = telefone.startsWith("55") ? telefone : `55${telefone}`
+                          window.open(`https://wa.me/${telefoneComPais}?text=${encodeURIComponent(mensagem)}`, "_blank", "noopener,noreferrer")
+                        }}
                       >
-                        Parabenizar
+                        WhatsApp
                       </button>
                     </div>
                   )
                 })}
-
-                {aniversariantesDoMes.length === 0 && (
-                  <div style={vazio}>
-                    Nenhum aniversariante cadastrado neste mês.
-                  </div>
-                )}
+                {aniversariantesDoMes.length === 0 && <div style={vazio}>Nenhum aniversariante cadastrado neste mês.</div>}
               </div>
             </div>
 
             <div style={acaoCard}>
               <div style={acaoCardTopo}>
-                <span style={acaoNumero}>
-                  {clientesParaReativar.length}
-                </span>
-
-                <span style={acaoLabel}>
-                  Clientes para reativar
-                </span>
+                <span style={acaoNumero}>{clientesParaReativar.length}</span>
+                <span style={acaoLabel}>Clientes para reativar</span>
               </div>
-
+              <div style={cardSubtitulo}>Retome o contato com quem está há um tempo sem comprar.</div>
               <div style={acaoLista}>
-                {clientesParaReativar.slice(0, 3).map(item => (
-                  <div
-                    key={item.cliente.id}
-                    className="dashboard-action-row" style={acaoLinha}
-                  >
+                {clientesParaReativar.slice(0, 5).map(item => (
+                  <div key={item.cliente.id} className="dashboard-action-row" style={acaoLinha}>
                     <div style={{ minWidth: 0 }}>
-                      <strong style={listaTitulo}>
-                        {item.cliente.nome}
-                      </strong>
-
+                      <strong style={listaTitulo}>{item.cliente.nome}</strong>
                       <div style={listaSubtitulo}>
-                        {item.ultimaCompra
-                          ? `Última compra: ${formatarDataHora(item.ultimaCompra.toISOString())}`
-                          : "Ainda não possui compra registrada"}
+                        {item.ultimaCompra ? `Última compra: ${formatarDataHora(item.ultimaCompra.toISOString())}` : "Ainda não possui compra registrada"}
                       </div>
                     </div>
-
                     <button
                       type="button"
-                      className="dashboard-action-button" style={botaoAcaoDesabilitado}
-                      disabled
-                      title="Disponível em uma próxima etapa"
+                      className="dashboard-action-button"
+                      style={botaoAcao}
+                      onClick={() => {
+                        const telefone = String(item.cliente.celular ?? "").replace(/\D/g, "")
+                        if (!telefone) {
+                          alert(`Cadastre o celular de ${item.cliente.nome} para abrir o WhatsApp.`)
+                          return
+                        }
+                        const mensagem = `Olá, ${item.cliente.nome}! Tudo bem? Faz um tempinho que não nos vemos por aqui na Cami&Duda. Temos novidades que acho que você vai gostar. Será muito bom te receber novamente!`
+                        const telefoneComPais = telefone.startsWith("55") ? telefone : `55${telefone}`
+                        window.open(`https://wa.me/${telefoneComPais}?text=${encodeURIComponent(mensagem)}`, "_blank", "noopener,noreferrer")
+                      }}
                     >
-                      Mandar mensagem
+                      Chamar
                     </button>
                   </div>
                 ))}
-
-                {clientesParaReativar.length === 0 && (
-                  <div style={vazio}>
-                    Nenhum cliente precisa de reativação no momento.
-                  </div>
-                )}
+                {clientesParaReativar.length === 0 && <div style={vazio}>Nenhuma cliente precisa de reativação no momento.</div>}
               </div>
             </div>
 
             <div style={acaoCard}>
               <div style={acaoCardTopo}>
-                <span style={acaoNumero}>
-                  {clientesComCupom.length}
-                </span>
-
-                <span style={acaoLabel}>
-                  Clientes com benefício
-                </span>
+                <span style={acaoNumero}>{clientesComCupom.length}</span>
+                <span style={acaoLabel}>Clientes com cupom</span>
               </div>
-
-              <div style={acaoLista}>
-                <div className="dashboard-action-row" style={acaoLinha}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={listaTitulo}>
-                      Cupons disponíveis
-                    </strong>
-
-                    <div style={listaSubtitulo}>
-                      Clientes com 10 ou mais pontos
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setPopupCupons(true)}
-                    className="dashboard-action-button" style={botaoAcao}
-                  >
-                    Ver clientes
-                  </button>
-                </div>
-
-                <div className="dashboard-action-row" style={acaoLinha}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={listaTitulo}>
-                      Campanha de relacionamento
-                    </strong>
-
-                    <div style={listaSubtitulo}>
-                      Criar campanha para clientes selecionados
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="dashboard-action-button" style={botaoAcaoDesabilitado}
-                    disabled
-                    title="Disponível em uma próxima etapa"
-                  >
-                    Criar campanha
-                  </button>
-                </div>
-              </div>
+              <div style={cardSubtitulo}>Encontre rapidamente quem já pode usar o benefício de fidelidade.</div>
+              <button type="button" onClick={() => setPopupCupons(true)} className="dashboard-action-button" style={botaoAcao}>
+                Ver clientes com cupom
+              </button>
             </div>
-          </div>
-        </section>
-
-        {/* FINANCEIRO */}
-
-        <section style={card}>
-          <div style={cardTitulo}>
-            Resumo financeiro
-          </div>
-
-          <div style={cardSubtitulo}>
-            Visão rápida do período selecionado
-          </div>
-
-          <div
-            className="dashboard-grid-3"
-            style={grid3Fallback}
-          >
-            <ResumoFinanceiro
-              label="Receitas recebidas"
-              valor={totalReceitasRecebidas}
-            />
-
-            <ResumoFinanceiro
-              label="Receitas pendentes"
-              valor={totalReceitasPendentes}
-            />
-
-            <ResumoFinanceiro
-              label="Despesas pagas"
-              valor={totalDespesasPagas}
-            />
-
-            <ResumoFinanceiro
-              label="Despesas pendentes"
-              valor={totalDespesasPendentes}
-            />
-
-            <ResumoFinanceiro
-              label="Custo dos produtos"
-              valor={custoProdutosVendidos}
-            />
-
-            <ResumoFinanceiro
-              label="Resultado líquido"
-              valor={resultadoLiquido}
-              destaque
-            />
-          </div>
-        </section>
-
-        {/* ALERTAS + MOVIMENTAÇÕES */}
-
-        <div
-          className="dashboard-grid-2"
-          style={grid2Fallback}
-        >
-          <section style={card}>
-            <div style={cardTitulo}>
-              Alertas
-            </div>
-
-            <div style={cardSubtitulo}>
-              Pontos que merecem atenção
-            </div>
-
-            <div style={lista}>
-              {alertas.map(
-                (alerta, index) => (
-                  <div
-                    key={`${alerta.titulo}-${index}`}
-                    style={alertaItem}
-                  >
-                    <strong
-                      style={{
-                        display: "block",
-                        fontSize: 14,
-                        marginBottom: 4,
-                        color: "#222",
-                      }}
-                    >
-                      {alerta.titulo}
-                    </strong>
-
-                    <span
-                      style={{
-                        display: "block",
-                        color: "#666",
-                        fontSize: 13,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {alerta.texto}
-                    </span>
-                  </div>
-                ),
-              )}
-
-              {alertas.length === 0 && (
-                <div style={vazio}>
-                  Nenhum alerta no momento.
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section style={card}>
-            <div style={cardTitulo}>
-              Últimas movimentações
-            </div>
-
-            <div style={cardSubtitulo}>
-              Atividades mais recentes
-            </div>
-
-            <div
-              className="dashboard-list"
-              style={lista}
-            >
-              {movimentacoesRecentes.map(
-                movimento => (
-                  <div
-                    key={movimento.id}
-                    className="dashboard-list-row"
-                    style={listaLinha}
-                  >
-                    <div
-                      className="dashboard-list-main"
-                      style={listaPrincipal}
-                    >
-                      <strong
-                        style={listaTitulo}
-                      >
-                        {movimento.descricao}
-                      </strong>
-
-                      <div
-                        style={listaSubtitulo}
-                      >
-                        {formatarDataHora(
-                          movimento.data,
-                        )}
-                      </div>
-                    </div>
-
-                    <strong
-                      className="dashboard-list-value dashboard-money"
-                      style={{
-                        ...listaValor,
-                        color:
-                          movimento.tipo ===
-                          "despesa"
-                            ? "#a33"
-                            : "#222",
-                      }}
-                    >
-                      {movimento.tipo ===
-                      "despesa"
-                        ? "- "
-                        : "+ "}
-                      {moeda(
-                        movimento.valor,
-                      )}
-                    </strong>
-                  </div>
-                ),
-              )}
-
-              {movimentacoesRecentes.length ===
-                0 && (
-                <div style={vazio}>
-                  Nenhuma movimentação encontrada.
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-
-        {/* VENDAS POR MÊS */}
-
-        <section style={card}>
-          <div style={cardTitulo}>
-            Vendas por mês
-          </div>
-
-          <div style={cardSubtitulo}>
-            Faturamento mensal considerando o filtro
-            selecionado
-          </div>
-
-          <div
-            className="dashboard-months"
-            style={mesesGrid}
-          >
-            {vendasPorMes.map(
-              ([mes, total]) => (
-                <div
-                  key={mes}
-                  style={mesCard}
-                >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: "#777",
-                      textTransform:
-                        "capitalize",
-                    }}
-                  >
-                    {mes}
-                  </span>
-
-                  <strong
-                    className="dashboard-money"
-                    style={mesValor}
-                  >
-                    {moeda(total)}
-                  </strong>
-                </div>
-              ),
-            )}
-
-            {vendasPorMes.length === 0 && (
-              <div style={vazio}>
-                Nenhuma venda encontrada.
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* RESUMO OPERACIONAL */}
-
-        <section style={card}>
-          <div style={cardTitulo}>
-            Resumo operacional
-          </div>
-
-          <div style={cardSubtitulo}>
-            Indicadores principais da operação
-          </div>
-
-          <div
-            className="dashboard-grid-3"
-            style={grid3Fallback}
-          >
-            <Indicador
-              label="Produtos cadastrados"
-              valor={String(produtos.length)}
-            />
-
-            <Indicador
-              label="Clientes cadastrados"
-              valor={String(clientes.length)}
-            />
-
-            <Indicador
-              label="Vendas registradas"
-              valor={String(compras.length)}
-            />
-
-            <Indicador
-              label="Aniversariantes do mês"
-              valor={String(aniversariantesDoMes.length)}
-            />
-
-            <Indicador
-              label="Clientes para reativar"
-              valor={String(clientesParaReativar.length)}
-            />
-
-            <Indicador
-              label="Clientes com cupom"
-              valor={String(clientesComCupom.length)}
-            />
           </div>
         </section>
 

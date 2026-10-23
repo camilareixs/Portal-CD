@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react"
 import Layout from "./components/Layout"
 import Dashboard from "./pages/Dashboard"
@@ -28,19 +29,51 @@ function App() {
   const [logado, setLogado] =
     useState(false)
 
+  const [perfil, setPerfil] =
+    useState("")
+
   const [carregando, setCarregando] =
     useState(true)
 
   const [compraSelecionada, setCompraSelecionada] =
     useState<CompraSelecionada>(null)
 
+  const isAdm = perfil === "ADM"
+
   useEffect(() => {
     const auth =
       localStorage.getItem("camiduda_auth")
 
+    const perfilSalvo =
+      localStorage.getItem("camiduda_perfil") || ""
+
     setLogado(auth === "true")
+    setPerfil(perfilSalvo)
+
+    // Funcionário não começa no Dashboard
+    if (
+      auth === "true" &&
+      perfilSalvo !== "ADM"
+    ) {
+      setPage("clientes")
+    }
+
     setCarregando(false)
   }, [])
+
+  function navegar(pagina: Page) {
+    // Restringe Dashboard e Financeiro a ADM
+    if (
+      !isAdm &&
+      (pagina === "dashboard" ||
+        pagina === "financeiro")
+    ) {
+      setPage("clientes")
+      return
+    }
+
+    setPage(pagina)
+  }
 
   function irParaCompra(
     clienteid: string,
@@ -55,6 +88,17 @@ function App() {
   }
 
   function renderPage() {
+    // Proteção adicional ao renderizar a página
+    if (
+      !isAdm &&
+      (page === "dashboard" ||
+        page === "financeiro")
+    ) {
+      return (
+        <Clientes irParaCompra={irParaCompra} />
+      )
+    }
+
     switch (page) {
       case "dashboard":
         return <Dashboard />
@@ -83,7 +127,9 @@ function App() {
         return <Financeiro />
 
       default:
-        return <Dashboard />
+        return (
+          <Clientes irParaCompra={irParaCompra} />
+        )
     }
   }
 
@@ -96,7 +142,7 @@ function App() {
   }
 
   return (
-    <Layout setPage={setPage}>
+    <Layout setPage={navegar}>
       {renderPage()}
     </Layout>
   )

@@ -162,7 +162,6 @@ export default function Financeiro() {
   const [aba, setAba] = useState<"resumo" | "receitas" | "despesas" | "fiado">("resumo")
   const [filtroMes, setFiltroMes] = useState("todos")
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()))
-  const [busca, setBusca] = useState("")
   const [filtroStatus] = useState("todos")
   const [periodoPersonalizado, setPeriodoPersonalizado] = useState(false)
   const [dataInicio, setDataInicio] = useState(inicioDoMesAtual())
@@ -274,11 +273,24 @@ export default function Financeiro() {
   const lucroBruto = faturamento - custoProdutosVendidos
   const resultadoOperacional = lucroBruto - totalDespesas
   const resultadoLiquido = resultadoOperacional + totalReceitasExtras
-  const resultadoCaixa = totalRecebido - totalDespesas
+
+  // Saldo acumulado até o dia anterior ao início do período selecionado.
+  // O valor positivo funciona como crédito trazido do mês anterior.
+  const inicioPeriodoISO = periodoPersonalizado
+    ? dataInicio
+    : `${filtroAno === "todos" ? new Date().getFullYear() : filtroAno}-${filtroMes === "todos" ? "01" : filtroMes}-01`
+  const creditoMesAnterior = useMemo(() => {
+    const receitasAnteriores = receitas
+      .filter(r => r.status === "RECEBIDA" && (r.dataRecebimento || r.dataCompetencia) && String(r.dataRecebimento || r.dataCompetencia).slice(0, 10) < inicioPeriodoISO)
+      .reduce((total, r) => total + r.valor, 0)
+    const despesasAnteriores = despesas
+      .filter(d => d.status === "PAGA" && (d.dataPagamento || d.dataCompetencia) && String(d.dataPagamento || d.dataCompetencia).slice(0, 10) < inicioPeriodoISO)
+      .reduce((total, d) => total + d.valor, 0)
+    return receitasAnteriores - despesasAnteriores
+  }, [receitas, despesas, inicioPeriodoISO])
+  const saldoComCreditoAnterior = creditoMesAnterior + totalRecebido - totalDespesas
   const margemBruta = faturamento > 0 ? (lucroBruto / faturamento) * 100 : 0
   const margemLiquida = faturamento > 0 ? (resultadoLiquido / faturamento) * 100 : 0
-  const ticketMedio = vendasPeriodo.length ? faturamento / vendasPeriodo.length : 0
-  const unidadesVendidas = vendaItens.filter(i => new Set(vendasPeriodo.map(c => c.id)).has(i.compraId)).reduce((t, i) => t + i.quantidade, 0)
 
   const fiado = useMemo(() => {
     return compras.filter(c => c.status !== "CANCELADA" && c.pagamento.toLowerCase().includes("em aberto")).map(compra => {
@@ -290,29 +302,13 @@ export default function Financeiro() {
   const totalAReceber = useMemo(() => fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).reduce((t, i) => t + i.pendente, 0), [fiado, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
 
   const receitasFiltradas = useMemo(() => {
-    const termo = busca.toLowerCase().trim()
-    return receitasPeriodo.filter(r => (filtroStatus === "todos" || r.status === filtroStatus) && `${r.descricao} ${r.tipo}`.toLowerCase().includes(termo))
-  }, [receitasPeriodo, busca, filtroStatus])
+    return receitasPeriodo.filter(r => filtroStatus === "todos" || r.status === filtroStatus)
+  }, [receitasPeriodo, filtroStatus])
 
   const despesasFiltradas = useMemo(() => {
-    const termo = busca.toLowerCase().trim()
-    return despesasPeriodo.filter(d => (filtroStatus === "todos" || d.status === filtroStatus) && `${d.descricao} ${d.categoria}`.toLowerCase().includes(termo))
-  }, [despesasPeriodo, busca, filtroStatus])
+    return despesasPeriodo.filter(d => filtroStatus === "todos" || d.status === filtroStatus)
+  }, [despesasPeriodo, filtroStatus])
 
-  const despesasPorCategoria = useMemo(() => {
-    const mapa: Record<string, number> = {}
-    despesasPagas.forEach(d => { mapa[d.categoria] = (mapa[d.categoria] || 0) + d.valor })
-    return Object.entries(mapa).sort((a, b) => b[1] - a[1])
-  }, [despesasPagas])
-
-  const pagamentosPorTipo = useMemo(() => {
-    const mapa: Record<string, number> = {}
-    vendasPeriodo.forEach(v => {
-      const tipo = v.pagamento || "Não informado"
-      mapa[tipo] = (mapa[tipo] || 0) + v.valor
-    })
-    return Object.entries(mapa).sort((a, b) => b[1] - a[1])
-  }, [vendasPeriodo])
 
   const mesesDoAno = useMemo(() => {
     const ano = Number(filtroAno) || new Date().getFullYear()
@@ -328,13 +324,14 @@ export default function Financeiro() {
       alert("Informe descrição e um valor maior que zero.")
       return
     }
+    setCarregando(true)
     const hoje = hojeISO()
     const { error } = await supabase.from("receitas").insert({
       tipo: tipoReceita, descricao: descricaoReceita.trim(), valor: valorReceita,
       dataCompetencia: hoje, dataRecebimento: hoje, status: "RECEBIDA",
       observacao: observacaoReceita.trim() || null
     })
-    if (error) { alert("Erro ao cadastrar receita: " + error.message); return }
+    if (error) { setCarregando(false); alert("Erro ao cadastrar receita: " + error.message); return }
     setModalReceita(false); setDescricaoReceita(""); setValorReceita(0); setTipoReceita("OUTRA_RECEITA"); setObservacaoReceita("")
     await fetchFinanceiro()
   }
@@ -344,12 +341,13 @@ export default function Financeiro() {
       alert("Informe descrição e um valor maior que zero.")
       return
     }
+    setCarregando(true)
     const { error } = await supabase.from("despesas").insert({
       descricao: descricaoDespesa.trim(), valor: valorDespesa, dataCompetencia: dataCompetenciaDespesa,
       dataPagamento: statusDespesa === "PAGA" ? dataPagamentoDespesa : null, recorrente: despesaRecorrente,
       status: statusDespesa, observacao: observacaoDespesa.trim() || null, categoria: categoriaDespesa
     })
-    if (error) { alert("Erro ao cadastrar despesa: " + error.message); return }
+    if (error) { setCarregando(false); alert("Erro ao cadastrar despesa: " + error.message); return }
     setModalDespesa(false); setDescricaoDespesa(""); setValorDespesa(0); setCategoriaDespesa("Outros")
     setDataCompetenciaDespesa(inicioDoMesAtual()); setDataPagamentoDespesa(hojeISO()); setDespesaRecorrente(false); setStatusDespesa("PAGA"); setObservacaoDespesa("")
     await fetchFinanceiro()
@@ -388,39 +386,50 @@ export default function Financeiro() {
   }
 
   function gerarRelatorio() {
-    const periodo = periodoPersonalizado ? `${dataBR(dataInicio)} a ${dataBR(dataFim)}` : `${filtroMes === "todos" ? `Ano ${filtroAno}` : `${meses.find(m => m.value === filtroMes)?.label} de ${filtroAno}`}`
-    const linhasReceitas = receitasRecebidas.map(r => `<tr><td>${dataBR(r.dataRecebimento || r.dataCompetencia)}</td><td>${tipoReceitaLabel(r.tipo)}</td><td>${r.descricao}</td><td class="entrada">${moeda(r.valor)}</td></tr>`).join("")
-    const linhasDespesas = despesasPagas.map(d => `<tr><td>${dataBR(d.dataPagamento || d.dataCompetencia)}</td><td>${d.categoria}</td><td>${d.descricao}</td><td class="saida">${moeda(d.valor)}</td></tr>`).join("")
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Relatório financeiro - Cami&Duda</title>
-    <style>
-    *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#202020;background:#eee;margin:0;padding:30px}
-    .folha{max-width:900px;margin:auto;background:#fff;padding:38px;border:1px solid #ddd}
-    .cab{border:2px solid #222;padding:20px;display:flex;justify-content:space-between;gap:20px}
-    .marca{font-size:25px;font-weight:800;letter-spacing:1px}.sub{color:#666;font-size:12px;margin-top:5px}
-    .titulo{text-align:right}.titulo h1{margin:0;font-size:20px}.titulo div{font-size:12px;margin-top:5px}
-    .faixa{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #222;border-top:0}
-    .kpi{padding:14px;border-right:1px solid #ddd}.kpi:last-child{border-right:0}.kpi small{display:block;color:#666;font-size:10px;text-transform:uppercase}.kpi strong{display:block;font-size:17px;margin-top:5px}
-    h2{font-size:14px;border-bottom:2px solid #222;padding-bottom:7px;margin:25px 0 10px}
-    table{width:100%;border-collapse:collapse;font-size:11px}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}th{background:#f3f3f3;font-size:10px;text-transform:uppercase}td:last-child,th:last-child{text-align:right}.entrada{color:#456d35}.saida{color:#a33}
-    .dre{width:100%;border:1px solid #ddd}.dre div{display:flex;justify-content:space-between;padding:9px 12px;border-bottom:1px solid #eee}.dre .total{font-weight:800;border-top:2px solid #222;border-bottom:0}
-    .rodape{margin-top:30px;padding-top:12px;border-top:1px dashed #999;font-size:10px;color:#666;display:flex;justify-content:space-between}
-    @media print{body{background:#fff;padding:0}.folha{border:0;max-width:none}.no-print{display:none}}
-    @media(max-width:650px){body{padding:8px}.folha{padding:18px}.cab{display:block}.titulo{text-align:left;margin-top:15px}.faixa{grid-template-columns:1fr 1fr}}
-    </style></head><body><main class="folha">
-    <div class="cab"><div><div class="marca">CAMI&DUDA</div><div class="sub">Relatório gerencial financeiro</div></div><div class="titulo"><h1>RELATÓRIO FINANCEIRO</h1><div>Período: ${periodo}</div><div>Emitido em ${dataBR(hojeISO())}</div></div></div>
-    <div class="faixa"><div class="kpi"><small>Faturamento</small><strong>${moeda(faturamento)}</strong></div><div class="kpi"><small>Recebido</small><strong>${moeda(totalRecebido)}</strong></div><div class="kpi"><small>Despesas pagas</small><strong>${moeda(totalDespesas)}</strong></div><div class="kpi"><small>Resultado líquido</small><strong>${moeda(resultadoLiquido)}</strong></div></div>
-    <h2>Demonstrativo do resultado</h2><div class="dre">
-    <div><span>Faturamento</span><strong>${moeda(faturamento)}</strong></div><div><span>(-) Custo dos produtos vendidos</span><strong>${moeda(custoProdutosVendidos)}</strong></div><div><span>Lucro bruto</span><strong>${moeda(lucroBruto)}</strong></div><div><span>(-) Despesas operacionais pagas</span><strong>${moeda(totalDespesas)}</strong></div><div><span>(+) Outras receitas</span><strong>${moeda(totalReceitasExtras)}</strong></div><div class="total"><span>Resultado líquido</span><strong>${moeda(resultadoLiquido)}</strong></div></div>
-    <h2>Indicadores</h2><table><tr><th>Vendas</th><th>Unidades</th><th>Ticket médio</th><th>Margem bruta</th><th>Margem líquida</th><th>A receber</th></tr><tr><td>${vendasPeriodo.length}</td><td>${unidadesVendidas}</td><td>${moeda(ticketMedio)}</td><td>${margemBruta.toFixed(1)}%</td><td>${margemLiquida.toFixed(1)}%</td><td>${moeda(totalAReceber)}</td></tr></table>
-    <h2>Receitas recebidas</h2><table><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr>${linhasReceitas || `<tr><td colspan="4">Nenhuma receita no período.</td></tr>`}</table>
-    <h2>Despesas pagas</h2><table><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th></tr>${linhasDespesas || `<tr><td colspan="4">Nenhuma despesa no período.</td></tr>`}</table>
-    <h2>Resumo de caixa</h2><div class="dre"><div><span>Entradas recebidas</span><strong>${moeda(totalRecebido)}</strong></div><div><span>Saídas pagas</span><strong>${moeda(totalDespesas)}</strong></div><div class="total"><span>Saldo de caixa do período</span><strong>${moeda(resultadoCaixa)}</strong></div></div>
-    <div class="rodape"><span>Cami&Duda • relatório gerencial</span><span>Documento gerencial — não substitui documento fiscal.</span></div>
-    </main><script>window.onload=()=>setTimeout(()=>window.print(),250)</script></body></html>`
-    const janela = window.open("", "_blank", "width=1000,height=800")
-    if (!janela) { alert("O navegador bloqueou a janela do relatório. Permita pop-ups para baixar/imprimir o relatório."); return }
-    janela.document.write(html)
-    janela.document.close()
+    const periodo = periodoPersonalizado
+      ? `${dataBR(dataInicio)} a ${dataBR(dataFim)}`
+      : filtroMes === "todos"
+        ? `Ano ${filtroAno}`
+        : `${meses.find(m => m.value === filtroMes)?.label} de ${filtroAno}`
+
+    const linhas: string[] = [
+      "CAMI&DUDA",
+      "RELATÓRIO FINANCEIRO",
+      `Período: ${periodo}`,
+      `Emitido em: ${dataBR(hojeISO())}`,
+      "",
+      "RESUMO FINANCEIRO",
+      `Faturamento: ${moeda(faturamento)}`,
+      `Total recebido: ${moeda(totalRecebido)}`,
+      `Crédito do mês anterior: ${moeda(creditoMesAnterior)}`,
+      `Despesas pagas: ${moeda(totalDespesas)}`,
+      `Saldo com crédito anterior: ${moeda(saldoComCreditoAnterior)}`,
+      `Resultado líquido: ${moeda(resultadoLiquido)}`,
+      "",
+      "RECEITAS RECEBIDAS",
+      "Data | Tipo | Descrição | Valor",
+      ...(receitasRecebidas.length
+        ? receitasRecebidas.map(r => `${dataBR(r.dataRecebimento || r.dataCompetencia)} | ${tipoReceitaLabel(r.tipo)} | ${r.descricao} | ${moeda(r.valor)}`)
+        : ["Nenhuma receita recebida no período."]),
+      "",
+      "DESPESAS PAGAS",
+      "Data | Categoria | Descrição | Valor",
+      ...(despesasPagas.length
+        ? despesasPagas.map(d => `${dataBR(d.dataPagamento || d.dataCompetencia)} | ${d.categoria} | ${d.descricao} | ${moeda(d.valor)}`)
+        : ["Nenhuma despesa paga no período."]),
+      "",
+      "Documento gerencial da Cami&Duda."
+    ]
+
+    const arquivo = new Blob(["\uFEFF" + linhas.join("\r\n")], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(arquivo)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `relatorio-financeiro-camiduda-${hojeISO()}.txt`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   const periodoTexto = periodoPersonalizado
@@ -436,21 +445,21 @@ export default function Financeiro() {
         .fin-table{width:100%;border-collapse:collapse;min-width:720px}.fin-table th,.fin-table td{padding:12px;border-bottom:1px solid #eee;text-align:left;font-size:13px}.fin-table th{font-size:11px;color:#777;text-transform:uppercase;background:#fafafa}.fin-table .right{text-align:right}
         .fin-scroll{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
         .fin-tabs{display:flex;gap:4px;overflow-x:auto;white-space:nowrap}
-        .fin-input-grid{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px}
+        .fin-input-grid{display:grid;gap:10px}.fin-input-grid-period{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}.fin-input-grid-custom{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
         .fin-breakdown{display:flex;flex-direction:column;gap:10px}.fin-break{display:grid;grid-template-columns:minmax(100px,1fr) minmax(120px,2fr) auto;align-items:center;gap:10px;font-size:12px}.fin-bar{height:8px;background:#eee;border-radius:20px;overflow:hidden}.fin-bar span{display:block;height:100%;background:#d4af37}
-        @media(max-width:1000px){.fin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fin-two,.fin-three{grid-template-columns:1fr}.fin-input-grid{grid-template-columns:1fr 1fr}.fin-input-grid button{grid-column:span 2}}
-        @media(max-width:620px){.fin-grid{grid-template-columns:1fr}.fin-input-grid{grid-template-columns:1fr}.fin-input-grid button{grid-column:auto}.fin-card{padding:15px!important}.fin-title{font-size:25px!important}.fin-header-actions{width:100%}.fin-header-actions button{flex:1}.fin-tabs button{padding:10px 12px!important}.fin-kpi-value{font-size:20px!important}}
+        @media(max-width:1000px){.fin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.fin-two,.fin-three{grid-template-columns:1fr}.fin-input-grid-period,.fin-input-grid-custom{grid-template-columns:1fr 1fr}.fin-input-grid button{grid-column:span 2}}
+        @media(max-width:620px){.fin-grid{grid-template-columns:1fr}.fin-input-grid-period,.fin-input-grid-custom{grid-template-columns:1fr}.fin-input-grid button{grid-column:auto}.fin-card{padding:15px!important}.fin-title{font-size:25px!important}.fin-header-actions{width:100%}.fin-header-actions button{flex:1}.fin-tabs button{padding:10px 12px!important}.fin-kpi-value{font-size:20px!important}}
       `}</style>
 
       <div style={header}>
         <div>
-          <h1 className="fin-title" style={title}>Financeiro</h1>
+          <h1 className="fin-title" style={title}>Financeiro - Fazer levantamento do que deseja</h1>
           <div style={subtitle}>Visão gerencial de vendas, receitas, despesas, caixa e valores a receber.</div>
         </div>
         <div className="fin-header-actions" style={headerButtons}>
-          <button style={btnSecondary} onClick={gerarRelatorio}>Relatório / PDF</button>
-          <button style={btnExpense} onClick={() => setModalDespesa(true)}>+ Nova despesa</button>
-          <button style={btnSmall} onClick={() => setModalReceita(true)}>+ Nova receita</button>
+          <button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button>
+          <button type="button" style={btnSmall} onClick={() => setModalDespesa(true)}>+ Nova despesa</button>
+          <button type="button" style={btnSmall} onClick={() => setModalReceita(true)}>+ Nova receita</button>
         </div>
       </div>
 
@@ -460,21 +469,19 @@ export default function Financeiro() {
           <label style={switchLabel}><input type="checkbox" checked={periodoPersonalizado} onChange={e => setPeriodoPersonalizado(e.target.checked)} /> Período personalizado</label>
         </div>
         {!periodoPersonalizado ? (
-          <div className="fin-input-grid" style={{marginTop:14}}>
+          <div className="fin-input-grid fin-input-grid-period" style={{marginTop:14}}>
             <select style={input} value={filtroMes} onChange={e => setFiltroMes(e.target.value)}>
               <option value="todos">Todos os meses</option>{meses.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
             <select style={input} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
               {anos.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
-            <input style={input} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar movimentação..." />
             <button style={refreshBtn} onClick={fetchFinanceiro} disabled={carregando}>{carregando ? "Atualizando..." : "Atualizar"}</button>
           </div>
         ) : (
-          <div className="fin-input-grid" style={{marginTop:14}}>
+          <div className="fin-input-grid fin-input-grid-custom" style={{marginTop:14}}>
             <div><label style={fieldLabel}>Data inicial</label><input type="date" style={input} value={dataInicio} onChange={e => setDataInicio(e.target.value)} /></div>
             <div><label style={fieldLabel}>Data final</label><input type="date" style={input} value={dataFim} onChange={e => setDataFim(e.target.value)} /></div>
-            <input style={input} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar movimentação..." />
             <button style={refreshBtn} onClick={fetchFinanceiro} disabled={carregando}>{carregando ? "Atualizando..." : "Atualizar"}</button>
           </div>
         )}
@@ -485,10 +492,10 @@ export default function Financeiro() {
         <Kpi label="Recebido" value={moeda(totalRecebido)} detail={`Caixa de entradas`} />
         <Kpi label="A receber" value={moeda(totalAReceber)} detail={`${fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).length} venda(s) em aberto`} />
         <Kpi label="Despesas pagas" value={moeda(totalDespesas)} detail={`${despesasPagas.length} lançamento(s)`} />
-        <Kpi label="CMV" value={moeda(custoProdutosVendidos)} detail="Custo dos produtos vendidos" />
         <Kpi label="Lucro bruto" value={moeda(lucroBruto)} detail={`Margem ${margemBruta.toFixed(1)}%`} />
         <Kpi label="Resultado líquido" value={moeda(resultadoLiquido)} detail={`Margem ${margemLiquida.toFixed(1)}%`} destaque />
-        <Kpi label="Caixa líquido" value={moeda(resultadoCaixa)} detail="Recebido − despesas pagas" />
+        <Kpi label="Crédito do mês anterior" value={moeda(creditoMesAnterior)} detail="Saldo trazido dos períodos anteriores" />
+        <Kpi label="Saldo com crédito anterior" value={moeda(saldoComCreditoAnterior)} detail="Crédito anterior + entradas − despesas" destaque />
       </div>
 
       <div className="fin-tabs" style={tabs}>
@@ -501,43 +508,12 @@ export default function Financeiro() {
         <>
           <div className="fin-two">
             <section className="fin-card" style={section}>
-              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button style={btnSecondary} onClick={gerarRelatorio}>Gerar relatório</button></div>
+              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button></div>
               <ResumoLinha label="Faturamento" valor={moeda(faturamento)} />
-              <ResumoLinha label="(-) Custo dos produtos vendidos" valor={moeda(custoProdutosVendidos)} />
               <ResumoLinha label="Lucro bruto" valor={moeda(lucroBruto)} />
               <ResumoLinha label="(-) Despesas operacionais pagas" valor={moeda(totalDespesas)} />
               <ResumoLinha label="(+) Outras receitas recebidas" valor={moeda(totalReceitasExtras)} />
               <ResumoLinha label="Resultado líquido" valor={moeda(resultadoLiquido)} destaque />
-            </section>
-            <section className="fin-card" style={section}>
-              <h3 style={sectionTitle}>Indicadores do período</h3>
-              <Indicator label="Ticket médio" value={moeda(ticketMedio)} />
-              <Indicator label="Unidades vendidas" value={String(unidadesVendidas)} />
-              <Indicator label="Margem bruta" value={`${margemBruta.toFixed(1)}%`} />
-              <Indicator label="Margem líquida" value={`${margemLiquida.toFixed(1)}%`} />
-              <Indicator label="Despesas pendentes" value={moeda(totalDespesasPendentes)} />
-              <Indicator label="Receitas extras" value={moeda(totalReceitasExtras)} />
-            </section>
-          </div>
-
-          <div className="fin-three" style={{marginTop:16}}>
-            <section className="fin-card" style={section}>
-              <h3 style={sectionTitle}>Despesas por categoria</h3>
-              <div className="fin-breakdown">
-                {despesasPorCategoria.length ? despesasPorCategoria.map(([cat,val]) => <Breakdown key={cat} label={cat} value={val} total={totalDespesas} />) : <div style={emptyText}>Nenhuma despesa paga no período.</div>}
-              </div>
-            </section>
-            <section className="fin-card" style={section}>
-              <h3 style={sectionTitle}>Vendas por pagamento</h3>
-              <div className="fin-breakdown">
-                {pagamentosPorTipo.length ? pagamentosPorTipo.map(([tipo,val]) => <Breakdown key={tipo} label={tipo} value={val} total={faturamento} />) : <div style={emptyText}>Nenhuma venda no período.</div>}
-              </div>
-            </section>
-            <section className="fin-card" style={section}>
-              <h3 style={sectionTitle}>Contas a pagar</h3>
-              <Indicator label="Pendentes" value={moeda(totalDespesasPendentes)} />
-              <Indicator label="Pagas" value={moeda(totalDespesas)} />
-              <Indicator label="Recorrentes pagas" value={moeda(despesasPagas.filter(d => d.recorrente).reduce((t,d)=>t+d.valor,0))} />
             </section>
           </div>
 
@@ -583,7 +559,7 @@ export default function Financeiro() {
         <label style={fieldLabel}>Tipo</label><select style={input} value={tipoReceita} onChange={e=>setTipoReceita(e.target.value as Receita["tipo"])}><option value="OUTRA_RECEITA">Outra receita</option><option value="OUTROS">Outros</option></select>
         <label style={fieldLabel}>Valor</label><input style={input} inputMode="decimal" value={moedaInput(valorReceita)} placeholder="R$ 0,00" onChange={e=>setValorReceita(numeroMoeda(e.target.value))}/>
         <label style={fieldLabel}>Observação</label><textarea style={textarea} placeholder="Opcional" value={observacaoReceita} onChange={e=>setObservacaoReceita(e.target.value)}/>
-        <div style={resumo}>Entrada: <strong>{moeda(valorReceita)}</strong></div><button style={btnPrimary} onClick={criarReceita}>Cadastrar receita</button>
+        <div style={resumo}>Entrada: <strong>{moeda(valorReceita)}</strong></div><button type="button" style={btnPrimary} onClick={criarReceita} disabled={carregando}>Cadastrar receita</button>
       </Modal>}
 
       {modalDespesa && <Modal titulo="Nova despesa" subtitulo="Registre um gasto da operação." onClose={()=>setModalDespesa(false)}>
@@ -595,7 +571,7 @@ export default function Financeiro() {
         {statusDespesa==="PAGA"&&<><label style={fieldLabel}>Data de pagamento</label><input type="date" style={input} value={dataPagamentoDespesa} onChange={e=>setDataPagamentoDespesa(e.target.value)}/></>}
         <label style={checkboxLabel}><input type="checkbox" checked={despesaRecorrente} onChange={e=>setDespesaRecorrente(e.target.checked)}/> Despesa recorrente</label>
         <label style={fieldLabel}>Observação</label><textarea style={textarea} placeholder="Opcional" value={observacaoDespesa} onChange={e=>setObservacaoDespesa(e.target.value)}/>
-        <div style={resumo}>Saída: <strong>{moeda(valorDespesa)}</strong></div><button style={btnExpensePrimary} onClick={criarDespesa}>Cadastrar despesa</button>
+        <div style={resumo}>Saída: <strong>{moeda(valorDespesa)}</strong></div><button type="button" style={btnExpensePrimary} onClick={criarDespesa} disabled={carregando}>Cadastrar despesa</button>
       </Modal>}
 
       {modalFiado&&fiadoSelecionado&&<Modal titulo="Receber fiado" subtitulo={`Venda de ${fiadoSelecionado.compra.cliente||"cliente"}`} onClose={()=>{setModalFiado(false);setFiadoSelecionado(null)}}>
@@ -611,14 +587,6 @@ function Kpi({label,value,detail,destaque=false}:{label:string,value:string,deta
   return <div className="fin-card" style={{...dash,...(destaque?{border:"1px solid #d4af37",background:"#fffdf5"}:{})}}><div style={dashLabel}>{label}</div><strong className="fin-kpi-value" style={dashValue}>{value}</strong><div style={muted}>{detail}</div></div>
 }
 
-function Indicator({label,value}:{label:string,value:string}) {
-  return <div style={indicator}><span>{label}</span><strong>{value}</strong></div>
-}
-
-function Breakdown({label,value,total}:{label:string,value:number,total:number}) {
-  const percentual=total>0?(value/total)*100:0
-  return <div className="fin-break"><span>{label}</span><div className="fin-bar"><span style={{width:`${Math.max(percentual,2)}%`}}/></div><strong>{moeda(value)}</strong></div>
-}
 
 function ResumoLinha({label,valor,destaque=false}:{label:string,valor:string,destaque?:boolean}) {
   return <div style={{...resumoLinha,...(destaque?resumoLinhaDestaque:{})}}><span>{label}</span><strong>{valor}</strong></div>
@@ -644,8 +612,8 @@ const subtitle={marginTop:5,color:"#888",fontSize:13}
 const headerButtons={display:"flex",gap:10,flexWrap:"wrap" as const}
 const btnSmall={padding:"11px 18px",borderRadius:10,border:"none",background:"linear-gradient(90deg,#d4af37,#f6e27a)",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap" as const}
 const btnSecondary={padding:"11px 18px",borderRadius:10,border:"1px solid #eadfbf",background:"#fff",color:"#80691f",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap" as const}
-const btnExpense={padding:"11px 18px",borderRadius:10,border:"1px solid #efcaca",background:"#fff5f5",color:"#c45a5a",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap" as const}
-const btnExpensePrimary={padding:13,width:"100%",marginTop:12,borderRadius:10,border:"none",background:"#c45a5a",color:"#fff",cursor:"pointer",fontWeight:600}
+const btnExpense={...btnSmall}
+const btnExpensePrimary={width:"100%",marginTop:12,padding:13,borderRadius:10,border:"none",background:"linear-gradient(90deg,#d4af37,#f6e27a)",cursor:"pointer",fontWeight:600}
 const dash={background:"#fff",padding:18,borderRadius:14,minWidth:0,overflow:"hidden" as const,border:"1px solid #eeeeee",boxShadow:"0 3px 12px rgba(0,0,0,0.025)",boxSizing:"border-box" as const}
 const dashLabel={color:"#777",fontSize:12,marginBottom:5}
 const dashValue={fontSize:22,display:"block",wordBreak:"break-word" as const}

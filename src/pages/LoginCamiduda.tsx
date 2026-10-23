@@ -135,6 +135,11 @@ export default function LoginCamiduda() {
       data.usuario
     )
 
+    localStorage.setItem(
+  "camiduda_perfil",
+  data.perfil
+)
+
     window.location.reload()
   }
 

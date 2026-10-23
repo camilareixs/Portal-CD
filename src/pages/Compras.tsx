@@ -6,6 +6,9 @@ type Cliente = {
   nome: string
   cpf: string
   pontos: number
+  celular: string
+  creditoDisponivel: number
+  ativo: boolean
 }
 
 type Compra = {
@@ -19,6 +22,9 @@ type Compra = {
   pontosgerados: number
   criadoem: string
   cupomusado: number
+  creditoutilizado: number
+  pontosutilizados: number
+  ativo: boolean
 }
 
 type Props = {
@@ -47,6 +53,21 @@ function moeda(valor: number) {
   })
 }
 
+function normalizarBuscaVenda(texto: string) {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+}
+
+// Retorna a data atual no formato exigido pelo input type="date",
+// respeitando o fuso horário local do computador.
+function dataAtualLocal() {
+  const hoje = new Date()
+  const ano = hoje.getFullYear()
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0")
+  const dia = String(hoje.getDate()).padStart(2, "0")
+
+  return `${ano}-${mes}-${dia}`
+}
+
 export default function Compras({
   compraSelecionada
 }: Props) {
@@ -54,7 +75,6 @@ export default function Compras({
   const [compras, setCompras] = useState<Compra[]>([])
 
   const [modal, setModal] = useState(false)
-  const [modalInativos, setModalInativos] = useState(false)
   const [modalReceita, setModalReceita] = useState(false)
 
   const [clienteSel, setClienteSel] =
@@ -63,11 +83,14 @@ export default function Compras({
   const [buscaCliente, setBuscaCliente] =
     useState("")
 
+  // A nova venda começa com a data de hoje, mas permite lançamento retroativo.
+  const [dataVenda, setDataVenda] = useState(dataAtualLocal())
+
   const [buscaVenda, setBuscaVenda] =
     useState("")
 
-  const [filtroMes, setFiltroMes] =
-    useState("todos")
+  const [filtroAno, setFiltroAno] = useState("todos")
+  const [filtroMes, setFiltroMes] = useState("todos")
 
   const [filtroPagamento, setFiltroPagamento] =
     useState("todos")
@@ -104,7 +127,8 @@ export default function Compras({
   async function fetchClientes() {
     const { data, error } = await supabase
       .from("clientes")
-      .select("id,nome,cpf,pontos")
+      .select("id,nome,cpf,pontos,celular,creditoDisponivel,ativo")
+      .eq("ativo", true)
       .order("nome")
 
     if (error) {
@@ -118,7 +142,10 @@ export default function Compras({
           id: String(c.id),
           nome: c.nome || "",
           cpf: c.cpf || "",
-          pontos: Number(c.pontos || 0)
+          pontos: Number(c.pontos || 0),
+          celular: c.celular || "",
+          creditoDisponivel: Number(c.creditoDisponivel || 0),
+          ativo: c.ativo !== false
         }))
       )
     }
@@ -134,12 +161,13 @@ export default function Compras({
     const { data, error } = await supabase
       .from("compras")
       .select("*")
+      .eq("ativo", true)
       .order("criadoem", {
         ascending: false
       })
 
     if (error) {
-      alert("Erro ao carregar compras: " + error.message)
+      alert("Erro ao carregar vendas: " + error.message)
       return
     }
 
@@ -170,7 +198,15 @@ export default function Compras({
           criadoem: c.criadoem || "",
 
           cupomusado:
-            Number(c.cupomusado || 0)
+            Number(c.cupomusado || 0),
+
+          creditoutilizado:
+            Number(c.creditoutilizado || 0),
+
+          pontosutilizados:
+            Number(c.pontosutilizados || 0),
+
+          ativo: c.ativo !== false
         }))
       )
     }
@@ -220,14 +256,18 @@ export default function Compras({
    * =========================
    */
 
-  const clientesFiltrados =
-    clientes.filter(c =>
-      c.nome
-        .toLowerCase()
-        .includes(
-          buscaCliente.toLowerCase()
-        )
-    )
+  const normalizarBuscaCliente = (valor: string) =>
+    valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+
+  const clientesFiltrados = clientes.filter(c => {
+    const termo = normalizarBuscaCliente(buscaCliente)
+    if (!termo) return true
+    const termoNumerico = termo.replace(/\D/g, "")
+    const camposTexto = [c.nome, c.cpf, c.celular, (c as any).descricao, (c as any).observacao, (c as any).clienteRef]
+    const encontrouTexto = camposTexto.some(campo => normalizarBuscaCliente(String(campo || "")).includes(termo))
+    const encontrouNumero = termoNumerico.length > 0 && [c.cpf, c.celular].some(campo => String(campo || "").replace(/\D/g, "").includes(termoNumerico))
+    return encontrouTexto || encontrouNumero
+  })
 
   /*
    * =========================
@@ -255,11 +295,17 @@ export default function Compras({
         )
       : 0
 
-  const valorRestante =
-    Math.max(
-      valor - valorCupom,
-      0
-    )
+  // O crédito é aplicado automaticamente depois do cupom de fidelidade.
+  // A pontuação continua sendo calculada sobre o valor integral da venda.
+  const creditoDisponivel = Number(clienteSel?.creditoDisponivel || 0)
+
+  const creditoUtilizado = clienteSel
+    ? Math.min(creditoDisponivel, Math.max(valor - valorCupom, 0))
+    : 0
+
+  const valorFinal = Math.max(valor - valorCupom - creditoUtilizado, 0)
+
+  const valorRestante = valorFinal
 
   /*
    * R$ 150,00 = 1 ponto
@@ -286,6 +332,11 @@ export default function Compras({
    */
 
   async function registrarCompra() {
+    if (!dataVenda) {
+      alert("Selecione a data da venda.")
+      return
+    }
+
     if (!clienteSel) {
       alert("Selecione um cliente.")
       return
@@ -316,12 +367,13 @@ export default function Compras({
       return
     }
 
-    const pagamentoFinal =
-      valorCupom > 0
-        ? valorRestante > 0
-          ? `${pagamento} + Cupom`
-          : "Cupom"
-        : pagamento
+    const partesPagamento: string[] = []
+    if (valorFinal > 0) partesPagamento.push(pagamento)
+    if (valorCupom > 0) partesPagamento.push("Cupom")
+    if (creditoUtilizado > 0) partesPagamento.push("Crédito")
+    const pagamentoFinal = partesPagamento.length > 0
+      ? partesPagamento.join(" + ")
+      : pagamento
 
     const novosPontos =
       clienteSel.pontos -
@@ -370,8 +422,14 @@ export default function Compras({
           cupomusado:
             valorCupom,
 
+          creditoutilizado:
+            creditoUtilizado,
+
+          pontosutilizados: pontosUsados,
+          ativo: true,
+
           criadoem:
-            new Date().toISOString()
+            new Date(`${dataVenda}T12:00:00`).toISOString()
         }
       ])
       .select()
@@ -396,8 +454,8 @@ export default function Compras({
     } = await supabase
       .from("clientes")
       .update({
-        pontos:
-          novosPontos
+        pontos: novosPontos,
+        creditoDisponivel: Math.max(creditoDisponivel - creditoUtilizado, 0)
       })
       .eq(
         "id",
@@ -412,11 +470,8 @@ export default function Compras({
        */
       await supabase
         .from("compras")
-        .delete()
-        .eq(
-          "id",
-          compraCriada.id
-        )
+        .update({ ativo: false })
+        .eq("id", compraCriada.id)
 
       alert(
         "Erro ao atualizar os pontos do cliente: " +
@@ -449,7 +504,7 @@ export default function Compras({
 
       if (countError) {
         alert(
-          "Compra salva, mas não foi possível registrar os cupons: " +
+          "Venda salva, mas não foi possível registrar os cupons: " +
             countError.message
         )
       } else {
@@ -486,6 +541,8 @@ export default function Compras({
               status:
                 "Concluído",
 
+              ativo: true,
+
               criadoem:
                 new Date().toISOString()
             })
@@ -507,7 +564,7 @@ export default function Compras({
     }
 
     alert(
-      "Compra registrada com sucesso!"
+      "Venda registrada com sucesso!"
     )
 
     fecharModalCompra()
@@ -570,6 +627,10 @@ export default function Compras({
           cupomusado:
             0,
 
+          creditoutilizado: 0,
+          pontosutilizados: 0,
+          ativo: true,
+
           criadoem:
             new Date().toISOString()
         }
@@ -605,6 +666,8 @@ export default function Compras({
   function fecharModalCompra() {
     setModal(false)
 
+    setDataVenda(dataAtualLocal())
+
     setClienteSel(null)
 
     setValor(0)
@@ -628,50 +691,91 @@ export default function Compras({
 
   async function excluirCompra(compra: Compra) {
     const ehReceita = compra.pagamento === "Receita"
-
     const confirmacao = window.confirm(
       ehReceita
-        ? `Tem certeza que deseja excluir esta receita?\n\nDescrição: ${compra.cliente || "Sem descrição"}\nValor: ${moeda(compra.valor)}\nData: ${new Date(compra.criadoem).toLocaleDateString("pt-BR")}\n\nEssa ação não poderá ser desfeita.`
-        : `Tem certeza que deseja excluir esta venda?\n\nCliente: ${compra.cliente || "Sem cliente"}\nValor: ${moeda(compra.valor)}\nData: ${new Date(compra.criadoem).toLocaleDateString("pt-BR")}\n\nOs pontos gerados serão estornados, os cupons utilizados serão devolvidos e o estoque será ajustado.\n\nEssa ação não poderá ser desfeita.`
+        ? `Deseja inativar esta receita?\n\nDescrição: ${compra.cliente || "Sem descrição"}\nValor: ${moeda(compra.valor)}\n\nO registro será ocultado do aplicativo, mas permanecerá salvo no banco.`
+        : `Deseja inativar esta venda?\n\nCliente: ${compra.cliente || "Sem cliente"}\nValor: ${moeda(compra.valor)}\n\nOs pontos e o crédito usados nesta venda serão devolvidos. O registro será preservado no banco.`
     )
-
     if (!confirmacao) return
 
     setExcluindo(compra.id)
 
-    if (ehReceita) {
+    // Receitas também são apenas inativadas; nunca usamos DELETE.
+    if (ehReceita || !compra.clienteid) {
       const { error } = await supabase
         .from("compras")
-        .delete()
+        .update({ ativo: false })
         .eq("id", compra.id)
 
       if (error) {
-        alert("Erro ao excluir receita: " + error.message)
+        alert("Erro ao inativar registro: " + error.message)
         setExcluindo(null)
         return
       }
 
-      alert("Receita excluída com sucesso!")
       setExcluindo(null)
       await fetchCompras()
+      alert(ehReceita ? "Receita inativada." : "Registro inativado.")
       return
     }
 
-    const { error } = await supabase.rpc("excluirVenda", {
-      p_compraid: compra.id
-    })
+    // Busca os valores atuais para devolver pontos e crédito sem sobrescrever valores antigos.
+    const { data: clienteAtual, error: erroBuscaCliente } = await supabase
+      .from("clientes")
+      .select("id,pontos,creditoDisponivel")
+      .eq("id", compra.clienteid)
+      .maybeSingle()
 
-    if (error) {
-      alert("Erro ao excluir venda: " + error.message)
+    if (erroBuscaCliente || !clienteAtual) {
+      alert("Não foi possível carregar os dados da cliente para estornar a venda." + (erroBuscaCliente ? " " + erroBuscaCliente.message : ""))
       setExcluindo(null)
       return
     }
 
-    alert("Venda excluída com sucesso!")
-    setExcluindo(null)
+    const pontosDevolvidos = Number(compra.pontosutilizados || (compra.cupomusado > 0 ? Math.ceil(compra.cupomusado / VALOR_CUPOM) * PONTOS_POR_CUPOM : 0))
+    const pontosAtualizados = Math.max(0, Number(clienteAtual.pontos || 0) - Number(compra.pontosgerados || 0) + pontosDevolvidos)
+    const creditoAtualizado = Number(clienteAtual.creditoDisponivel || 0) + Number(compra.creditoutilizado || 0)
 
+    const { error: erroInativarVenda } = await supabase
+      .from("compras")
+      .update({ ativo: false })
+      .eq("id", compra.id)
+
+    if (erroInativarVenda) {
+      alert("Erro ao inativar venda: " + erroInativarVenda.message)
+      setExcluindo(null)
+      return
+    }
+
+    const { error: erroEstornoCliente } = await supabase
+      .from("clientes")
+      .update({ pontos: pontosAtualizados, creditoDisponivel: creditoAtualizado })
+      .eq("id", compra.clienteid)
+
+    if (erroEstornoCliente) {
+      // A venda fica ativa novamente se não for possível concluir o estorno do saldo.
+      await supabase.from("compras").update({ ativo: true }).eq("id", compra.id)
+      alert("Não foi possível estornar pontos e crédito: " + erroEstornoCliente.message)
+      setExcluindo(null)
+      return
+    }
+
+    // Preserva os registros de trocas/cupons, apenas marcando-os como inativos.
+    const { error: erroTrocas } = await supabase
+      .from("trocas")
+      .update({ ativo: false })
+      .eq("compraid", compra.id)
+
+    setExcluindo(null)
     await fetchClientes()
     await fetchCompras()
+
+    if (erroTrocas) {
+      alert("Venda inativada e saldos estornados, mas não foi possível inativar os registros de cupons relacionados: " + erroTrocas.message)
+      return
+    }
+
+    alert("Venda inativada. Os pontos e o crédito utilizados foram devolvidos.")
   }
 
   /*
@@ -680,127 +784,59 @@ export default function Compras({
    * =========================
    */
 
-  const comprasFiltradas =
-    useMemo(() => {
-      return compras.filter(
-        compra => {
-          const busca =
-            buscaVenda
-              .toLowerCase()
-              .trim()
-
-          const nomeMatch =
-            compra.cliente
-              .toLowerCase()
-              .includes(busca) ||
-            compra.cpf
-              .toLowerCase()
-              .includes(busca)
-
-          const data =
-            new Date(
-              compra.criadoem
-            )
-
-          const mesCompra =
-            String(
-              data.getMonth() + 1
-            ).padStart(
-              2,
-              "0"
-            )
-
-          const mesMatch =
-            filtroMes ===
-              "todos" ||
-            filtroMes ===
-              mesCompra
-
-          const pagamentoMatch =
-            filtroPagamento ===
-              "todos" ||
-            compra.pagamento
-              .includes(
-                filtroPagamento
-              )
-
-          return (
-            nomeMatch &&
-            mesMatch &&
-            pagamentoMatch
-          )
-        }
-      )
-    }, [
-      compras,
-      buscaVenda,
-      filtroMes,
-      filtroPagamento
-    ])
-
-  /*
-   * =========================
-   * CLIENTES INATIVOS
-   * =========================
-   */
-
-  const hoje = new Date()
-
-  const clientesInativos =
-    clientes.filter(c => {
-      const comprasCliente =
-        compras
-          .filter(
-            x =>
-              x.clienteid ===
-              c.id
-          )
-          .sort(
-            (a, b) =>
-              new Date(
-                b.criadoem
-              ).getTime() -
-              new Date(
-                a.criadoem
-              ).getTime()
-          )
-
-      const ultima =
-        comprasCliente[0]
-
-      if (!ultima) {
-        return true
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set<string>()
+    compras.forEach(compra => {
+      const data = new Date(compra.criadoem)
+      if (!Number.isNaN(data.getTime())) {
+        anos.add(String(data.getFullYear()))
       }
-
-      const dias =
-        (hoje.getTime() -
-          new Date(
-            ultima.criadoem
-          ).getTime()) /
-        86400000
-
-      return dias > 30
     })
+    return Array.from(anos).sort((a, b) => b.localeCompare(a))
+  }, [compras])
 
-  function getUltimaCompra(
-    clienteId: string
-  ) {
-    return compras
-      .filter(
-        c =>
-          c.clienteid ===
-          clienteId
+  const mesesDisponiveis = [
+    { valor: "01", nome: "Janeiro" },
+    { valor: "02", nome: "Fevereiro" },
+    { valor: "03", nome: "Março" },
+    { valor: "04", nome: "Abril" },
+    { valor: "05", nome: "Maio" },
+    { valor: "06", nome: "Junho" },
+    { valor: "07", nome: "Julho" },
+    { valor: "08", nome: "Agosto" },
+    { valor: "09", nome: "Setembro" },
+    { valor: "10", nome: "Outubro" },
+    { valor: "11", nome: "Novembro" },
+    { valor: "12", nome: "Dezembro" }
+  ]
+
+  const comprasFiltradas = useMemo(() => {
+    const termo = normalizarBuscaVenda(buscaVenda)
+    const termoNumerico = buscaVenda.replace(/\D/g, "")
+
+    return compras.filter(compra => {
+      const clienteRelacionado = clientes.find(cliente => cliente.id === compra.clienteid)
+      const camposTexto = [compra.cliente, compra.cpf, clienteRelacionado?.celular, compra.pagamento]
+      const encontrouTexto = !termo || camposTexto.some(campo =>
+        normalizarBuscaVenda(String(campo || "")).includes(termo)
       )
-      .sort(
-        (a, b) =>
-          new Date(
-            b.criadoem
-          ).getTime() -
-          new Date(
-            a.criadoem
-          ).getTime()
-      )[0]
-  }
+      const encontrouNumero = termoNumerico.length > 0 &&
+        String(compra.cpf || "").replace(/\D/g, "").includes(termoNumerico)
+      const buscaMatch = !termo || encontrouTexto || encontrouNumero
+
+      const data = new Date(compra.criadoem)
+      if (Number.isNaN(data.getTime())) return false
+
+      const anoCompra = String(data.getFullYear())
+      const mesCompra = String(data.getMonth() + 1).padStart(2, "0")
+      const anoMatch = filtroAno === "todos" || anoCompra === filtroAno
+      const mesMatch = filtroMes === "todos" || mesCompra === filtroMes
+      const pagamentoMatch = filtroPagamento === "todos" ||
+        normalizarBuscaVenda(compra.pagamento).includes(normalizarBuscaVenda(filtroPagamento))
+
+      return buscaMatch && anoMatch && mesMatch && pagamentoMatch
+    })
+  }, [compras, clientes, buscaVenda, filtroAno, filtroMes, filtroPagamento])
 
   /*
    * =========================
@@ -836,8 +872,14 @@ export default function Compras({
             }
 
             .compra-card {
-              grid-template-columns: 1fr !important;
+              grid-template-columns: minmax(0, 1fr) !important;
+              gap: 12px !important;
+              padding: 14px !important;
             }
+
+            .compra-card > div { min-width: 0; }
+            .compra-card-delete { display: flex !important; width: 100%; justify-content: flex-end !important; }
+            .compra-card-delete button { display: inline-flex !important; align-items: center; justify-content: center; min-width: 42px; min-height: 42px; }
 
             .header-buttons {
               width: 100%;
@@ -851,35 +893,12 @@ export default function Compras({
       </style>
 
       {/* =========================
-          CLIENTES INATIVOS
-      ========================= */}
-
-      {clientesInativos.length > 0 && (
-        <div style={notifBar}>
-          <span>
-            🔔{" "}
-            {clientesInativos.length}{" "}
-            clientes inativos
-          </span>
-
-          <button
-            style={notifBtn}
-            onClick={() =>
-              setModalInativos(true)
-            }
-          >
-            Ver
-          </button>
-        </div>
-      )}
-
-      {/* =========================
           CABEÇALHO
       ========================= */}
 
       <div style={header}>
         <h1 style={title}>
-          Compras
+          Vendas
         </h1>
 
         <div
@@ -887,21 +906,13 @@ export default function Compras({
           style={headerButtons}
         >
           <button
-            style={btnSecondary}
-            onClick={() =>
-              setModalReceita(true)
-            }
-          >
-            Nova receita
-          </button>
-
-          <button
             style={btnSmall}
-            onClick={() =>
+            onClick={() => {
+              setDataVenda(dataAtualLocal())
               setModal(true)
-            }
+            }}
           >
-            Nova compra
+            Nova venda
           </button>
         </div>
       </div>
@@ -960,74 +971,32 @@ export default function Compras({
         <input
           placeholder="Buscar por cliente ou CPF"
           value={buscaVenda}
-          onChange={e =>
-            setBuscaVenda(
-              e.target.value
-            )
-          }
+          onChange={e => setBuscaVenda(e.target.value)}
           style={inputFiltro}
         />
 
         <select
-          value={filtroMes}
-          onChange={e =>
-            setFiltroMes(
-              e.target.value
-            )
-          }
+          value={filtroAno}
+          onChange={e => setFiltroAno(e.target.value)}
           style={selectFiltro}
+          aria-label="Filtrar por ano"
         >
-          <option value="todos">
-            Todos os meses
-          </option>
+          <option value="todos">Todos os anos</option>
+          {anosDisponiveis.map(ano => (
+            <option key={ano} value={ano}>{ano}</option>
+          ))}
+        </select>
 
-          <option value="01">
-            Janeiro
-          </option>
-
-          <option value="02">
-            Fevereiro
-          </option>
-
-          <option value="03">
-            Março
-          </option>
-
-          <option value="04">
-            Abril
-          </option>
-
-          <option value="05">
-            Maio
-          </option>
-
-          <option value="06">
-            Junho
-          </option>
-
-          <option value="07">
-            Julho
-          </option>
-
-          <option value="08">
-            Agosto
-          </option>
-
-          <option value="09">
-            Setembro
-          </option>
-
-          <option value="10">
-            Outubro
-          </option>
-
-          <option value="11">
-            Novembro
-          </option>
-
-          <option value="12">
-            Dezembro
-          </option>
+        <select
+          value={filtroMes}
+          onChange={e => setFiltroMes(e.target.value)}
+          style={selectFiltro}
+          aria-label="Filtrar por mês"
+        >
+          <option value="todos">Todos os meses</option>
+          {mesesDisponiveis.map(mes => (
+            <option key={mes.valor} value={mes.valor}>{mes.nome}</option>
+          ))}
         </select>
 
         <select
@@ -1257,9 +1226,8 @@ export default function Compras({
                 {/* EXCLUIR */}
 
                 <div
-                  style={
-                    deleteContainer
-                  }
+                  className="compra-card-delete"
+                  style={deleteContainer}
                 >
                   <button
                     type="button"
@@ -1275,11 +1243,16 @@ export default function Compras({
                         compra
                       )
                     }
+                    title={excluindo === compra.id ? "Inativando venda" : "Inativar venda"}
+                    aria-label={excluindo === compra.id ? "Inativando venda" : "Inativar venda"}
                   >
-                    {excluindo ===
-                    compra.id
-                      ? "Excluindo..."
-                      : "Excluir"}
+                    {excluindo === compra.id ? (
+                      <span style={{ fontSize: 11 }}>…</span>
+                    ) : (
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1315,7 +1288,7 @@ export default function Compras({
                   margin: 0
                 }}
               >
-                Nova compra
+                Nova venda
               </h2>
 
               <button
@@ -1328,10 +1301,31 @@ export default function Compras({
               </button>
             </div>
 
+            {/* DATA DA VENDA */}
+            <label
+              style={{
+                display: "block",
+                marginBottom: 6,
+                fontWeight: 600
+              }}
+            >
+              Data da venda
+            </label>
+
+            <input
+              type="date"
+              value={dataVenda}
+              onChange={e => setDataVenda(e.target.value)}
+              style={{
+                ...input,
+                marginBottom: 16
+              }}
+            />
+
             {/* BUSCAR CLIENTE */}
 
             <input
-              placeholder="Buscar cliente"
+              placeholder="Buscar por nome, descrição, telefone ou CPF"
               value={
                 buscaCliente
               }
@@ -1357,7 +1351,7 @@ export default function Compras({
                       border:
                         clienteSel?.id ===
                         c.id
-                          ? "2px solid #d4af37"
+                          ? "2px solid #b9974f"
                           : "1px solid #eee"
                     }}
                     onClick={() =>
@@ -1410,15 +1404,11 @@ export default function Compras({
                     }
                   </strong>
 
-                  <span
-                    style={
-                      clientePontos
-                    }
-                  >
-                    {
-                      clienteSel.pontos
-                    }{" "}
-                    pontos
+                  <span style={clientePontos}>
+                    {clienteSel.pontos} pontos
+                  </span>
+                  <span style={creditoTag}>
+                    Crédito: {moeda(clienteSel.creditoDisponivel)}
                   </span>
                 </div>
 
@@ -1643,6 +1633,9 @@ export default function Compras({
                   <option value="Em aberto">
                     Em aberto (Fiado)
                   </option>
+                  <option value="N/A">
+                    N/A
+                  </option>
                 </select>
 
                 {/* PARCELAS */}
@@ -1713,30 +1706,28 @@ export default function Compras({
                   }
                 >
                   <div>
-                    Valor da compra:{" "}
-                    <strong>
-                      {moeda(
-                        valor
-                      )}
-                    </strong>
+                    Valor da venda: {" "}
+                    <strong>{moeda(valor)}</strong>
                   </div>
 
                   <div>
-                    Cupom usado:{" "}
-                    <strong>
-                      {moeda(
-                        valorCupom
-                      )}
-                    </strong>
+                    Cupom utilizado: {" "}
+                    <strong>{moeda(valorCupom)}</strong>
                   </div>
 
                   <div>
-                    Valor a pagar:{" "}
-                    <strong>
-                      {moeda(
-                        valorRestante
-                      )}
-                    </strong>
+                    Crédito disponível: {" "}
+                    <strong>{moeda(creditoDisponivel)}</strong>
+                  </div>
+
+                  <div>
+                    Crédito utilizado: {" "}
+                    <strong>{moeda(creditoUtilizado)}</strong>
+                  </div>
+
+                  <div style={{ borderTop: "1px solid #e7dcc0", paddingTop: 8, marginTop: 4 }}>
+                    Valor final: {" "}
+                    <strong>{moeda(valorFinal)}</strong>
                   </div>
 
                   <div>
@@ -1918,89 +1909,7 @@ export default function Compras({
         </div>
       )}
 
-      {/* =========================
-          MODAL INATIVOS
-      ========================= */}
 
-      {modalInativos && (
-        <div
-          style={overlay}
-          onClick={() =>
-            setModalInativos(
-              false
-            )
-          }
-        >
-          <div
-            style={modalCard}
-            onClick={e =>
-              e.stopPropagation()
-            }
-          >
-            <div
-              style={
-                modalHeader
-              }
-            >
-              <h3
-                style={{
-                  margin: 0
-                }}
-              >
-                Clientes inativos
-              </h3>
-
-              <button
-                style={closeBtn}
-                onClick={() =>
-                  setModalInativos(
-                    false
-                  )
-                }
-              >
-                ×
-              </button>
-            </div>
-
-            {clientesInativos.map(
-              c => {
-                const ult =
-                  getUltimaCompra(
-                    c.id
-                  )
-
-                return (
-                  <div
-                    key={c.id}
-                    style={
-                      inativoRow
-                    }
-                  >
-                    <strong>
-                      {c.nome}
-                    </strong>
-
-                    <div
-                      style={
-                        muted
-                      }
-                    >
-                      Última compra:{" "}
-                      {ult
-                        ? new Date(
-                            ult.criadoem
-                          ).toLocaleDateString(
-                            "pt-BR"
-                          )
-                        : "Nunca"}
-                    </div>
-                  </div>
-                )
-              }
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -2078,34 +1987,6 @@ const sectionTitle = {
   fontSize: 18
 }
 
-const notifBar = {
-  width: "100%",
-  background: "#fff6d6",
-  padding:
-    "12px 16px",
-  borderRadius: 12,
-  marginBottom: 16,
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  gap: 10,
-  fontSize: 13,
-  flexWrap:
-    "wrap" as const,
-  boxSizing:
-    "border-box" as const
-}
-
-const notifBtn = {
-  border: "none",
-  background:
-    "transparent",
-  color: "#b8962e",
-  cursor: "pointer",
-  fontWeight: 600
-}
-
 const header = {
   display: "flex",
   justifyContent:
@@ -2135,8 +2016,8 @@ const btnSmall = {
     "11px 18px",
   borderRadius: 10,
   border: "none",
-  background:
-    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  background: "#b9974f",
+  color: "#fff",
   cursor: "pointer",
   fontWeight: 600,
   whiteSpace:
@@ -2147,9 +2028,8 @@ const btnSecondary = {
   padding:
     "11px 18px",
   borderRadius: 10,
-  border:
-    "1px solid #eadfbf",
-  background: "#fff",
+  border: "1px solid #e5d7b3",
+  background: "#faf8f1",
   color: "#80691f",
   cursor: "pointer",
   fontWeight: 600,
@@ -2201,7 +2081,7 @@ const emptyText = {
 const filtrosBar = {
   display: "grid",
   gridTemplateColumns:
-    "minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)",
+    "minmax(0,2fr) repeat(3, minmax(0,1fr))",
   gap: 10,
   marginBottom: 20,
   width: "100%",
@@ -2287,7 +2167,7 @@ const infoLabel = {
 
 const pontos = {
   fontWeight: 600,
-  color: "#b08d3c"
+  color: "#8f7131"
 }
 
 const receitaBadge = {
@@ -2310,9 +2190,13 @@ const deleteContainer = {
 }
 
 const deleteBtn = {
-  padding:
-    "8px 11px",
-  borderRadius: 8,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 40,
+  height: 40,
+  padding: 8,
+  borderRadius: 9,
   border:
     "1px solid #efcaca",
   background: "#fff5f5",
@@ -2320,8 +2204,7 @@ const deleteBtn = {
   cursor: "pointer",
   fontSize: 12,
   fontWeight: 600,
-  whiteSpace:
-    "nowrap" as const
+  whiteSpace: "nowrap" as const
 }
 
 const overlay = {
@@ -2477,8 +2360,8 @@ const btnPrimary = {
   padding: 13,
   borderRadius: 10,
   border: "none",
-  background:
-    "linear-gradient(90deg,#d4af37,#f6e27a)",
+  background: "#b9974f",
+  color: "#fff",
   cursor: "pointer",
   fontWeight: 600
 }
@@ -2494,10 +2377,13 @@ const escolhaCliente = {
   fontSize: 13
 }
 
-const inativoRow = {
-  padding: 12,
-  borderBottom:
-    "1px solid #eee"
+const creditoTag = {
+  padding: "5px 9px",
+  borderRadius: 8,
+  background: "#f8f1df",
+  color: "#8f7131",
+  fontSize: 12,
+  fontWeight: 600
 }
 
 const input = {
