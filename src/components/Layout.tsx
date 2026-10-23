@@ -16,7 +16,7 @@ type Props = {
 }
 
 export default function Layout({ children, setPage }: Props) {
-  const [active, setActive] = useState<Page>("dashboard")
+  const [active, setActive] = useState<Page>("clientes")
 
   function sair() {
     localStorage.removeItem("camiduda_auth")
