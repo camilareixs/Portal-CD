@@ -305,7 +305,6 @@ export default function Compras({
 
   const valorFinal = Math.max(valor - valorCupom - creditoUtilizado, 0)
 
-  const valorRestante = valorFinal
 
   /*
    * R$ 150,00 = 1 ponto
@@ -2024,18 +2023,6 @@ const btnSmall = {
     "nowrap" as const
 }
 
-const btnSecondary = {
-  padding:
-    "11px 18px",
-  borderRadius: 10,
-  border: "1px solid #e5d7b3",
-  background: "#faf8f1",
-  color: "#80691f",
-  cursor: "pointer",
-  fontWeight: 600,
-  whiteSpace:
-    "nowrap" as const
-}
 
 const dashGrid = {
   display: "grid",
