@@ -23,7 +23,7 @@ export default function LoginCamiduda() {
   const [text, setText] =
     useState("")
 
-  const fullText = "Camiduda"
+  const fullText = "Cami&Duda"
 
   useEffect(() => {
     verificarPrimeiroAcesso()
