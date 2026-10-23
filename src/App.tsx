@@ -24,7 +24,7 @@ export type CompraSelecionada = {
 
 function App() {
   const [page, setPage] =
-    useState<Page>("dashboard")
+    useState<Page>("clientes")
 
   const [logado, setLogado] =
     useState(false)
