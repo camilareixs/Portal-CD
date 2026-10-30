@@ -310,9 +310,9 @@ export default function Financeiro() {
     return despesasPeriodo.filter(d => filtroStatus === "todos" || d.status === filtroStatus)
   }, [despesasPeriodo, filtroStatus])
 
-  // Histórico completo de entradas e saídas do período selecionado.
+  // Histórico de receitas, vendas e despesas do período selecionado.
   const historicoMovimentacoes = useMemo(() => {
-    const entradas = receitasFiltradas.map(r => ({
+    const entradasReceitas = receitasFiltradas.map(r => ({
       id: r.id,
       data: r.dataRecebimento || r.dataCompetencia,
       tipo: "Entrada",
@@ -320,6 +320,26 @@ export default function Financeiro() {
       status: r.status,
       valor: r.valor
     }))
+
+    // Algumas vendas aparecem no faturamento mensal a partir da tabela compras,
+    // mas não necessariamente possuem um lançamento correspondente em receitas.
+    // Incluímos essas vendas no histórico sem duplicar as que já estão em receitas.
+    const comprasComReceita = new Set(
+      receitasFiltradas
+        .filter(r => r.tipo === "VENDA" && r.compraId)
+        .map(r => String(r.compraId))
+    )
+
+    const entradasVendas = vendasPeriodo
+      .filter(v => !comprasComReceita.has(String(v.id)))
+      .map(v => ({
+        id: `venda-${v.id}`,
+        data: v.criadoem,
+        tipo: "Entrada",
+        descricao: `Venda${v.cliente ? ` - ${v.cliente}` : ""}`,
+        status: "RECEBIDA",
+        valor: v.valor
+      }))
 
     const saidas = despesasFiltradas.map(d => ({
       id: d.id,
@@ -330,10 +350,10 @@ export default function Financeiro() {
       valor: -d.valor
     }))
 
-    return [...entradas, ...saidas].sort((a, b) =>
+    return [...entradasReceitas, ...entradasVendas, ...saidas].sort((a, b) =>
       String(b.data).localeCompare(String(a.data))
     )
-  }, [receitasFiltradas, despesasFiltradas])
+  }, [receitasFiltradas, despesasFiltradas, vendasPeriodo])
 
 
   const mesesDoAno = useMemo(() => {
