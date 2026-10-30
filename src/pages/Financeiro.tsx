@@ -160,7 +160,9 @@ export default function Financeiro() {
   const [vendaItens, setVendaItens] = useState<VendaItem[]>([])
 
   const [aba, setAba] = useState<"resumo" | "receitas" | "despesas" | "fiado">("resumo")
-  const [filtroMes, setFiltroMes] = useState("todos")
+  const [filtroMes, setFiltroMes] = useState(
+    String(new Date().getMonth() + 1).padStart(2, "0")
+  )
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()))
   const [filtroStatus] = useState("todos")
   const [periodoPersonalizado, setPeriodoPersonalizado] = useState(false)
@@ -307,6 +309,31 @@ export default function Financeiro() {
   const despesasFiltradas = useMemo(() => {
     return despesasPeriodo.filter(d => filtroStatus === "todos" || d.status === filtroStatus)
   }, [despesasPeriodo, filtroStatus])
+
+  // Histórico completo de entradas e saídas do período selecionado.
+  const historicoMovimentacoes = useMemo(() => {
+    const entradas = receitasFiltradas.map(r => ({
+      id: r.id,
+      data: r.dataRecebimento || r.dataCompetencia,
+      tipo: "Entrada",
+      descricao: r.descricao,
+      status: r.status,
+      valor: r.valor
+    }))
+
+    const saidas = despesasFiltradas.map(d => ({
+      id: d.id,
+      data: d.dataPagamento || d.dataCompetencia,
+      tipo: "Saída",
+      descricao: d.descricao,
+      status: d.status,
+      valor: -d.valor
+    }))
+
+    return [...entradas, ...saidas].sort((a, b) =>
+      String(b.data).localeCompare(String(a.data))
+    )
+  }, [receitasFiltradas, despesasFiltradas])
 
 
   const mesesDoAno = useMemo(() => {
@@ -524,10 +551,48 @@ export default function Financeiro() {
           </section>
 
           <section className="fin-card" style={{...section, marginTop:16}}>
-            <h3 style={sectionTitle}>Últimas movimentações</h3>
-            <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Status</th><th className="right">Valor</th></tr></thead><tbody>
-              {[...receitasRecebidas.map(r=>({data:r.dataRecebimento||r.dataCompetencia,tipo:"Entrada",descricao:r.descricao,status:r.status,valor:r.valor})),...despesasPagas.map(d=>({data:d.dataPagamento||d.dataCompetencia,tipo:"Saída",descricao:d.descricao,status:d.status,valor:-d.valor}))].sort((a,b)=>String(b.data).localeCompare(String(a.data))).slice(0,12).map((m,i)=><tr key={`${m.tipo}-${i}`}><td>{dataBR(m.data)}</td><td>{m.tipo}</td><td>{m.descricao}</td><td><StatusBadge status={m.status}/></td><td className="right" style={{color:m.valor>=0?"#5f7f47":"#b35a5a",fontWeight:700}}>{m.valor>=0?"+ ":"- "}{moeda(Math.abs(m.valor))}</td></tr>)}
-            </tbody></table></div>
+            <h3 style={sectionTitle}>Histórico de movimentações</h3>
+            <div style={muted}>Todas as receitas e despesas do período selecionado.</div>
+            <div className="fin-scroll">
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Descrição</th>
+                    <th>Status</th>
+                    <th className="right">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historicoMovimentacoes.map(m => (
+                    <tr key={`${m.tipo}-${m.id}`}>
+                      <td>{dataBR(m.data)}</td>
+                      <td>{m.tipo}</td>
+                      <td>{m.descricao}</td>
+                      <td><StatusBadge status={m.status} /></td>
+                      <td
+                        className="right"
+                        style={{
+                          color: m.valor >= 0 ? "#5f7f47" : "#b35a5a",
+                          fontWeight: 700
+                        }}
+                      >
+                        {m.valor >= 0 ? "+ " : "- "}
+                        {moeda(Math.abs(m.valor))}
+                      </td>
+                    </tr>
+                  ))}
+                  {!historicoMovimentacoes.length && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: "center", color: "#888" }}>
+                        Nenhuma movimentação encontrada neste período.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}
