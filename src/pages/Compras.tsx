@@ -334,27 +334,19 @@ async function salvarMetas() {
    * =========================
    */
 
-  useEffect(() => {
-    if (
-      compraSelecionada &&
-      clientes.length > 0
-    ) {
-      const cliente = clientes.find(
-        c =>
-          c.id ===
-          compraSelecionada.clienteid
-      )
+ useEffect(() => {
+  if (!compraSelecionada || clientes.length === 0) return
 
-      if (cliente) {
-        setClienteSel(cliente)
-        setModal(true)
-      }
-    }
-  }, [
-    compraSelecionada,
-    clientes
-  ])
+  const cliente = clientes.find(
+    c => c.id === compraSelecionada.clienteid
+  )
 
+  if (!cliente) return
+
+  setClienteSel(cliente)
+  setGaleriaMinimizada(true)
+  setModal(true)
+}, [compraSelecionada, clientes])
   /*
    * =========================
    * CLIENTES FILTRADOS
@@ -1033,9 +1025,12 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
           <button
             style={btnSmall}
             onClick={() => {
-              setDataVenda(dataAtualLocal())
-              setModal(true)
-            }}
+  setClienteSel(null)
+  setGaleriaMinimizada(false)
+  setBuscaCliente("")
+  setDataVenda(dataAtualLocal())
+  setModal(true)
+}}
           >
             Nova venda
           </button>
