@@ -62,18 +62,24 @@ function App() {
   }, [])
 
   function navegar(pagina: Page) {
-    // Restringe Dashboard e Financeiro a ADM
-    if (
-      !isAdm &&
-      (pagina === "dashboard" ||
-        pagina === "financeiro")
-    ) {
-      setPage("clientes")
-      return
-    }
-
-    setPage(pagina)
+  // Restringe Dashboard e Financeiro a ADM
+  if (
+    !isAdm &&
+    (pagina === "dashboard" ||
+      pagina === "financeiro")
+  ) {
+    setCompraSelecionada(null)
+    setPage("clientes")
+    return
   }
+
+  // Ao abrir Vendas pelo menu, não reutiliza cliente anterior
+  if (pagina === "compra") {
+    setCompraSelecionada(null)
+  }
+
+  setPage(pagina)
+}
 
   function irParaCompra(
     clienteid: string,
