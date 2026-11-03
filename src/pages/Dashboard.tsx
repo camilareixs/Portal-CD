@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import type { ReactNode, CSSProperties } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { supabase } from "../lib/supabase"
 
 type Cliente = {
@@ -35,28 +35,26 @@ type Despesa = {
   status?: string | null
 }
 
-type Produto = {
-  id: string
-  nome: string
-  ativo?: boolean | null
-}
-
-type Variante = {
-  id: string
-  produtoId?: string | null
-  estoqueAtual?: number | null
-  estoqueMinimo?: number | null
-  ativo?: boolean | null
-}
-
 type VendaItem = {
   id: string
   compraId?: string | null
   quantidade?: number | null
   custoUnitario?: number | null
-  produtoId?: string | null
-  produtoVarianteId?: string | null
-  varianteId?: string | null
+}
+
+type Campanha = {
+  id: string
+  titulo: string
+  data_evento: string
+  descricao?: string | null
+  tipo: "padrao" | "personalizada"
+}
+
+type DataSazonal = {
+  mes: number
+  dia: number
+  nome: string
+  mensagem: string
 }
 
 const moeda = (valor: number) =>
@@ -73,7 +71,6 @@ const numero = (valor: unknown) => {
     const resultado = Number(
       valor.replace(/[^\d,-]/g, "").replace(/\./g, "").replace(",", "."),
     )
-
     return Number.isNaN(resultado) ? 0 : resultado
   }
 
@@ -85,47 +82,39 @@ const texto = (valor: unknown) => String(valor ?? "").trim().toLowerCase()
 const compraValida = (compra: Compra) =>
   !["cancelada", "cancelado"].includes(texto(compra.status))
 
-const inicioMes = (data: Date) =>
-  new Date(data.getFullYear(), data.getMonth(), 1)
-
-const deslocarMes = (data: Date, quantidade: number) =>
-  new Date(data.getFullYear(), data.getMonth() + quantidade, 1)
-
-const dentroDoMes = (valor: string | null | undefined, mes: Date) => {
-  if (!valor) return false
-
-  const data = new Date(valor)
-  if (Number.isNaN(data.getTime())) return false
-
-  return (
-    data.getFullYear() === mes.getFullYear() &&
-    data.getMonth() === mes.getMonth()
-  )
-}
-
 const dataLocal = (valor?: string | null) => {
   if (!valor) return null
-
   const data = new Date(`${valor.slice(0, 10)}T12:00:00`)
   return Number.isNaN(data.getTime()) ? null : data
 }
 
 const dataCurta = (valor?: string | null) => {
   const data = dataLocal(valor)
-
   return data
-    ? data.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-      })
+    ? data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
     : "—"
 }
 
-const nomeMes = (data: Date) =>
-  data.toLocaleDateString("pt-BR", {
+const nomeMes = (ano: number, mes: number) =>
+  new Date(ano, mes, 1).toLocaleDateString("pt-BR", {
     month: "long",
     year: "numeric",
   })
+
+const dentroDoPeriodo = (
+  valor: string | null | undefined,
+  ano: number,
+  mes: number | null,
+) => {
+  if (!valor) return false
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return false
+
+  return (
+    data.getFullYear() === ano &&
+    (mes === null || data.getMonth() === mes)
+  )
+}
 
 const abrirWhatsApp = (
   telefone: string | null | undefined,
@@ -145,20 +134,24 @@ const abrirWhatsApp = (
   window.open(url, "_blank", "noopener,noreferrer")
 }
 
-const datasSazonais = [
+const segundoDomingo = (ano: number, mes: number) => {
+  const primeiroDia = new Date(ano, mes - 1, 1).getDay()
+  return 1 + ((7 - primeiroDia) % 7) + 7
+}
+
+const ultimaSexta = (ano: number, mes: number) => {
+  const ultimoDia = new Date(ano, mes, 0).getDate()
+  const diaSemana = new Date(ano, mes - 1, ultimoDia).getDay()
+  return ultimoDia - ((diaSemana - 5 + 7) % 7)
+}
+
+const datasSazonaisDoAno = (ano: number): DataSazonal[] => [
   {
     mes: 1,
     dia: 1,
     nome: "Ano Novo",
     mensagem:
       "Um novo ano começou! Que seja cheio de alegria, realizações e momentos especiais. A Cami&Duda deseja um excelente ano para você!",
-  },
-  {
-    mes: 2,
-    dia: 14,
-    nome: "Dia de São Valentim",
-    mensagem:
-      "Hoje é dia de celebrar o amor e o carinho. Que seu dia seja especial! Com carinho, Cami&Duda.",
   },
   {
     mes: 3,
@@ -168,8 +161,15 @@ const datasSazonais = [
       "Hoje celebramos mulheres incríveis como você. Que nunca faltem motivos para se sentir especial. Com carinho, Cami&Duda!",
   },
   {
+    mes: 3,
+    dia: 15,
+    nome: "Dia do Consumidor",
+    mensagem:
+      "Hoje é Dia do Consumidor! A Cami&Duda agradece pela sua confiança e carinho. Esperamos você para conferir nossas novidades!",
+  },
+  {
     mes: 5,
-    dia: 2,
+    dia: segundoDomingo(ano, 5),
     nome: "Dia das Mães",
     mensagem:
       "Neste Dia das Mães, desejamos muito amor, carinho e momentos especiais. A Cami&Duda preparou tudo com muito carinho para celebrar essa data!",
@@ -183,10 +183,17 @@ const datasSazonais = [
   },
   {
     mes: 8,
-    dia: 9,
+    dia: segundoDomingo(ano, 8),
     nome: "Dia dos Pais",
     mensagem:
       "Desejamos um Dia dos Pais cheio de carinho e bons momentos. Com carinho, Cami&Duda!",
+  },
+  {
+    mes: 9,
+    dia: 15,
+    nome: "Dia do Cliente",
+    mensagem:
+      "Hoje é Dia do Cliente! Obrigada por fazer parte da história da Cami&Duda. Seu carinho e confiança são muito especiais para nós!",
   },
   {
     mes: 10,
@@ -197,7 +204,7 @@ const datasSazonais = [
   },
   {
     mes: 11,
-    dia: 27,
+    dia: ultimaSexta(ano, 11),
     nome: "Black Friday",
     mensagem:
       "A Black Friday chegou à Cami&Duda! Passe na loja para conferir as oportunidades especiais que preparamos.",
@@ -209,42 +216,52 @@ const datasSazonais = [
     mensagem:
       "Que seu Natal seja cheio de amor, paz e momentos especiais. A Cami&Duda deseja boas festas para você e sua família!",
   },
+  {
+    mes: 12,
+    dia: 31,
+    nome: "Fim de ano",
+    mensagem:
+      "Mais um ano chega ao fim! A Cami&Duda agradece por fazer parte da sua história e deseja um novo ciclo cheio de alegria e realizações.",
+  },
 ]
 
 export default function Dashboard() {
-  const [mesSelecionado, setMesSelecionado] = useState(() =>
-    inicioMes(new Date()),
-  )
+  const hoje = new Date()
+
+  const [anoSelecionado, setAnoSelecionado] = useState(hoje.getFullYear())
+  const [mesSelecionado, setMesSelecionado] = useState(hoje.getMonth())
+  const [todosMeses, setTodosMeses] = useState(false)
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [receitas, setReceitas] = useState<Receita[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [variantes, setVariantes] = useState<Variante[]>([])
   const [itens, setItens] = useState<VendaItem[]>([])
+  const [campanhas, setCampanhas] = useState<Campanha[]>([])
   const [carregando, setCarregando] = useState(true)
+  const [salvandoCampanha, setSalvandoCampanha] = useState(false)
   const [erro, setErro] = useState("")
+  const [mensagemSucesso, setMensagemSucesso] = useState("")
 
-  const [meta, setMeta] = useState(10000)
+  const [metaMensal, setMetaMensal] = useState(10000)
   const [editandoMeta, setEditandoMeta] = useState(false)
   const [novaMeta, setNovaMeta] = useState("10000")
 
   const [mensagemAniversario, setMensagemAniversario] = useState(
     "Olá, {nome}! A equipe Cami&Duda deseja um feliz aniversário, com muita saúde, alegria e um novo ciclo cheio de coisas boas. Esperamos te ver em breve!",
   )
-
   const [mensagemIndicacao, setMensagemIndicacao] = useState(
-    "Oi! Quero te apresentar a Cami&Duda, uma loja cheia de peças lindas. Acho que você vai gostar! 💛",
+    "Oi! Quero te apresentar a Cami&Duda, uma loja cheia de peças lindas. Acho que você vai gostar!",
   )
 
   const [dataSazonalSelecionada, setDataSazonalSelecionada] = useState("")
   const [mensagemSazonal, setMensagemSazonal] = useState("")
   const [dataPersonalizada, setDataPersonalizada] = useState("")
   const [nomeDataPersonalizada, setNomeDataPersonalizada] = useState("")
+  const [descricaoDataPersonalizada, setDescricaoDataPersonalizada] = useState("")
 
   useEffect(() => {
-    carregarDados()
+    void carregarDados()
   }, [])
 
   async function carregarDados() {
@@ -257,28 +274,21 @@ export default function Dashboard() {
         comprasResult,
         receitasResult,
         despesasResult,
-        produtosResult,
-        variantesResult,
         itensResult,
+        campanhasResult,
       ] = await Promise.all([
-        supabase
-          .from("clientes")
-          .select("id,nome,pontos,dataNascimento,celular"),
+        supabase.from("clientes").select("id,nome,pontos,dataNascimento,celular"),
         supabase
           .from("compras")
           .select("id,clienteid,valor,criadoem,pagamento,status")
           .order("criadoem", { ascending: false }),
-        supabase
-          .from("receitas")
-          .select("id,descricao,valor,dataCompetencia,status"),
-        supabase
-          .from("despesas")
-          .select("id,descricao,valor,dataCompetencia,status"),
-        supabase.from("produtos").select("id,nome,ativo"),
-        supabase
-          .from("produtoVariantes")
-          .select("id,produtoId,estoqueAtual,estoqueMinimo,ativo"),
+        supabase.from("receitas").select("id,descricao,valor,dataCompetencia,status"),
+        supabase.from("despesas").select("id,descricao,valor,dataCompetencia,status"),
         supabase.from("vendaItens").select("*"),
+        supabase
+          .from("calendario_campanhas")
+          .select("id,titulo,data_evento,descricao,tipo")
+          .order("data_evento", { ascending: true }),
       ])
 
       for (const resultado of [
@@ -286,9 +296,8 @@ export default function Dashboard() {
         comprasResult,
         receitasResult,
         despesasResult,
-        produtosResult,
-        variantesResult,
         itensResult,
+        campanhasResult,
       ]) {
         if (resultado.error) throw resultado.error
       }
@@ -297,43 +306,39 @@ export default function Dashboard() {
       setCompras((comprasResult.data ?? []) as Compra[])
       setReceitas((receitasResult.data ?? []) as Receita[])
       setDespesas((despesasResult.data ?? []) as Despesa[])
-      setProdutos((produtosResult.data ?? []) as Produto[])
-      setVariantes((variantesResult.data ?? []) as Variante[])
       setItens((itensResult.data ?? []) as VendaItem[])
+      setCampanhas((campanhasResult.data ?? []) as Campanha[])
     } catch (error) {
       console.error(error)
-      setErro("Não foi possível carregar os dados do dashboard.")
+      setErro(
+        "Não foi possível carregar os dados. Confira os nomes das tabelas e as permissões do Supabase.",
+      )
     } finally {
       setCarregando(false)
     }
   }
-
-  const clientesMap = useMemo(
-    () => new Map(clientes.map(cliente => [cliente.id, cliente])),
-    [clientes],
-  )
 
   const comprasValidas = useMemo(
     () => compras.filter(compraValida),
     [compras],
   )
 
+  const mesFiltro = todosMeses ? null : mesSelecionado
+
   const comprasPeriodo = useMemo(
     () =>
       comprasValidas.filter(compra =>
-        dentroDoMes(compra.criadoem, mesSelecionado),
+        dentroDoPeriodo(compra.criadoem, anoSelecionado, mesFiltro),
       ),
-    [comprasValidas, mesSelecionado],
+    [comprasValidas, anoSelecionado, mesFiltro],
   )
 
   const faturamento = comprasPeriodo.reduce(
     (total, compra) => total + numero(compra.valor),
     0,
   )
-
   const pedidos = comprasPeriodo.length
   const ticketMedio = pedidos ? faturamento / pedidos : 0
-
   const clientesAtendidos = new Set(
     comprasPeriodo.map(compra => compra.clienteid).filter(Boolean),
   ).size
@@ -342,7 +347,7 @@ export default function Dashboard() {
     .filter(
       receita =>
         texto(receita.status) === "pendente" &&
-        dentroDoMes(receita.dataCompetencia, mesSelecionado),
+        dentroDoPeriodo(receita.dataCompetencia, anoSelecionado, mesFiltro),
     )
     .reduce((total, receita) => total + numero(receita.valor), 0)
 
@@ -350,7 +355,7 @@ export default function Dashboard() {
     .filter(
       despesa =>
         texto(despesa.status) === "pendente" &&
-        dentroDoMes(despesa.dataCompetencia, mesSelecionado),
+        dentroDoPeriodo(despesa.dataCompetencia, anoSelecionado, mesFiltro),
     )
     .reduce((total, despesa) => total + numero(despesa.valor), 0)
 
@@ -358,95 +363,62 @@ export default function Dashboard() {
     .filter(
       despesa =>
         texto(despesa.status) === "paga" &&
-        dentroDoMes(despesa.dataCompetencia, mesSelecionado),
+        dentroDoPeriodo(despesa.dataCompetencia, anoSelecionado, mesFiltro),
     )
     .reduce((total, despesa) => total + numero(despesa.valor), 0)
 
   const custoProdutosVendidos = useMemo(
     () =>
       itens.reduce((total, item) => {
-        const compra = comprasValidas.find(
-          venda => venda.id === item.compraId,
-        )
-
+        const compra = comprasValidas.find(venda => venda.id === item.compraId)
         if (
           !compra ||
-          !dentroDoMes(compra.criadoem, mesSelecionado)
+          !dentroDoPeriodo(compra.criadoem, anoSelecionado, mesFiltro)
         ) {
           return total
         }
 
-        return (
-          total +
-          numero(item.custoUnitario) * (numero(item.quantidade) || 1)
-        )
+        return total + numero(item.custoUnitario) * (numero(item.quantidade) || 1)
       }, 0),
-    [itens, comprasValidas, mesSelecionado],
+    [itens, comprasValidas, anoSelecionado, mesFiltro],
   )
 
   const lucroBruto = faturamento - custoProdutosVendidos
   const resultadoEstimado = lucroBruto - despesasPagas
 
-  const primeiroDiaAnterior = deslocarMes(mesSelecionado, -1)
-
-  const vendasMesAnterior = comprasValidas.filter(compra =>
-    dentroDoMes(compra.criadoem, primeiroDiaAnterior),
+  const comprasAnoAnterior = comprasValidas.filter(compra =>
+    dentroDoPeriodo(compra.criadoem, anoSelecionado - 1, mesFiltro),
   )
-
-  const faturamentoMesAnterior = vendasMesAnterior.reduce(
+  const faturamentoAnoAnterior = comprasAnoAnterior.reduce(
     (total, compra) => total + numero(compra.valor),
     0,
   )
-
-  const variacaoMensal = faturamentoMesAnterior
-    ? ((faturamento - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
+  const variacaoComparativo = faturamentoAnoAnterior
+    ? ((faturamento - faturamentoAnoAnterior) / faturamentoAnoAnterior) * 100
     : null
 
-  const aniversariantes = useMemo(
-    () =>
-      clientes
-        .filter(cliente => {
-          const nascimento = dataLocal(cliente.dataNascimento)
-          return (
-            nascimento &&
-            nascimento.getMonth() === mesSelecionado.getMonth()
-          )
-        })
-        .sort((a, b) => {
-          const dataA = dataLocal(a.dataNascimento)?.getDate() ?? 0
-          const dataB = dataLocal(b.dataNascimento)?.getDate() ?? 0
-          return dataA - dataB
-        }),
-    [clientes, mesSelecionado],
-  )
-
-  const vendasPorMes = useMemo(() => {
-    const meses = Array.from({ length: 6 }, (_, indice) => {
-      const data = deslocarMes(mesSelecionado, indice - 5)
-
-      return {
-        chave: `${data.getFullYear()}-${data.getMonth()}`,
-        nome: data.toLocaleDateString("pt-BR", { month: "short" }),
-        total: 0,
-      }
-    })
-
-    comprasValidas.forEach(compra => {
-      const data = new Date(compra.criadoem)
-      const mes = meses.find(
-        item =>
-          item.chave === `${data.getFullYear()}-${data.getMonth()}`,
+  const faturamentoMesAnterior = useMemo(() => {
+    if (todosMeses) return 0
+    const dataAnterior = new Date(anoSelecionado, mesSelecionado - 1, 1)
+    return comprasValidas
+      .filter(compra =>
+        dentroDoPeriodo(
+          compra.criadoem,
+          dataAnterior.getFullYear(),
+          dataAnterior.getMonth(),
+        ),
       )
+      .reduce((total, compra) => total + numero(compra.valor), 0)
+  }, [comprasValidas, anoSelecionado, mesSelecionado, todosMeses])
 
-      if (mes) mes.total += numero(compra.valor)
-    })
+  const variacaoMensal =
+    !todosMeses && faturamentoMesAnterior
+      ? ((faturamento - faturamentoMesAnterior) / faturamentoMesAnterior) * 100
+      : null
 
-    return meses
-  }, [comprasValidas, mesSelecionado])
-
-  const maiorVendaMensal = Math.max(
-    ...vendasPorMes.map(mes => mes.total),
-    1,
+  const clientesMap = useMemo(
+    () => new Map(clientes.map(cliente => [cliente.id, cliente])),
+    [clientes],
   )
 
   const rankingClientes = useMemo(() => {
@@ -457,12 +429,10 @@ export default function Dashboard() {
 
     comprasPeriodo.forEach(compra => {
       if (!compra.clienteid) return
-
       const cliente = clientesMap.get(compra.clienteid)
       if (!cliente) return
 
       const atual = ranking.get(cliente.id)
-
       if (atual) {
         atual.total += numero(compra.valor)
         atual.pedidos += 1
@@ -480,54 +450,148 @@ export default function Dashboard() {
       .slice(0, 5)
   }, [comprasPeriodo, clientesMap])
 
-  const estoqueBaixo = variantes.filter(
-    variante =>
-      variante.ativo !== false &&
-      numero(variante.estoqueAtual) <= numero(variante.estoqueMinimo),
+  const aniversariantes = useMemo(
+    () =>
+      clientes
+        .filter(cliente => {
+          const nascimento = dataLocal(cliente.dataNascimento)
+          return (
+            nascimento &&
+            (todosMeses || nascimento.getMonth() === mesSelecionado)
+          )
+        })
+        .sort((a, b) => {
+          const dataA = dataLocal(a.dataNascimento)
+          const dataB = dataLocal(b.dataNascimento)
+          if (!dataA || !dataB) return 0
+          return (
+            dataA.getMonth() - dataB.getMonth() ||
+            dataA.getDate() - dataB.getDate()
+          )
+        }),
+    [clientes, todosMeses, mesSelecionado],
   )
 
-  const produtosAtivos = produtos.filter(
-    produto => produto.ativo !== false,
-  ).length
+  const vendasPorMes = useMemo(() => {
+    const meses = Array.from({ length: 12 }, (_, mes) => ({
+      chave: `${anoSelecionado}-${mes}`,
+      nome: new Date(anoSelecionado, mes, 1).toLocaleDateString("pt-BR", {
+        month: "short",
+      }),
+      total: 0,
+    }))
+
+    comprasValidas.forEach(compra => {
+      const data = new Date(compra.criadoem)
+      if (data.getFullYear() !== anoSelecionado) return
+      const item = meses[data.getMonth()]
+      if (item) item.total += numero(compra.valor)
+    })
+
+    return meses
+  }, [comprasValidas, anoSelecionado])
+
+  const maiorVendaMensal = Math.max(...vendasPorMes.map(mes => mes.total), 1)
+
+  const datasPadrao = useMemo(
+    () => datasSazonaisDoAno(anoSelecionado),
+    [anoSelecionado],
+  )
+
+  const campanhasPersonalizadas = campanhas.filter(
+    campanha => campanha.tipo === "personalizada",
+  )
 
   const datasCalendario = useMemo(() => {
-    const ano = new Date().getFullYear()
-    const hoje = new Date()
+    const hojeInicio = new Date()
+    hojeInicio.setHours(0, 0, 0, 0)
 
-    return datasSazonais
-      .map(data => ({
-        ...data,
-        data: new Date(ano, data.mes - 1, data.dia),
-      }))
-      .filter(
-        data =>
-          data.data >=
-          new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()),
-      )
-      .sort((a, b) => a.data.getTime() - b.data.getTime())
-      .slice(0, 5)
-  }, [])
+    const padrao = datasPadrao.map(data => ({
+      id: `padrao-${data.mes}-${data.dia}`,
+      titulo: data.nome,
+      data_evento: `${anoSelecionado}-${String(data.mes).padStart(2, "0")}-${String(data.dia).padStart(2, "0")}`,
+      descricao: data.mensagem,
+      tipo: "padrao" as const,
+    }))
+
+    return [...padrao, ...campanhasPersonalizadas]
+      .filter(campanha => {
+        const data = dataLocal(campanha.data_evento)
+        return data && data >= hojeInicio
+      })
+      .sort((a, b) => {
+        const dataA = dataLocal(a.data_evento)?.getTime() ?? 0
+        const dataB = dataLocal(b.data_evento)?.getTime() ?? 0
+        return dataA - dataB
+      })
+      .slice(0, 8)
+  }, [datasPadrao, campanhasPersonalizadas, anoSelecionado])
 
   function selecionarDataSazonal(valor: string) {
     setDataSazonalSelecionada(valor)
 
-    const data = datasSazonais.find(
-      item => `${item.mes}-${item.dia}` === valor,
-    )
+    if (valor === "outra") {
+      setMensagemSazonal("")
+      return
+    }
 
-    setMensagemSazonal(data?.mensagem ?? "")
+    const data = datasCalendario.find(item => item.id === valor)
+    setMensagemSazonal(data?.descricao ?? "")
     setDataPersonalizada("")
     setNomeDataPersonalizada("")
+    setDescricaoDataPersonalizada("")
+  }
+
+  async function salvarCampanhaPersonalizada() {
+    if (!nomeDataPersonalizada.trim() || !dataPersonalizada) {
+      setErro("Informe o nome e a data da campanha personalizada.")
+      return
+    }
+
+    try {
+      setSalvandoCampanha(true)
+      setErro("")
+      setMensagemSucesso("")
+
+      const { data, error } = await supabase
+        .from("calendario_campanhas")
+        .insert({
+          titulo: nomeDataPersonalizada.trim(),
+          data_evento: dataPersonalizada,
+          descricao: descricaoDataPersonalizada.trim() || null,
+          tipo: "personalizada",
+        })
+        .select("id,titulo,data_evento,descricao,tipo")
+        .single()
+
+      if (error) throw error
+
+      setCampanhas(atual => [...atual, data as Campanha])
+      setDataSazonalSelecionada(data.id)
+      setMensagemSazonal(data.descricao ?? "")
+      setMensagemSucesso("Campanha salva no calendário.")
+      setDataPersonalizada("")
+      setNomeDataPersonalizada("")
+      setDescricaoDataPersonalizada("")
+    } catch (error) {
+      console.error(error)
+      setErro("Não foi possível salvar a campanha no calendário.")
+    } finally {
+      setSalvandoCampanha(false)
+    }
   }
 
   function salvarMeta() {
     const valor = numero(novaMeta)
-
-    if (valor > 0) setMeta(valor)
+    if (valor > 0) setMetaMensal(valor)
     setEditandoMeta(false)
   }
 
-  const percentualMeta = meta > 0 ? (faturamento / meta) * 100 : 0
+  const metaPeriodo = todosMeses ? metaMensal * 12 : metaMensal
+  const percentualMeta = metaPeriodo > 0 ? (faturamento / metaPeriodo) * 100 : 0
+  const tituloPeriodo = todosMeses
+    ? `ano de ${anoSelecionado}`
+    : nomeMes(anoSelecionado, mesSelecionado)
 
   if (carregando) {
     return <div style={styles.loading}>Carregando dashboard...</div>
@@ -560,68 +624,58 @@ export default function Dashboard() {
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>Dashboard Cami&Duda</h1>
-          <p style={styles.subtitle}>
-            Visão geral da loja por mês
-          </p>
+          <p style={styles.subtitle}>Visão geral da loja por período</p>
         </div>
 
-        <label style={styles.filterLabel}>
-          Mês
-          <div style={styles.monthSelector}>
-            <button
-              className="dash-btn"
-              aria-label="Mês anterior"
-              onClick={() =>
-                setMesSelecionado(mes => deslocarMes(mes, -1))
-              }
-            >
-              ‹
-            </button>
-
+        <div style={styles.filters}>
+          <label style={styles.filterLabel}>
+            Ano
             <select
-              value={`${mesSelecionado.getFullYear()}-${mesSelecionado.getMonth()}`}
-              onChange={e => {
-                const [ano, mes] = e.target.value.split("-").map(Number)
-                setMesSelecionado(new Date(ano, mes, 1))
-              }}
+              value={anoSelecionado}
+              onChange={e => setAnoSelecionado(Number(e.target.value))}
               style={styles.select}
             >
-              {Array.from({ length: 24 }, (_, indice) => {
-                const data = deslocarMes(inicioMes(new Date()), indice - 12)
-
-                return (
-                  <option
-                    key={`${data.getFullYear()}-${data.getMonth()}`}
-                    value={`${data.getFullYear()}-${data.getMonth()}`}
-                  >
-                    {nomeMes(data)}
-                  </option>
-                )
-              })}
+              {Array.from({ length: 7 }, (_, indice) => hoje.getFullYear() - 5 + indice).map(ano => (
+                <option key={ano} value={ano}>{ano}</option>
+              ))}
             </select>
+          </label>
 
-            <button
-              className="dash-btn"
-              aria-label="Próximo mês"
-              disabled={
-                mesSelecionado.getFullYear() === new Date().getFullYear() &&
-                mesSelecionado.getMonth() === new Date().getMonth()
-              }
-              onClick={() =>
-                setMesSelecionado(mes => deslocarMes(mes, 1))
-              }
+          <label style={styles.filterLabel}>
+            Mês
+            <select
+              value={mesSelecionado}
+              disabled={todosMeses}
+              onChange={e => setMesSelecionado(Number(e.target.value))}
+              style={styles.select}
             >
-              ›
-            </button>
-          </div>
-        </label>
+              {Array.from({ length: 12 }, (_, mes) => (
+                <option key={mes} value={mes}>
+                  {new Date(anoSelecionado, mes, 1).toLocaleDateString("pt-BR", {
+                    month: "long",
+                  })}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={todosMeses}
+              onChange={e => setTodosMeses(e.target.checked)}
+            />
+            Todos os meses
+          </label>
+        </div>
       </header>
 
       {erro && <div style={styles.error}>{erro}</div>}
+      {mensagemSucesso && <div style={styles.success}>{mensagemSucesso}</div>}
 
       <section className="dash-grid dash-kpis" style={{ marginBottom: 16 }}>
         <Kpi
-          titulo="Faturamento do mês"
+          titulo={todosMeses ? "Faturamento do ano" : "Faturamento do mês"}
           valor={moeda(faturamento)}
           detalhe={`${pedidos} venda(s)`}
         />
@@ -633,7 +687,7 @@ export default function Dashboard() {
         <Kpi
           titulo="Clientes atendidos"
           valor={String(clientesAtendidos)}
-          detalhe="Clientes com compra no mês"
+          detalhe="Clientes com compra no período"
         />
         <Kpi
           titulo="Resultado estimado"
@@ -646,28 +700,28 @@ export default function Dashboard() {
         <div className="dash-card">
           <h2 style={styles.cardTitle}>Evolução das vendas</h2>
           <p style={styles.cardSub}>
-            Faturamento dos seis meses até {nomeMes(mesSelecionado)}.
+            Faturamento dos 12 meses de {anoSelecionado}.
           </p>
 
           <div style={styles.chart}>
-            {vendasPorMes.map(mes => (
+            {vendasPorMes.map((mes, indice) => (
               <div className="dash-bar" key={mes.chave}>
                 <small style={styles.chartValue}>
                   {mes.total ? moeda(mes.total) : "R$ 0"}
                 </small>
-
                 <div
                   style={{
                     width: "min(42px,75%)",
-                    height: `${Math.max(
-                      mes.total ? 8 : 3,
-                      (mes.total / maiorVendaMensal) * 150,
-                    )}px`,
-                    background: mes.total ? "#c9a227" : "#e9e4d8",
+                    height: `${Math.max(mes.total ? 8 : 3, (mes.total / maiorVendaMensal) * 150)}px`,
+                    background:
+                      !todosMeses && indice === mesSelecionado
+                        ? "#735b15"
+                        : mes.total
+                          ? "#c9a227"
+                          : "#e9e4d8",
                     borderRadius: "6px 6px 0 0",
                   }}
                 />
-
                 <span style={styles.chartLabel}>{mes.nome}</span>
               </div>
             ))}
@@ -675,54 +729,62 @@ export default function Dashboard() {
         </div>
 
         <div className="dash-card">
-          <h2 style={styles.cardTitle}>Comparativo mensal</h2>
+          <h2 style={styles.cardTitle}>
+            {todosMeses ? "Comparativo anual" : "Comparativo mensal"}
+          </h2>
           <p style={styles.cardSub}>
-            {nomeMes(mesSelecionado)} × {nomeMes(primeiroDiaAnterior)}
+            {todosMeses
+              ? `${anoSelecionado} × ${anoSelecionado - 1}`
+              : `${nomeMes(anoSelecionado, mesSelecionado)} × mês anterior`}
           </p>
 
           <div style={styles.compareNumber}>{moeda(faturamento)}</div>
-          <div style={styles.muted}>Mês selecionado</div>
+          <div style={styles.muted}>
+            {todosMeses ? "Faturamento do ano" : "Mês selecionado"}
+          </div>
 
           <div
             style={{
               ...styles.compareChange,
               color:
-                variacaoMensal === null
+                (todosMeses ? variacaoComparativo : variacaoMensal) === null
                   ? "#777"
-                  : variacaoMensal >= 0
+                  : (todosMeses ? variacaoComparativo : variacaoMensal)! >= 0
                     ? "#28764b"
                     : "#b13b35",
             }}
           >
-            {variacaoMensal === null
-              ? "Sem vendas no mês anterior para comparar"
-              : `${variacaoMensal >= 0 ? "▲" : "▼"} ${Math.abs(
-                  variacaoMensal,
-                ).toFixed(1)}% em relação ao mês anterior`}
+            {(todosMeses ? variacaoComparativo : variacaoMensal) === null
+              ? "Sem período anterior para comparar"
+              : `${(todosMeses ? variacaoComparativo : variacaoMensal)! >= 0 ? "▲" : "▼"} ${Math.abs((todosMeses ? variacaoComparativo : variacaoMensal)!).toFixed(1)}% em relação ao período anterior`}
           </div>
 
           <div style={styles.comparePrevious}>
-            Mês anterior:{" "}
-            <strong>{moeda(faturamentoMesAnterior)}</strong>
+            {todosMeses ? "Ano anterior: " : "Mês anterior: "}
+            <strong>
+              {moeda(todosMeses ? faturamentoAnoAnterior : faturamentoMesAnterior)}
+            </strong>
           </div>
 
           <div style={{ marginTop: 22 }}>
             <div style={styles.flexBetween}>
-              <strong style={{ fontSize: 13 }}>Meta do mês</strong>
+              <strong style={{ fontSize: 13 }}>
+                {todosMeses ? "Meta anual" : "Meta do mês"}
+              </strong>
               <button
                 className="dash-btn"
                 onClick={() => {
-                  setNovaMeta(String(meta))
+                  setNovaMeta(String(metaMensal))
                   setEditandoMeta(true)
                 }}
               >
-                Editar meta
+                Editar meta mensal
               </button>
             </div>
 
             <div style={{ ...styles.flexBetween, marginTop: 12 }}>
               <strong>{moeda(faturamento)}</strong>
-              <span style={styles.muted}>de {moeda(meta)}</span>
+              <span style={styles.muted}>de {moeda(metaPeriodo)}</span>
             </div>
 
             <div style={styles.progressBg}>
@@ -739,7 +801,7 @@ export default function Dashboard() {
                 {Math.min(100, percentualMeta).toFixed(0)}% atingido
               </span>
               <span style={styles.muted}>
-                Faltam {moeda(Math.max(0, meta - faturamento))}
+                Faltam {moeda(Math.max(0, metaPeriodo - faturamento))}
               </span>
             </div>
 
@@ -749,17 +811,11 @@ export default function Dashboard() {
                   value={novaMeta}
                   onChange={e => setNovaMeta(e.target.value)}
                   style={styles.input}
-                  placeholder="Valor da meta"
+                  placeholder="Valor da meta mensal"
                 />
-
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="dash-btn" onClick={salvarMeta}>
-                    Salvar
-                  </button>
-                  <button
-                    className="dash-btn"
-                    onClick={() => setEditandoMeta(false)}
-                  >
+                  <button className="dash-btn" onClick={salvarMeta}>Salvar</button>
+                  <button className="dash-btn" onClick={() => setEditandoMeta(false)}>
                     Cancelar
                   </button>
                 </div>
@@ -773,7 +829,7 @@ export default function Dashboard() {
         <div className="dash-card">
           <h2 style={styles.cardTitle}>Principais clientes</h2>
           <p style={styles.cardSub}>
-            Ordenados pelo valor comprado em {nomeMes(mesSelecionado)}.
+            Ordenados pelo valor comprado em {tituloPeriodo}.
           </p>
 
           {rankingClientes.length ? (
@@ -782,139 +838,44 @@ export default function Dashboard() {
                 <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
                   <span style={styles.rank}>{indice + 1}</span>
                   <div style={{ minWidth: 0 }}>
-                    <strong style={styles.rowName}>
-                      {item.cliente.nome}
-                    </strong>
-                    <div style={styles.muted}>
-                      {item.pedidos} compra(s)
-                    </div>
+                    <strong style={styles.rowName}>{item.cliente.nome}</strong>
+                    <div style={styles.muted}>{item.pedidos} compra(s)</div>
                   </div>
                 </div>
-
                 <strong>{moeda(item.total)}</strong>
               </div>
             ))
           ) : (
-            <Empty>Nenhuma compra neste mês.</Empty>
+            <Empty>Nenhuma compra neste período.</Empty>
           )}
         </div>
 
         <div className="dash-card">
           <h2 style={styles.cardTitle}>Visão financeira</h2>
-          <p style={styles.cardSub}>
-            Valores registrados em {nomeMes(mesSelecionado)}.
-          </p>
-
-          <FinancialRow
-            label="Receitas pendentes"
-            value={moeda(receitasPendentes)}
-          />
-          <FinancialRow
-            label="Despesas pendentes"
-            value={moeda(despesasPendentes)}
-          />
-          <FinancialRow
-            label="Despesas pagas"
-            value={moeda(despesasPagas)}
-          />
-          <FinancialRow
-            label="Custo dos produtos vendidos"
-            value={moeda(custoProdutosVendidos)}
-          />
-          <FinancialRow
-            label="Lucro bruto estimado"
-            value={moeda(lucroBruto)}
-            strong
-          />
-        </div>
-      </section>
-
-      <section className="dash-grid dash-three" style={{ marginBottom: 16 }}>
-        <div className="dash-card">
-          <h2 style={styles.cardTitle}>Estoque</h2>
-          <p style={styles.cardSub}>Resumo dos cadastros atuais.</p>
-
-          <div style={styles.bigNumber}>{produtosAtivos}</div>
-          <div style={styles.muted}>Produtos ativos</div>
-
-          <div style={{ ...styles.stockAlert, marginTop: 14 }}>
-            <strong>{estoqueBaixo.length}</strong> variante(s) com estoque no
-            mínimo ou abaixo dele.
-          </div>
-        </div>
-
-        <div className="dash-card">
-          <h2 style={styles.cardTitle}>Formas de pagamento</h2>
-          <p style={styles.cardSub}>
-            Faturamento por forma de pagamento em {nomeMes(mesSelecionado)}.
-          </p>
-
-          {(() => {
-            const pagamentos = new Map<string, number>()
-
-            comprasPeriodo.forEach(compra => {
-              const nome = compra.pagamento?.trim() || "Não informado"
-              pagamentos.set(
-                nome,
-                (pagamentos.get(nome) ?? 0) + numero(compra.valor),
-              )
-            })
-
-            const lista = [...pagamentos.entries()]
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 5)
-
-            return lista.length ? (
-              lista.map(([nome, total]) => (
-                <FinancialRow
-                  key={nome}
-                  label={nome}
-                  value={moeda(total)}
-                />
-              ))
-            ) : (
-              <Empty>Nenhuma venda neste mês.</Empty>
-            )
-          })()}
-        </div>
-
-        <div className="dash-card">
-          <h2 style={styles.cardTitle}>Atenção financeira</h2>
-          <p style={styles.cardSub}>
-            Pendências do mês selecionado.
-          </p>
-
-          <div style={styles.attention}>
-            <span>Receitas pendentes</span>
-            <strong>{moeda(receitasPendentes)}</strong>
-          </div>
-
-          <div style={styles.attention}>
-            <span>Despesas pendentes</span>
-            <strong>{moeda(despesasPendentes)}</strong>
-          </div>
+          <p style={styles.cardSub}>Valores registrados em {tituloPeriodo}.</p>
+          <FinancialRow label="Receitas pendentes" value={moeda(receitasPendentes)} />
+          <FinancialRow label="Despesas pendentes" value={moeda(despesasPendentes)} />
+          <FinancialRow label="Despesas pagas" value={moeda(despesasPagas)} />
+          <FinancialRow label="Custo dos produtos vendidos" value={moeda(custoProdutosVendidos)} />
+          <FinancialRow label="Lucro bruto estimado" value={moeda(lucroBruto)} strong />
         </div>
       </section>
 
       <section className="dash-card" style={{ marginBottom: 16 }}>
         <h2 style={styles.cardTitle}>Ações da loja</h2>
         <p style={styles.cardSub}>
-          Prepare mensagens e campanhas para revisar antes de enviar pelo
-          WhatsApp.
+          Prepare mensagens e campanhas para revisar antes de enviar pelo WhatsApp.
         </p>
 
         <div className="dash-grid dash-three">
           <div style={styles.actionCard}>
-            <h3 style={styles.actionTitle}>Aniversariantes do mês</h3>
+            <h3 style={styles.actionTitle}>Aniversariantes</h3>
             <p style={styles.cardSub}>
-              {aniversariantes.length} cliente(s) fazem aniversário em{" "}
-              {nomeMes(mesSelecionado)}.
+              {aniversariantes.length} cliente(s) fazem aniversário{" "}
+              {todosMeses ? `em ${anoSelecionado}` : `em ${nomeMes(anoSelecionado, mesSelecionado)}`}.
             </p>
 
-            <label style={styles.label}>
-              Mensagem — use {"{nome}"} para personalizar
-            </label>
-
+            <label style={styles.label}>Mensagem — use {"{nome}"} para personalizar</label>
             <textarea
               rows={4}
               value={mensagemAniversario}
@@ -922,47 +883,34 @@ export default function Dashboard() {
               style={styles.textarea}
             />
 
-            <div style={{ marginTop: 10 }}>
-              {aniversariantes.map(cliente => (
-                <div className="dash-row" key={cliente.id}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={styles.rowName}>{cliente.nome}</strong>
-                    <div style={styles.muted}>
-                      {dataCurta(cliente.dataNascimento)}
-                    </div>
-                  </div>
-
-                  <button
-                    className="dash-btn"
-                    onClick={() =>
-                      abrirWhatsApp(
-                        cliente.celular,
-                        mensagemAniversario.replaceAll(
-                          "{nome}",
-                          cliente.nome,
-                        ),
-                      )
-                    }
-                  >
-                    WhatsApp
-                  </button>
+            {aniversariantes.map(cliente => (
+              <div className="dash-row" key={cliente.id}>
+                <div style={{ minWidth: 0 }}>
+                  <strong style={styles.rowName}>{cliente.nome}</strong>
+                  <div style={styles.muted}>{dataCurta(cliente.dataNascimento)}</div>
                 </div>
-              ))}
+                <button
+                  className="dash-btn"
+                  onClick={() =>
+                    abrirWhatsApp(
+                      cliente.celular,
+                      mensagemAniversario.replaceAll("{nome}", cliente.nome),
+                    )
+                  }
+                >
+                  WhatsApp
+                </button>
+              </div>
+            ))}
 
-              {!aniversariantes.length && (
-                <Empty>
-                  Não há aniversariantes cadastrados neste mês.
-                </Empty>
-              )}
-            </div>
+            {!aniversariantes.length && (
+              <Empty>Não há aniversariantes cadastrados neste período.</Empty>
+            )}
           </div>
 
           <div style={styles.actionCard}>
             <h3 style={styles.actionTitle}>Indique uma amiga</h3>
-            <p style={styles.cardSub}>
-              Mensagem pronta para compartilhar com uma cliente pelo WhatsApp.
-            </p>
-
+            <p style={styles.cardSub}>Mensagem pronta para compartilhar com uma cliente.</p>
             <label style={styles.label}>Texto da mensagem</label>
             <textarea
               rows={5}
@@ -970,7 +918,6 @@ export default function Dashboard() {
               onChange={e => setMensagemIndicacao(e.target.value)}
               style={styles.textarea}
             />
-
             <button
               className="dash-btn"
               style={{ marginTop: 10 }}
@@ -983,7 +930,7 @@ export default function Dashboard() {
           <div style={styles.actionCard}>
             <h3 style={styles.actionTitle}>Calendário sazonal</h3>
             <p style={styles.cardSub}>
-              Escolha uma data comercial e prepare uma campanha.
+              Datas comerciais e campanhas personalizadas salvas no calendário.
             </p>
 
             <label style={styles.label}>Datas próximas</label>
@@ -994,51 +941,58 @@ export default function Dashboard() {
             >
               <option value="">Selecione uma data</option>
               {datasCalendario.map(data => (
-                <option
-                  key={`${data.mes}-${data.dia}`}
-                  value={`${data.mes}-${data.dia}`}
-                >
-                  {data.data.toLocaleDateString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                  })}{" "}
-                  — {data.nome}
+                <option key={data.id} value={data.id}>
+                  {dataCurta(data.data_evento)} — {data.titulo}
                 </option>
               ))}
+              <option value="outra">Outra data...</option>
             </select>
 
-            <label style={{ ...styles.label, marginTop: 10 }}>
-              Ou crie uma data personalizada
-            </label>
+            {dataSazonalSelecionada === "outra" && (
+              <>
+                <label style={{ ...styles.label, marginTop: 10 }}>Nome da campanha</label>
+                <input
+                  value={nomeDataPersonalizada}
+                  onChange={e => setNomeDataPersonalizada(e.target.value)}
+                  style={styles.input}
+                  placeholder="Ex.: Aniversário da loja"
+                />
 
-            <input
-              type="date"
-              value={dataPersonalizada}
-              onChange={e => {
-                setDataPersonalizada(e.target.value)
-                setDataSazonalSelecionada("personalizada")
-                setMensagemSazonal("")
-              }}
-              style={styles.input}
-            />
+                <label style={{ ...styles.label, marginTop: 10 }}>Data</label>
+                <input
+                  type="date"
+                  value={dataPersonalizada}
+                  onChange={e => setDataPersonalizada(e.target.value)}
+                  style={styles.input}
+                />
 
-            <input
-              value={nomeDataPersonalizada}
-              onChange={e => setNomeDataPersonalizada(e.target.value)}
-              style={{ ...styles.input, marginTop: 8 }}
-              placeholder="Nome da campanha ou data"
-            />
+                <label style={{ ...styles.label, marginTop: 10 }}>Descrição (opcional)</label>
+                <textarea
+                  rows={3}
+                  value={descricaoDataPersonalizada}
+                  onChange={e => setDescricaoDataPersonalizada(e.target.value)}
+                  style={styles.textarea}
+                  placeholder="Observações sobre a campanha..."
+                />
 
-            <label style={{ ...styles.label, marginTop: 10 }}>
-              Mensagem da campanha
-            </label>
+                <button
+                  className="dash-btn"
+                  style={{ marginTop: 10 }}
+                  disabled={salvandoCampanha || !nomeDataPersonalizada.trim() || !dataPersonalizada}
+                  onClick={() => void salvarCampanhaPersonalizada()}
+                >
+                  {salvandoCampanha ? "Salvando..." : "Salvar data no calendário"}
+                </button>
+              </>
+            )}
 
+            <label style={{ ...styles.label, marginTop: 10 }}>Mensagem da campanha</label>
             <textarea
               rows={4}
               value={mensagemSazonal}
               onChange={e => setMensagemSazonal(e.target.value)}
               style={styles.textarea}
-              placeholder="Escreva ou ajuste a mensagem da campanha..."
+              placeholder="Selecione uma data e escreva a mensagem..."
             />
 
             <button
@@ -1134,17 +1088,26 @@ const styles: Record<string, CSSProperties> = {
     color: "#777",
     fontSize: 14,
   },
+  filters: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  },
   filterLabel: {
     display: "flex",
     alignItems: "center",
-    gap: 9,
+    gap: 8,
     color: "#777",
     fontSize: 13,
   },
-  monthSelector: {
+  checkboxLabel: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
+    color: "#777",
+    fontSize: 13,
+    whiteSpace: "nowrap",
   },
   select: {
     padding: "10px 12px",
@@ -1161,6 +1124,14 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 8,
     marginBottom: 16,
     color: "#9a3333",
+  },
+  success: {
+    background: "#effaf2",
+    border: "1px solid #b9dfc2",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    color: "#28764b",
   },
   cardTitle: {
     margin: 0,
@@ -1188,12 +1159,13 @@ const styles: Record<string, CSSProperties> = {
     height: 220,
     display: "flex",
     alignItems: "flex-end",
-    gap: 14,
+    gap: 7,
     padding: "8px 4px 0",
+    overflowX: "auto",
   },
   chartValue: {
     color: "#777",
-    fontSize: 10,
+    fontSize: 9,
     whiteSpace: "nowrap",
   },
   chartLabel: {
@@ -1258,29 +1230,6 @@ const styles: Record<string, CSSProperties> = {
     color: "#806b32",
     fontSize: 11,
     fontWeight: 700,
-  },
-  bigNumber: {
-    fontSize: 30,
-    fontWeight: 700,
-    marginTop: 20,
-  },
-  stockAlert: {
-    background: "#faf5e8",
-    border: "1px solid #eee1bf",
-    borderRadius: 8,
-    padding: 10,
-    color: "#735b15",
-    fontSize: 12,
-    lineHeight: 1.5,
-  },
-  attention: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-    padding: "12px 0",
-    borderBottom: "1px solid #eee9df",
-    color: "#777",
-    fontSize: 13,
   },
   actionCard: {
     minWidth: 0,
