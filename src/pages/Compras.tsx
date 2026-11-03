@@ -32,6 +32,7 @@ type Props = {
     clienteid: string
     cliente: string
   } | null
+  esconderGaleriaInicial?: boolean
 }
 
 /*
@@ -69,7 +70,8 @@ function dataAtualLocal() {
 }
 
 export default function Compras({
-  compraSelecionada
+  compraSelecionada,
+  esconderGaleriaInicial = false
 }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
@@ -1578,73 +1580,41 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
               }}
             />
 
-            {/* BUSCAR CLIENTE */}
+            {/* BUSCAR CLIENTE E GALERIA */}
 
-            <input
-              placeholder="Buscar por nome, descrição, telefone ou CPF"
-              value={
-                buscaCliente
-              }
-              onChange={e =>
-                setBuscaCliente(
-                  e.target.value
-                )
-              }
-              style={input}
-            />
+{!esconderGaleriaInicial && (
+  <>
+    <input
+      placeholder="Buscar por nome, descrição, telefone ou CPF"
+      value={buscaCliente}
+      onChange={e => setBuscaCliente(e.target.value)}
+      style={input}
+    />
 
-            <div
-              style={
-                clienteGrid
-              }
-            >
-              {clientesFiltrados.map(
-                c => (
-                  <div
-                    key={c.id}
-                    style={{
-                      ...clienteCard,
-                      border:
-                        clienteSel?.id ===
-                        c.id
-                          ? "2px solid #b9974f"
-                          : "1px solid #eee"
-                    }}
-                    onClick={() =>
-                      setClienteSel(
-                        c
-                      )
-                    }
-                  >
-                    <strong>
-                      {c.nome}
-                    </strong>
+    <div style={clienteGrid}>
+      {clientesFiltrados.map(c => (
+        <div
+          key={c.id}
+          style={{
+            ...clienteCard,
+            border:
+              clienteSel?.id === c.id
+                ? "2px solid #b9974f"
+                : "1px solid #eee"
+          }}
+          onClick={() => setClienteSel(c)}
+        >
+          <strong>{c.nome}</strong>
+          <div style={muted}>{c.pontos} pontos</div>
+        </div>
+      ))}
 
-                    <div
-                      style={
-                        muted
-                      }
-                    >
-                      {c.pontos}{" "}
-                      pontos
-                    </div>
-                  </div>
-                )
-              )}
-
-              {clientesFiltrados.length ===
-                0 && (
-                <div
-                  style={
-                    emptyText
-                  }
-                >
-                  Nenhum cliente
-                  encontrado.
-                </div>
-              )}
-            </div>
-
+      {clientesFiltrados.length === 0 && (
+        <div style={emptyText}>Nenhum cliente encontrado.</div>
+      )}
+    </div>
+  </>
+)}
             {/* CLIENTE SELECIONADO */}
 
             {clienteSel && (
