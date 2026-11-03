@@ -248,7 +248,12 @@ export default function Dashboard() {
   const [novaMeta, setNovaMeta] = useState("10000")
 
   const [mensagemAniversario, setMensagemAniversario] = useState(
-    "Olá, {nome}! A equipe Cami&Duda deseja um feliz aniversário, com muita saúde, alegria e um novo ciclo cheio de coisas boas. Esperamos te ver em breve!",
+    "Feliz aniversário, {nome}!\n\n" +
+  "Hoje é o seu dia!.\n" +
+  "A Cami&Duda deseja a você muita paz, amor, saúde, felicidade e sucesso. Que esse novo ciclo seja cheio de bençãos e sonhos realizados \n\n" +
+  "E para deixar seu dia ainda mais especial, estamos te prsenteando com um cupom no valor de R$ 20,00.\n\n" +
+  "Com carinho, Cami&Duda.\n\n" +
+    "Obs.: cupom válido por 24h.",
   )
   const [mensagemIndicacao, setMensagemIndicacao] = useState(
     "Oi! Quero te apresentar a Cami&Duda, uma loja cheia de peças lindas. Acho que você vai gostar!",
