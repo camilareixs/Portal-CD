@@ -148,7 +148,7 @@ function tipoReceitaLabel(tipo: Receita["tipo"]) {
   switch (tipo) {
     case "VENDA": return "Venda"
     case "PAGAMENTO_FIADO": return "Pagamento de fiado"
-    case "OUTRA_RECEITA": return "Outra receita"
+    //case "OUTRA_RECEITA": return "Outra receita"
     default: return "Outros"
   }
 }
@@ -456,9 +456,9 @@ export default function Financeiro() {
           <div style={subtitle}>Visão gerencial de vendas, receitas, despesas, caixa e valores a receber.</div>
         </div>
         <div className="fin-header-actions" style={headerButtons}>
-          <button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button>
-          <button type="button" style={btnSmall} onClick={() => setModalDespesa(true)}>+ Nova despesa</button>
-          <button type="button" style={btnSmall} onClick={() => setModalReceita(true)}>+ Nova receita</button>
+          <button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório</button>
+          <button type="button" style={btnSmall} onClick={() => setModalDespesa(true)}>Nova despesa</button>
+          <button type="button" style={btnSmall} onClick={() => setModalReceita(true)}>Nova receita</button>
         </div>
       </div>
 
@@ -507,7 +507,7 @@ export default function Financeiro() {
         <>
           <div className="fin-two">
             <section className="fin-card" style={section}>
-              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button></div>
+              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório</button></div>
               <ResumoLinha label="Faturamento" valor={moeda(faturamento)} />
               <ResumoLinha label="Lucro bruto" valor={moeda(lucroBruto)} />
               <ResumoLinha label="(-) Despesas operacionais pagas" valor={moeda(totalDespesas)} />
@@ -555,7 +555,7 @@ export default function Financeiro() {
 
       {modalReceita && <Modal titulo="Nova receita" subtitulo="Registre uma entrada financeira." onClose={()=>setModalReceita(false)}>
         <label style={fieldLabel}>Descrição</label><input style={input} placeholder="Ex.: receita extra" value={descricaoReceita} onChange={e=>setDescricaoReceita(e.target.value)}/>
-        <label style={fieldLabel}>Tipo</label><select style={input} value={tipoReceita} onChange={e=>setTipoReceita(e.target.value as Receita["tipo"])}><option value="OUTRA_RECEITA">Outra receita</option><option value="OUTROS">Outros</option></select>
+        <label style={fieldLabel}>Tipo</label><select style={input} value={tipoReceita} onChange={e=>setTipoReceita(e.target.value as Receita["tipo"])}><option value="OUTROS">Outros</option></select>
         <label style={fieldLabel}>Valor</label><input style={input} inputMode="decimal" value={moedaInput(valorReceita)} placeholder="R$ 0,00" onChange={e=>setValorReceita(numeroMoeda(e.target.value))}/>
         <label style={fieldLabel}>Observação</label><textarea style={textarea} placeholder="Opcional" value={observacaoReceita} onChange={e=>setObservacaoReceita(e.target.value)}/>
         <div style={resumo}>Entrada: <strong>{moeda(valorReceita)}</strong></div><button type="button" style={btnPrimary} onClick={criarReceita} disabled={carregando}>Cadastrar receita</button>
