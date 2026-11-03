@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { supabase } from "../lib/supabase"
 
-type CategoriaFinanceira = { id: string; nome: string; tipo: "DESPESA" | "RECEITA"; ativo: boolean }
-
 type Receita = {
   id: string
-  tipo: string
-  categoriaId?: string | null
+  tipo: "VENDA" | "PAGAMENTO_FIADO" | "OUTRA_RECEITA" | "OUTROS"
   descricao: string
   valor: number
   dataCompetencia: string
@@ -27,7 +24,6 @@ type Despesa = {
   status: "PENDENTE" | "PAGA" | "CANCELADA"
   observacao: string
   categoria: string
-  categoriaId?: string | null
   criadoem: string
 }
 
@@ -55,6 +51,19 @@ type Fiado = {
   pendente: number
 }
 
+const categoriasDespesas = [
+  "Aluguel",
+  "Marketing",
+  "Embalagens",
+  "Transporte",
+  "Taxas",
+  "Fornecedores",
+  "Operacional",
+  "Impostos",
+  "Pessoal",
+  "Manutenção",
+  "Outros"
+]
 
 const meses = [
   { value: "01", label: "Janeiro" }, { value: "02", label: "Fevereiro" },
@@ -140,7 +149,7 @@ function tipoReceitaLabel(tipo: Receita["tipo"]) {
     case "VENDA": return "Venda"
     case "PAGAMENTO_FIADO": return "Pagamento de fiado"
     case "OUTRA_RECEITA": return "Outra receita"
-    default: return tipo || "Outros"
+    default: return "Outros"
   }
 }
 
@@ -149,16 +158,9 @@ export default function Financeiro() {
   const [despesas, setDespesas] = useState<Despesa[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [vendaItens, setVendaItens] = useState<VendaItem[]>([])
-  const [categoriasFinanceiras, setCategoriasFinanceiras] = useState<CategoriaFinanceira[]>([])
-  const [novaCategoriaDespesa, setNovaCategoriaDespesa] = useState("")
-  const [novaCategoriaReceita, setNovaCategoriaReceita] = useState("")
-  const [gerenciarCategoriasDespesa, setGerenciarCategoriasDespesa] = useState(false)
-  const [gerenciarCategoriasReceita, setGerenciarCategoriasReceita] = useState(false)
 
   const [aba, setAba] = useState<"resumo" | "receitas" | "despesas" | "fiado">("resumo")
-  const [filtroMes, setFiltroMes] = useState(
-    String(new Date().getMonth() + 1).padStart(2, "0")
-  )
+  const [filtroMes, setFiltroMes] = useState("todos")
   const [filtroAno, setFiltroAno] = useState(String(new Date().getFullYear()))
   const [filtroStatus] = useState("todos")
   const [periodoPersonalizado, setPeriodoPersonalizado] = useState(false)
@@ -173,14 +175,12 @@ export default function Financeiro() {
 
   const [descricaoReceita, setDescricaoReceita] = useState("")
   const [valorReceita, setValorReceita] = useState(0)
-  const [tipoReceita, setTipoReceita] = useState("Outras receitas")
-  const [categoriaReceitaId, setCategoriaReceitaId] = useState("")
+  const [tipoReceita, setTipoReceita] = useState<Receita["tipo"]>("OUTRA_RECEITA")
   const [observacaoReceita, setObservacaoReceita] = useState("")
 
   const [descricaoDespesa, setDescricaoDespesa] = useState("")
   const [valorDespesa, setValorDespesa] = useState(0)
   const [categoriaDespesa, setCategoriaDespesa] = useState("Outros")
-  const [categoriaDespesaId, setCategoriaDespesaId] = useState("")
   const [dataCompetenciaDespesa, setDataCompetenciaDespesa] = useState(inicioDoMesAtual())
   const [dataPagamentoDespesa, setDataPagamentoDespesa] = useState(hojeISO())
   const [despesaRecorrente, setDespesaRecorrente] = useState(false)
@@ -190,27 +190,24 @@ export default function Financeiro() {
 
   async function fetchFinanceiro() {
     setCarregando(true)
-    const [receitasResult, despesasResult, comprasResult, itensResult, categoriasResult] = await Promise.all([
+    const [receitasResult, despesasResult, comprasResult, itensResult] = await Promise.all([
       supabase.from("receitas").select("*").order("dataCompetencia", { ascending: false }),
       supabase.from("despesas").select("*").order("dataCompetencia", { ascending: false }),
       supabase.from("compras").select("id,clienteid,cliente,cpf,valor,pagamento,criadoem,status").order("criadoem", { ascending: false }),
-      supabase.from("vendaItens").select("id,compraId,quantidade,custoUnitario"),
-      supabase.from("categoriasFinanceiras").select("id,nome,tipo,ativo").order("nome")
+      supabase.from("vendaItens").select("id,compraId,quantidade,custoUnitario")
     ])
 
     if (receitasResult.error) alert("Erro ao carregar receitas: " + receitasResult.error.message)
     if (despesasResult.error) alert("Erro ao carregar despesas: " + despesasResult.error.message)
     if (comprasResult.error) alert("Erro ao carregar vendas: " + comprasResult.error.message)
     if (itensResult.error) alert("Erro ao carregar itens das vendas: " + itensResult.error.message)
-    if (categoriasResult.error) alert("Erro ao carregar categorias: " + categoriasResult.error.message)
-    if (categoriasResult.data) setCategoriasFinanceiras(categoriasResult.data as CategoriaFinanceira[])
 
     if (receitasResult.data) {
       setReceitas(receitasResult.data.map((r: any) => ({
         id: String(r.id), tipo: r.tipo, descricao: r.descricao || "", valor: Number(r.valor || 0),
         dataCompetencia: r.dataCompetencia || "", dataRecebimento: r.dataRecebimento || null,
         status: r.status, observacao: r.observacao || "", criadoem: r.criadoem || "",
-        compraId: r.compraId ? String(r.compraId) : null, categoriaId: r.categoriaId ? String(r.categoriaId) : null
+        compraId: r.compraId ? String(r.compraId) : null
       })))
     }
     if (despesasResult.data) {
@@ -218,7 +215,7 @@ export default function Financeiro() {
         id: String(d.id), descricao: d.descricao || "", valor: Number(d.valor || 0),
         dataCompetencia: d.dataCompetencia || "", dataPagamento: d.dataPagamento || null,
         recorrente: Boolean(d.recorrente), status: d.status, observacao: d.observacao || "",
-        categoria: d.categoria || "Outros", categoriaId: d.categoriaId ? String(d.categoriaId) : null, criadoem: d.criadoem || ""
+        categoria: d.categoria || "Outros", criadoem: d.criadoem || ""
       })))
     }
     if (comprasResult.data) {
@@ -238,9 +235,6 @@ export default function Financeiro() {
   }
 
   useEffect(() => { fetchFinanceiro() }, [])
-
-  const categoriasDespesasAtivas = categoriasFinanceiras.filter(c => c.tipo === "DESPESA" && c.ativo)
-  const categoriasReceitasAtivas = categoriasFinanceiras.filter(c => c.tipo === "RECEITA" && c.ativo)
 
   const anos = useMemo(() => anosDisponiveis(receitas, despesas, compras), [receitas, despesas, compras])
 
@@ -267,8 +261,9 @@ export default function Financeiro() {
 
   const despesasPeriodo = useMemo(() => despesas.filter(d => dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const despesasPagas = useMemo(() => despesas.filter(d => d.status === "PAGA" && dentroDoPeriodo(d.dataPagamento || d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
+  const despesasPendentes = useMemo(() => despesas.filter(d => d.status === "PENDENTE" && dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const totalDespesas = useMemo(() => despesasPagas.reduce((t, d) => t + d.valor, 0), [despesasPagas])
- 
+  const totalDespesasPendentes = useMemo(() => despesasPendentes.reduce((t, d) => t + d.valor, 0), [despesasPendentes])
 
   const custoProdutosVendidos = useMemo(() => {
     const ids = new Set(vendasPeriodo.map(c => c.id))
@@ -314,51 +309,6 @@ export default function Financeiro() {
     return despesasPeriodo.filter(d => filtroStatus === "todos" || d.status === filtroStatus)
   }, [despesasPeriodo, filtroStatus])
 
-  // Histórico de receitas, vendas e despesas do período selecionado.
-  const historicoMovimentacoes = useMemo(() => {
-    const entradasReceitas = receitasFiltradas.map(r => ({
-      id: r.id,
-      data: r.dataRecebimento || r.dataCompetencia,
-      tipo: "Entrada",
-      descricao: r.descricao,
-      status: r.status,
-      valor: r.valor
-    }))
-
-    // Algumas vendas aparecem no faturamento mensal a partir da tabela compras,
-    // mas não necessariamente possuem um lançamento correspondente em receitas.
-    // Incluímos essas vendas no histórico sem duplicar as que já estão em receitas.
-    const comprasComReceita = new Set(
-      receitasFiltradas
-        .filter(r => r.tipo === "VENDA" && r.compraId)
-        .map(r => String(r.compraId))
-    )
-
-    const entradasVendas = vendasPeriodo
-      .filter(v => !comprasComReceita.has(String(v.id)))
-      .map(v => ({
-        id: `venda-${v.id}`,
-        data: v.criadoem,
-        tipo: "Entrada",
-        descricao: `Venda${v.cliente ? ` - ${v.cliente}` : ""}`,
-        status: "RECEBIDA",
-        valor: v.valor
-      }))
-
-    const saidas = despesasFiltradas.map(d => ({
-      id: d.id,
-      data: d.dataPagamento || d.dataCompetencia,
-      tipo: "Saída",
-      descricao: d.descricao,
-      status: d.status,
-      valor: -d.valor
-    }))
-
-    return [...entradasReceitas, ...entradasVendas, ...saidas].sort((a, b) =>
-      String(b.data).localeCompare(String(a.data))
-    )
-  }, [receitasFiltradas, despesasFiltradas, vendasPeriodo])
-
 
   const mesesDoAno = useMemo(() => {
     const ano = Number(filtroAno) || new Date().getFullYear()
@@ -369,58 +319,36 @@ export default function Financeiro() {
     })
   }, [filtroAno, vendasValidas, despesas])
 
-  async function adicionarCategoria(tipo: "DESPESA" | "RECEITA") {
-    const nome = (tipo === "DESPESA" ? novaCategoriaDespesa : novaCategoriaReceita).trim()
-    if (!nome) { alert("Digite o nome da categoria."); return }
-    if (categoriasFinanceiras.some(c => c.tipo === tipo && c.nome.toLowerCase() === nome.toLowerCase() && c.ativo)) {
-      alert("Essa categoria já existe."); return
-    }
-    const { data, error } = await supabase.from("categoriasFinanceiras").insert({ nome, tipo }).select("id,nome,tipo,ativo").single()
-    if (error) { alert("Não foi possível cadastrar a categoria: " + error.message); return }
-    setCategoriasFinanceiras(atual => [...atual, data as CategoriaFinanceira].sort((a,b) => a.nome.localeCompare(b.nome)))
-    if (tipo === "DESPESA") { setCategoriaDespesa(nome); setCategoriaDespesaId(data.id); setNovaCategoriaDespesa("") }
-    else { setTipoReceita(nome); setCategoriaReceitaId(data.id); setNovaCategoriaReceita("") }
-  }
-
-  async function desativarCategoria(categoria: CategoriaFinanceira) {
-    if (!window.confirm(`Desativar a categoria "${categoria.nome}"? Os lançamentos antigos serão preservados.`)) return
-    const { error } = await supabase.from("categoriasFinanceiras").update({ ativo: false }).eq("id", categoria.id)
-    if (error) { alert("Não foi possível desativar a categoria: " + error.message); return }
-    setCategoriasFinanceiras(atual => atual.map(c => c.id === categoria.id ? { ...c, ativo: false } : c))
-    if (categoria.tipo === "DESPESA" && categoriaDespesaId === categoria.id) { setCategoriaDespesaId(""); setCategoriaDespesa("Outros") }
-    if (categoria.tipo === "RECEITA" && categoriaReceitaId === categoria.id) { setCategoriaReceitaId(""); setTipoReceita("Outras receitas") }
-  }
-
   async function criarReceita() {
-    if (!descricaoReceita.trim() || valorReceita <= 0 || !categoriaReceitaId) {
-      alert("Informe descrição, categoria e um valor maior que zero.")
+    if (!descricaoReceita.trim() || valorReceita <= 0) {
+      alert("Informe descrição e um valor maior que zero.")
       return
     }
     setCarregando(true)
     const hoje = hojeISO()
     const { error } = await supabase.from("receitas").insert({
-      tipo: tipoReceita, categoriaId: categoriaReceitaId || null, descricao: descricaoReceita.trim(), valor: valorReceita,
+      tipo: tipoReceita, descricao: descricaoReceita.trim(), valor: valorReceita,
       dataCompetencia: hoje, dataRecebimento: hoje, status: "RECEBIDA",
       observacao: observacaoReceita.trim() || null
     })
     if (error) { setCarregando(false); alert("Erro ao cadastrar receita: " + error.message); return }
-    setModalReceita(false); setDescricaoReceita(""); setValorReceita(0); setTipoReceita("Outras receitas"); setCategoriaReceitaId(""); setObservacaoReceita("")
+    setModalReceita(false); setDescricaoReceita(""); setValorReceita(0); setTipoReceita("OUTRA_RECEITA"); setObservacaoReceita("")
     await fetchFinanceiro()
   }
 
   async function criarDespesa() {
-    if (!descricaoDespesa.trim() || valorDespesa <= 0 || !categoriaDespesaId) {
-      alert("Informe descrição, categoria e um valor maior que zero.")
+    if (!descricaoDespesa.trim() || valorDespesa <= 0) {
+      alert("Informe descrição e um valor maior que zero.")
       return
     }
     setCarregando(true)
     const { error } = await supabase.from("despesas").insert({
       descricao: descricaoDespesa.trim(), valor: valorDespesa, dataCompetencia: dataCompetenciaDespesa,
       dataPagamento: statusDespesa === "PAGA" ? dataPagamentoDespesa : null, recorrente: despesaRecorrente,
-      status: statusDespesa, observacao: observacaoDespesa.trim() || null, categoria: categoriaDespesa, categoriaId: categoriaDespesaId || null
+      status: statusDespesa, observacao: observacaoDespesa.trim() || null, categoria: categoriaDespesa
     })
     if (error) { setCarregando(false); alert("Erro ao cadastrar despesa: " + error.message); return }
-    setModalDespesa(false); setDescricaoDespesa(""); setValorDespesa(0); setCategoriaDespesa("Outros"); setCategoriaDespesaId("")
+    setModalDespesa(false); setDescricaoDespesa(""); setValorDespesa(0); setCategoriaDespesa("Outros")
     setDataCompetenciaDespesa(inicioDoMesAtual()); setDataPagamentoDespesa(hojeISO()); setDespesaRecorrente(false); setStatusDespesa("PAGA"); setObservacaoDespesa("")
     await fetchFinanceiro()
   }
@@ -525,13 +453,13 @@ export default function Financeiro() {
 
       <div style={header}>
         <div>
-          <h1 className="fin-title" style={title}>Financeiro - Fazer levantamento do que deseja</h1>
+          <h1 className="fin-title" style={title}>Financeiro</h1>
           <div style={subtitle}>Visão gerencial de vendas, receitas, despesas, caixa e valores a receber.</div>
         </div>
         <div className="fin-header-actions" style={headerButtons}>
           <button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button>
-          <button type="button" style={btnSmall} onClick={() => setModalDespesa(true)}>Nova despesa</button>
-          <button type="button" style={btnSmall} onClick={() => setModalReceita(true)}>Nova receita</button>
+          <button type="button" style={btnSmall} onClick={() => setModalDespesa(true)}>+ Nova despesa</button>
+          <button type="button" style={btnSmall} onClick={() => setModalReceita(true)}>+ Nova receita</button>
         </div>
       </div>
 
@@ -580,7 +508,7 @@ export default function Financeiro() {
         <>
           <div className="fin-two">
             <section className="fin-card" style={section}>
-              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório</button></div>
+              <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório (.txt)</button></div>
               <ResumoLinha label="Faturamento" valor={moeda(faturamento)} />
               <ResumoLinha label="Lucro bruto" valor={moeda(lucroBruto)} />
               <ResumoLinha label="(-) Despesas operacionais pagas" valor={moeda(totalDespesas)} />
@@ -597,61 +525,23 @@ export default function Financeiro() {
           </section>
 
           <section className="fin-card" style={{...section, marginTop:16}}>
-            <h3 style={sectionTitle}>Histórico de movimentações</h3>
-            <div style={muted}>Todas as receitas e despesas do período selecionado.</div>
-            <div className="fin-scroll">
-              <table className="fin-table">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Tipo</th>
-                    <th>Descrição</th>
-                    <th>Status</th>
-                    <th className="right">Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historicoMovimentacoes.map(m => (
-                    <tr key={`${m.tipo}-${m.id}`}>
-                      <td>{dataBR(m.data)}</td>
-                      <td>{m.tipo}</td>
-                      <td>{m.descricao}</td>
-                      <td><StatusBadge status={m.status} /></td>
-                      <td
-                        className="right"
-                        style={{
-                          color: m.valor >= 0 ? "#5f7f47" : "#b35a5a",
-                          fontWeight: 700
-                        }}
-                      >
-                        {m.valor >= 0 ? "+ " : "- "}
-                        {moeda(Math.abs(m.valor))}
-                      </td>
-                    </tr>
-                  ))}
-                  {!historicoMovimentacoes.length && (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: "center", color: "#888" }}>
-                        Nenhuma movimentação encontrada neste período.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <h3 style={sectionTitle}>Últimas movimentações</h3>
+            <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Status</th><th className="right">Valor</th></tr></thead><tbody>
+              {[...receitasRecebidas.map(r=>({data:r.dataRecebimento||r.dataCompetencia,tipo:"Entrada",descricao:r.descricao,status:r.status,valor:r.valor})),...despesasPagas.map(d=>({data:d.dataPagamento||d.dataCompetencia,tipo:"Saída",descricao:d.descricao,status:d.status,valor:-d.valor}))].sort((a,b)=>String(b.data).localeCompare(String(a.data))).slice(0,12).map((m,i)=><tr key={`${m.tipo}-${i}`}><td>{dataBR(m.data)}</td><td>{m.tipo}</td><td>{m.descricao}</td><td><StatusBadge status={m.status}/></td><td className="right" style={{color:m.valor>=0?"#5f7f47":"#b35a5a",fontWeight:700}}>{m.valor>=0?"+ ":"- "}{moeda(Math.abs(m.valor))}</td></tr>)}
+            </tbody></table></div>
           </section>
         </>
       )}
 
       {aba === "receitas" && <ListCard title="Receitas" subtitle="Entradas financeiras registradas no período." action={<button style={btnSmall} onClick={()=>setModalReceita(true)}>+ Nova receita</button>}>
-        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Descrição</th><th>Tipo</th><th>Data do lançamento</th><th>Recebimento</th><th>Status</th><th className="right">Valor</th><th></th></tr></thead><tbody>
+        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Descrição</th><th>Tipo</th><th>Competência</th><th>Recebimento</th><th>Status</th><th className="right">Valor</th><th></th></tr></thead><tbody>
           {receitasFiltradas.map(r=><tr key={r.id}><td><strong>{r.descricao}</strong>{r.observacao&&<div style={muted}>{r.observacao}</div>}</td><td>{tipoReceitaLabel(r.tipo)}</td><td>{dataBR(r.dataCompetencia)}</td><td>{dataBR(r.dataRecebimento)}</td><td><StatusBadge status={r.status}/></td><td className="right" style={{color:"#5f7f47",fontWeight:700}}>{moeda(r.valor)}</td><td><button style={deleteBtn} disabled={r.status==="CANCELADA"} onClick={()=>cancelarReceita(r)}>Cancelar</button></td></tr>)}
         </tbody></table></div>
         {!receitasFiltradas.length && <div style={emptyText}>Nenhuma receita encontrada.</div>}
       </ListCard>}
 
       {aba === "despesas" && <ListCard title="Despesas" subtitle="Contas e gastos da operação." action={<button style={btnExpense} onClick={()=>setModalDespesa(true)}>+ Nova despesa</button>}>
-        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Descrição</th><th>Categoria</th><th>Data do lançamento</th><th>Pagamento</th><th>Status</th><th className="right">Valor</th><th></th></tr></thead><tbody>
+        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Descrição</th><th>Categoria</th><th>Competência</th><th>Pagamento</th><th>Status</th><th className="right">Valor</th><th></th></tr></thead><tbody>
           {despesasFiltradas.map(d=><tr key={d.id}><td><strong>{d.descricao}</strong>{d.recorrente&&<div style={muted}>Despesa recorrente</div>}</td><td>{d.categoria}</td><td>{dataBR(d.dataCompetencia)}</td><td>{dataBR(d.dataPagamento)}</td><td><StatusBadge status={d.status}/></td><td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(d.valor)}</td><td><button style={deleteBtn} disabled={d.status==="CANCELADA"} onClick={()=>cancelarDespesa(d)}>Cancelar</button></td></tr>)}
         </tbody></table></div>
         {!despesasFiltradas.length && <div style={emptyText}>Nenhuma despesa encontrada.</div>}
@@ -666,9 +556,7 @@ export default function Financeiro() {
 
       {modalReceita && <Modal titulo="Nova receita" subtitulo="Registre uma entrada financeira." onClose={()=>setModalReceita(false)}>
         <label style={fieldLabel}>Descrição</label><input style={input} placeholder="Ex.: receita extra" value={descricaoReceita} onChange={e=>setDescricaoReceita(e.target.value)}/>
-        <label style={fieldLabel}>Categoria</label><select style={input} value={categoriaReceitaId} onChange={e=>{setCategoriaReceitaId(e.target.value);setTipoReceita(categoriasReceitasAtivas.find(c=>c.id===e.target.value)?.nome || "Outras receitas")}}><option value="">Selecione uma categoria</option>{categoriasReceitasAtivas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select>
-        <button type="button" style={btnSecondary} onClick={()=>setGerenciarCategoriasReceita(v=>!v)}>Gerenciar categorias</button>
-        {gerenciarCategoriasReceita&&<div style={{border:"1px solid #eee",borderRadius:10,padding:12,marginTop:10}}><div style={{display:"flex",gap:8}}><input style={input} placeholder="Nova categoria de receita" value={novaCategoriaReceita} onChange={e=>setNovaCategoriaReceita(e.target.value)}/><button type="button" style={btnSmall} onClick={()=>adicionarCategoria("RECEITA")}>Adicionar</button></div>{categoriasReceitasAtivas.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0"}}><span>{c.nome}</span><button type="button" style={deleteBtn} onClick={()=>desativarCategoria(c)}>Desativar</button></div>)}</div>}
+        <label style={fieldLabel}>Tipo</label><select style={input} value={tipoReceita} onChange={e=>setTipoReceita(e.target.value as Receita["tipo"])}><option value="OUTRA_RECEITA">Outra receita</option><option value="OUTROS">Outros</option></select>
         <label style={fieldLabel}>Valor</label><input style={input} inputMode="decimal" value={moedaInput(valorReceita)} placeholder="R$ 0,00" onChange={e=>setValorReceita(numeroMoeda(e.target.value))}/>
         <label style={fieldLabel}>Observação</label><textarea style={textarea} placeholder="Opcional" value={observacaoReceita} onChange={e=>setObservacaoReceita(e.target.value)}/>
         <div style={resumo}>Entrada: <strong>{moeda(valorReceita)}</strong></div><button type="button" style={btnPrimary} onClick={criarReceita} disabled={carregando}>Cadastrar receita</button>
@@ -676,9 +564,7 @@ export default function Financeiro() {
 
       {modalDespesa && <Modal titulo="Nova despesa" subtitulo="Registre um gasto da operação." onClose={()=>setModalDespesa(false)}>
         <label style={fieldLabel}>Descrição</label><input style={input} placeholder="Ex.: aluguel" value={descricaoDespesa} onChange={e=>setDescricaoDespesa(e.target.value)}/>
-        <label style={fieldLabel}>Categoria</label><select style={input} value={categoriaDespesaId} onChange={e=>{setCategoriaDespesaId(e.target.value);setCategoriaDespesa(categoriasDespesasAtivas.find(c=>c.id===e.target.value)?.nome || "Outros")}}><option value="">Selecione uma categoria</option>{categoriasDespesasAtivas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select>
-        <button type="button" style={btnSecondary} onClick={()=>setGerenciarCategoriasDespesa(v=>!v)}>Gerenciar categorias</button>
-        {gerenciarCategoriasDespesa&&<div style={{border:"1px solid #eee",borderRadius:10,padding:12,marginTop:10}}><div style={{display:"flex",gap:8}}><input style={input} placeholder="Nova categoria de despesa" value={novaCategoriaDespesa} onChange={e=>setNovaCategoriaDespesa(e.target.value)}/><button type="button" style={btnSmall} onClick={()=>adicionarCategoria("DESPESA")}>Adicionar</button></div>{categoriasDespesasAtivas.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0"}}><span>{c.nome}</span><button type="button" style={deleteBtn} onClick={()=>desativarCategoria(c)}>Desativar</button></div>)}</div>}
+        <label style={fieldLabel}>Categoria</label><select style={input} value={categoriaDespesa} onChange={e=>setCategoriaDespesa(e.target.value)}>{categoriasDespesas.map(c=><option key={c}>{c}</option>)}</select>
         <label style={fieldLabel}>Valor</label><input style={input} inputMode="decimal" value={moedaInput(valorDespesa)} placeholder="R$ 0,00" onChange={e=>setValorDespesa(numeroMoeda(e.target.value))}/>
         <label style={fieldLabel}>Data do lançamento</label><input type="date" style={input} value={dataCompetenciaDespesa} onChange={e=>setDataCompetenciaDespesa(e.target.value)}/>
         <label style={fieldLabel}>Status</label><select style={input} value={statusDespesa} onChange={e=>setStatusDespesa(e.target.value as Despesa["status"])}><option value="PAGA">Paga</option><option value="PENDENTE">Pendente</option></select>
@@ -748,6 +634,7 @@ const sectionTitle={marginTop:0,marginBottom:16,fontSize:17}
 const sectionTitleNoMargin={margin:0,fontSize:18}
 const resumoLinha={display:"flex",justifyContent:"space-between",alignItems:"center",gap:15,padding:"13px 0",borderBottom:"1px solid #eee",fontSize:14}
 const resumoLinhaDestaque={color:"#80691f",fontSize:15,fontWeight:700}
+const indicator={display:"flex",justifyContent:"space-between",gap:12,padding:"12px 0",borderBottom:"1px solid #eee",fontSize:13}
 const statusBadge={display:"inline-block",padding:"5px 8px",borderRadius:7,fontSize:10,fontWeight:600,whiteSpace:"nowrap" as const}
 const statusRecebido={background:"#edf5e7",color:"#66834e"}
 const statusPendente={background:"#fff6d6",color:"#9b7b2f"}
