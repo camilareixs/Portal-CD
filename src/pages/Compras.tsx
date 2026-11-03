@@ -134,6 +134,8 @@ const [salvandoMetas, setSalvandoMetas] = useState(false)
   const [excluindo, setExcluindo] =
     useState<string | null>(null)
 
+  const [galeriaMinimizada, setGaleriaMinimizada] = useState(false)
+
   /*
    * =========================
    * FETCH CLIENTES
@@ -765,26 +767,27 @@ async function salvarMetas() {
    * =========================
    */
 
-  function fecharModalCompra() {
-    setModal(false)
+ function fecharModalCompra() {
+  setModal(false)
 
-    setDataVenda(dataAtualLocal())
+  setDataVenda(dataAtualLocal())
 
-    setClienteSel(null)
+  setClienteSel(null)
 
-    setValor(0)
+  setGaleriaMinimizada(false)
 
-    setPagamento("Pix")
+  setValor(0)
 
-    setParcelas(1)
+  setPagamento("Pix")
 
-    setUsarCupom(false)
+  setParcelas(1)
 
-    setQuantidadeCupons(0)
+  setUsarCupom(false)
 
-    setBuscaCliente("")
-  }
+  setQuantidadeCupons(0)
 
+  setBuscaCliente("")
+}
   /*
    * =========================
    * EXCLUIR COMPRA / RECEITA
@@ -1584,35 +1587,75 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
 
 {!esconderGaleriaInicial && (
   <>
-    <input
-      placeholder="Buscar por nome, descrição, telefone ou CPF"
-      value={buscaCliente}
-      onChange={e => setBuscaCliente(e.target.value)}
-      style={input}
-    />
-
-    <div style={clienteGrid}>
-      {clientesFiltrados.map(c => (
-        <div
-          key={c.id}
-          style={{
-            ...clienteCard,
-            border:
-              clienteSel?.id === c.id
-                ? "2px solid #b9974f"
-                : "1px solid #eee"
-          }}
-          onClick={() => setClienteSel(c)}
-        >
-          <strong>{c.nome}</strong>
-          <div style={muted}>{c.pontos} pontos</div>
+    {clienteSel && galeriaMinimizada ? (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: 12,
+          marginTop: 12,
+          background: "#faf8f1",
+          border: "1px solid #eee6c9",
+          borderRadius: 10
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <strong>{clienteSel.nome}</strong>
+          <div style={muted}>
+            {clienteSel.pontos} pontos
+          </div>
         </div>
-      ))}
 
-      {clientesFiltrados.length === 0 && (
-        <div style={emptyText}>Nenhum cliente encontrado.</div>
-      )}
-    </div>
+        <button
+          type="button"
+          style={btnSmall}
+          onClick={() => setGaleriaMinimizada(false)}
+        >
+          Trocar cliente
+        </button>
+      </div>
+    ) : (
+      <>
+        <input
+          placeholder="Buscar por nome, descrição, telefone ou CPF"
+          value={buscaCliente}
+          onChange={e => setBuscaCliente(e.target.value)}
+          style={input}
+        />
+
+        <div style={clienteGrid}>
+          {clientesFiltrados.map(c => (
+            <div
+              key={c.id}
+              style={{
+                ...clienteCard,
+                border:
+                  clienteSel?.id === c.id
+                    ? "2px solid #b9974f"
+                    : "1px solid #eee"
+              }}
+              onClick={() => {
+                setClienteSel(c)
+                setGaleriaMinimizada(true)
+              }}
+            >
+              <strong>{c.nome}</strong>
+              <div style={muted}>
+                {c.pontos} pontos
+              </div>
+            </div>
+          ))}
+
+          {clientesFiltrados.length === 0 && (
+            <div style={emptyText}>
+              Nenhum cliente encontrado.
+            </div>
+          )}
+        </div>
+      </>
+    )}
   </>
 )}
             {/* CLIENTE SELECIONADO */}
