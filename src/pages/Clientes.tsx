@@ -730,7 +730,15 @@ ${comprasCliente.length
                 </div>
 
                 <div className="clientes-modal-actions">
-                  <button style={styles.secondaryBtn} onClick={() => { if (irParaCompra) irParaCompra(selected.id, selected.nome); setSelected(null) }}>Nova venda</button>
+                 <button
+  style={styles.secondaryBtn}
+  onClick={() => {
+    if (irParaCompra) irParaCompra(selected.id, selected.nome)
+    setSelected(null)
+  }}
+>
+  Nova venda
+</button>
                   <button style={styles.newCreditBtn} onClick={() => { setNovoCredito(""); setCreditoAberto(true) }}>Novo Crédito</button>
                   <button style={styles.secondaryBtn} onClick={() => visualizarRelatorio(selected)}>Relatório</button>
                   <button style={styles.whatsBtn} onClick={() => abrirWhats(selected)}>WhatsApp</button>
