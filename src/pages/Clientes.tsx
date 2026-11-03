@@ -42,10 +42,20 @@ type Compra = {
 }
 
 const MENSAGEM_WHATS_PADRAO =
-  "Olá, {nome}! Você tem {pontos} pontos acumulados na Cami&Duda. A cada 10 pontos, você ganha um cupom de R$ 60. Você tem {cupons} cupom(ns) disponível(is) e já acumulou {resto}/10 pontos para o próximo. Te esperamos!"
+  "Olá, {nome}!\n\n" +
+  "Você tem {pontos} pontos acumulados na Cami&Duda.\n" +
+  "A cada 10 pontos, você ganha um cupom de R$ 60,00.\n\n" +
+  "Você tem {cupons} cupom(ns) disponível(is) e já acumulou {resto}/10 pontos para o próximo.\n\n" +
+  "Te esperamos!";
 
 const MENSAGEM_CUPONS_PADRAO =
-  "Olá, {nome}! Você tem {cupons} cupom(ns) disponível(is) e já acumulou {resto}/10 pontos para ganhar mais um. Te esperamos na Cami&Duda!"
+  "Olá, {nome}!\n\n" +
+  "Temos uma ótima notícia para você!\n\n" +
+  "Você já acumulou {resto} pontos no nosso Programa de Fidelidade e agora pode aproveitar R$ 60,00 de desconto na sua próxima compra!\n\n" +
+  "Que tal escolher aquele look que você está desejando e aproveitar esse benefício exclusivo?\n\n" +
+  "Estamos te esperando!\n\n" +
+  "Com carinho,\n" +
+  "Equipe Cami&Duda.";
 
 export default function Clientes({
   irParaCompra
