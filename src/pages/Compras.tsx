@@ -98,6 +98,14 @@ const [filtroMes, setFiltroMes] = useState(
   String(new Date().getMonth() + 1).padStart(2, "0")
 )
 
+const perfil = localStorage.getItem("camiduda_perfil") || ""
+const isAdm = perfil === "ADM"
+
+const [meta, setMeta] = useState(0)
+const [superMeta, setSuperMeta] = useState(0)
+const [editandoMetas, setEditandoMetas] = useState(false)
+const [salvandoMetas, setSalvandoMetas] = useState(false)
+  
   const [filtroPagamento, setFiltroPagamento] =
     useState("todos")
 
@@ -228,6 +236,93 @@ const [filtroMes, setFiltroMes] = useState(
     fetchClientes()
     fetchCompras()
   }, [])
+
+  async function fetchMetas() {
+  if (filtroAno === "todos" || filtroMes === "todos") {
+    setMeta(0)
+    setSuperMeta(0)
+    return
+  }
+
+  const { data, error } = await supabase
+    .from("metas_mensais")
+    .select("meta,super_meta")
+    .eq("ano", Number(filtroAno))
+    .eq("mes", Number(filtroMes))
+    .maybeSingle()
+
+  if (error) {
+    alert("Erro ao carregar metas: " + error.message)
+    return
+  }
+
+  setMeta(Number(data?.meta || 0))
+  setSuperMeta(Number(data?.super_meta || 0))
+}
+
+async function salvarMetas() {
+  if (!isAdm) return
+
+  if (filtroAno === "todos" || filtroMes === "todos") {
+    alert("Selecione um mês e um ano para salvar as metas.")
+    return
+  }
+
+  if (meta < 0 || superMeta < 0) {
+    alert("As metas não podem ser negativas.")
+    return
+  }
+
+  setSalvandoMetas(true)
+
+  const ano = Number(filtroAno)
+  const mes = Number(filtroMes)
+
+  const { data: registro, error: erroBusca } = await supabase
+    .from("metas_mensais")
+    .select("id")
+    .eq("ano", ano)
+    .eq("mes", mes)
+    .maybeSingle()
+
+  if (erroBusca) {
+    alert("Erro ao consultar metas: " + erroBusca.message)
+    setSalvandoMetas(false)
+    return
+  }
+
+  const valores = {
+    ano,
+    mes,
+    meta,
+    super_meta: superMeta,
+    atualizado_em: new Date().toISOString()
+  }
+
+  const resultado = registro
+    ? await supabase
+        .from("metas_mensais")
+        .update(valores)
+        .eq("id", registro.id)
+    : await supabase
+        .from("metas_mensais")
+        .insert(valores)
+
+  if (resultado.error) {
+    alert("Erro ao salvar metas: " + resultado.error.message)
+    setSalvandoMetas(false)
+    return
+  }
+
+  setEditandoMetas(false)
+  setSalvandoMetas(false)
+  alert("Metas salvas com sucesso!")
+  await fetchMetas()
+}
+
+  useEffect(() => {
+  fetchMetas()
+}, [filtroAno, filtroMes])
 
   /*
    * =========================
@@ -925,6 +1020,93 @@ const [filtroMes, setFiltroMes] = useState(
           </button>
         </div>
       </div>
+
+      {/* =========================
+    METAS DO MÊS
+========================= */}
+
+<div style={metasContainer}>
+  <div style={metasCabecalho}>
+    <div>
+      <h3 style={{ margin: 0 }}>Meta e Super Meta</h3>
+      <div style={muted}>
+        {filtroMes !== "todos" && filtroAno !== "todos"
+          ? `${mesesDisponiveis.find(m => m.valor === filtroMes)?.nome} de ${filtroAno}`
+          : "Selecione um mês e um ano nos filtros para consultar as metas."}
+      </div>
+    </div>
+
+    {isAdm && filtroMes !== "todos" && filtroAno !== "todos" && (
+      <div style={{ display: "flex", gap: 8 }}>
+        {!editandoMetas ? (
+          <button
+            type="button"
+            style={btnSmall}
+            onClick={() => setEditandoMetas(true)}
+          >
+            Editar metas
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              style={{ ...btnSmall, background: "#777" }}
+              onClick={() => {
+                setEditandoMetas(false)
+                fetchMetas()
+              }}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              style={btnSmall}
+              disabled={salvandoMetas}
+              onClick={salvarMetas}
+            >
+              {salvandoMetas ? "Salvando..." : "Salvar"}
+            </button>
+          </>
+        )}
+      </div>
+    )}
+  </div>
+
+  <div style={metasValores}>
+    <div>
+      <span style={infoLabel}>Meta</span>
+      {editandoMetas ? (
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={meta}
+          onChange={e => setMeta(Number(e.target.value))}
+          style={input}
+        />
+      ) : (
+        <strong style={{ fontSize: 22 }}>{moeda(meta)}</strong>
+      )}
+    </div>
+
+    <div>
+      <span style={infoLabel}>Super Meta</span>
+      {editandoMetas ? (
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={superMeta}
+          onChange={e => setSuperMeta(Number(e.target.value))}
+          style={input}
+        />
+      ) : (
+        <strong style={{ fontSize: 22 }}>{moeda(superMeta)}</strong>
+      )}
+    </div>
+  </div>
+</div>
 
       {/* =========================
           DASHBOARD
@@ -2401,4 +2583,28 @@ const muted = {
   fontSize: 12,
   color: "#888",
   marginTop: 3
+}
+
+const metasContainer = {
+  background: "#fff",
+  padding: 20,
+  borderRadius: 14,
+  marginBottom: 20,
+  border: "1px solid #eee",
+  boxSizing: "border-box" as const
+}
+
+const metasCabecalho = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  marginBottom: 18
+}
+
+const metasValores = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 16
 }
