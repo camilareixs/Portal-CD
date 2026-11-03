@@ -942,6 +942,22 @@ async function salvarMetas() {
     })
   }, [compras, clientes, buscaVenda, filtroAno, filtroMes, filtroPagamento])
 
+  const totalVendido = comprasFiltradas.reduce(
+  (total, compra) => total + compra.valor,
+  0
+)
+
+const percentualMeta = meta > 0
+  ? (totalVendido / meta) * 100
+  : 0
+
+const percentualSuperMeta = superMeta > 0
+  ? (totalVendido / superMeta) * 100
+  : 0
+
+const faltaMeta = Math.max(meta - totalVendido, 0)
+const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
+
   /*
    * =========================
    * RENDER
@@ -1105,8 +1121,57 @@ async function salvarMetas() {
         <strong style={{ fontSize: 22 }}>{moeda(superMeta)}</strong>
       )}
     </div>
+    </div>
+
+  <div style={progressoMetas}>
+    <div style={progressoItem}>
+      <div style={progressoTexto}>
+        <span>Meta cumprida</span>
+        <strong>{percentualMeta.toFixed(1).replace(".", ",")}%</strong>
+      </div>
+
+      <div style={barraFundo}>
+        <div
+          style={{
+            ...barraPreenchida,
+            width: `${Math.min(percentualMeta, 100)}%`
+          }}
+        />
+      </div>
+
+      <span style={muted}>
+        {faltaMeta > 0
+          ? `Faltam ${moeda(faltaMeta)}`
+          : `Meta atingida! ${moeda(totalVendido - meta)} acima da meta`}
+      </span>
+    </div>
+
+    <div style={progressoItem}>
+      <div style={progressoTexto}>
+        <span>Super Meta cumprida</span>
+        <strong>{percentualSuperMeta.toFixed(1).replace(".", ",")}%</strong>
+      </div>
+
+      <div style={barraFundo}>
+        <div
+          style={{
+            ...barraPreenchida,
+            width: `${Math.min(percentualSuperMeta, 100)}%`
+          }}
+        />
+      </div>
+
+      <span style={muted}>
+        {faltaSuperMeta > 0
+          ? `Faltam ${moeda(faltaSuperMeta)}`
+          : `Super Meta atingida! ${moeda(totalVendido - superMeta)} acima da meta`}
+      </span>
+    </div>
   </div>
 </div>
+
+      {/* =========================
+          DASHBOARD
 
       {/* =========================
           DASHBOARD
@@ -2607,4 +2672,40 @@ const metasValores = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 16
+}
+
+const progressoMetas = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 18,
+  marginTop: 20
+}
+
+const progressoItem = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 8
+}
+
+const progressoTexto = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  fontSize: 13,
+  color: "#555"
+}
+
+const barraFundo = {
+  height: 10,
+  width: "100%",
+  background: "#eee",
+  borderRadius: 20,
+  overflow: "hidden" as const
+}
+
+const barraPreenchida = {
+  height: "100%",
+  background: "#b9974f",
+  borderRadius: 20,
+  transition: "width 0.3s ease"
 }
