@@ -261,7 +261,7 @@ export default function Financeiro() {
 
   const despesasPeriodo = useMemo(() => despesas.filter(d => dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const despesasPagas = useMemo(() => despesas.filter(d => d.status === "PAGA" && dentroDoPeriodo(d.dataPagamento || d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
-  const despesasPendentes = useMemo(() => despesas.filter(d => d.status === "PENDENTE" && dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
+  //const despesasPendentes = useMemo(() => despesas.filter(d => d.status === "PENDENTE" && dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const totalDespesas = useMemo(() => despesasPagas.reduce((t, d) => t + d.valor, 0), [despesasPagas])
 
   const custoProdutosVendidos = useMemo(() => {
