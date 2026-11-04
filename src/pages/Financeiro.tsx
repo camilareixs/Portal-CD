@@ -61,7 +61,7 @@ const categoriasDespesas = [
   "Operacional",
   "Impostos",
   "Pessoal",
-  "Manutenção",
+  "Funcionário",
   "Outros"
 ]
 
