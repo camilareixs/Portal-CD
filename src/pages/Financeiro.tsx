@@ -35,6 +35,8 @@ type Compra = {
   valor: number
   pagamento: string
   criadoem: string
+  cupomusado?: boolean | null;
+creditoutilizado?: number | null;
   status: "PENDENTE" | "CONCLUIDA" | "CANCELADA"
 }
 
