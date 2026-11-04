@@ -294,7 +294,16 @@ export default function Financeiro() {
   const fiado = useMemo(() => {
     return compras.filter(c => c.status !== "CANCELADA" && c.pagamento.toLowerCase().includes("em aberto")).map(compra => {
       const recebido = receitas.filter(r => r.compraId === compra.id && r.tipo === "PAGAMENTO_FIADO" && r.status === "RECEBIDA").reduce((t, r) => t + r.valor, 0)
-      return { compra, recebido, pendente: Math.max(compra.valor - recebido, 0) }
+      const valorLiquido =
+  Number(compra.valor || 0) -
+  Number(compra.cupomusado || 0) -
+  Number(compra.creditoutilizado || 0)
+
+return {
+  compra,
+  recebido,
+  pendente: Math.max(valorLiquido - recebido, 0)
+}
     }).filter(i => i.pendente > 0)
   }, [compras, receitas])
 
