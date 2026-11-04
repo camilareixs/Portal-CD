@@ -9,6 +9,7 @@ type Cliente = {
   celular: string
   creditoDisponivel: number
   ativo: boolean
+  observacao: string
 }
 
 type Compra = {
@@ -145,7 +146,7 @@ const [salvandoMetas, setSalvandoMetas] = useState(false)
   async function fetchClientes() {
     const { data, error } = await supabase
       .from("clientes")
-      .select("id,nome,cpf,pontos,celular,creditoDisponivel,ativo")
+      .select("id,nome,cpf,pontos,celular,creditoDisponivel,ativo,observacao")
       .eq("ativo", true)
       .order("nome")
 
@@ -163,6 +164,7 @@ const [salvandoMetas, setSalvandoMetas] = useState(false)
           pontos: Number(c.pontos || 0),
           celular: c.celular || "",
           creditoDisponivel: Number(c.creditoDisponivel || 0),
+          observacao: c.observacao || "",
           ativo: c.ativo !== false
         }))
       )
@@ -1637,9 +1639,9 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
               }}
             >
               <strong>{c.nome}</strong>
-              <div style={muted}>
-                {c.pontos} pontos
-              </div>
+<div style={muted}>
+  {c.observacao || "Sem observação"}
+</div>
             </div>
           ))}
 
