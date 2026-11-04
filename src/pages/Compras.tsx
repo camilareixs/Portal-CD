@@ -633,6 +633,8 @@ async function salvarMetas() {
               valorcupom:
                 VALOR_CUPOM,
 
+        pontosUtilizados: 0,
+
               tipo:
                 "Cupom Fidelidade",
 
@@ -1601,8 +1603,8 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
         <div style={{ minWidth: 0 }}>
           <strong>{clienteSel.nome}</strong>
           <div style={muted}>
-            {clienteSel.pontos} pontos
-          </div>
+  {clienteSel.observacao || "Sem observação"}
+</div>
         </div>
 
         <button
