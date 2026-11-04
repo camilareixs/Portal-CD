@@ -35,9 +35,10 @@ type Compra = {
   valor: number
   pagamento: string
   criadoem: string
-  cupomusado?: boolean | null;
-creditoutilizado?: number | null;
   status: "PENDENTE" | "CONCLUIDA" | "CANCELADA"
+  ativo: boolean
+  cupomusado: number
+  creditoutilizado: number
 }
 
 type VendaItem = {
@@ -195,7 +196,11 @@ export default function Financeiro() {
     const [receitasResult, despesasResult, comprasResult, itensResult] = await Promise.all([
       supabase.from("receitas").select("*").order("dataCompetencia", { ascending: false }),
       supabase.from("despesas").select("*").order("dataCompetencia", { ascending: false }),
-      supabase.from("compras").select("id,clienteid,cliente,cpf,valor,pagamento,criadoem,status").order("criadoem", { ascending: false }),
+      supabase
+  .from("compras")
+  .select("id,clienteid,cliente,cpf,valor,pagamento,criadoem,status,ativo,cupomusado,creditoutilizado")
+  .eq("ativo", true)
+  .order("criadoem", { ascending: false }),
       supabase.from("vendaItens").select("id,compraId,quantidade,custoUnitario")
     ])
 
@@ -221,12 +226,20 @@ export default function Financeiro() {
       })))
     }
     if (comprasResult.data) {
-      setCompras(comprasResult.data.map((c: any) => ({
-        id: String(c.id), clienteid: c.clienteid ? String(c.clienteid) : null,
-        cliente: c.cliente || "", cpf: c.cpf || "", valor: Number(c.valor || 0),
-        pagamento: c.pagamento || "", criadoem: c.criadoem || "", status: c.status || "CONCLUIDA"
-      })))
-    }
+  setCompras(comprasResult.data.map((c: any) => ({
+    id: String(c.id),
+    clienteid: c.clienteid ? String(c.clienteid) : null,
+    cliente: c.cliente || "",
+    cpf: c.cpf || "",
+    valor: Number(c.valor || 0),
+    pagamento: c.pagamento || "",
+    criadoem: c.criadoem || "",
+    status: c.status || "CONCLUIDA",
+    ativo: Boolean(c.ativo),
+    cupomusado: Number(c.cupomusado || 0),
+    creditoutilizado: Number(c.creditoutilizado || 0)
+  })))
+}
     if (itensResult.data) {
       setVendaItens(itensResult.data.map((item: any) => ({
         id: String(item.id), compraId: String(item.compraId),
@@ -294,23 +307,42 @@ export default function Financeiro() {
   const margemLiquida = faturamento > 0 ? (resultadoLiquido / faturamento) * 100 : 0
 
   const fiado = useMemo(() => {
-    return compras.filter(c => c.status !== "CANCELADA" && c.pagamento.toLowerCase().includes("em aberto")).map(compra => {
-      const recebido = receitas.filter(r => r.compraId === compra.id && r.tipo === "PAGAMENTO_FIADO" && r.status === "RECEBIDA").reduce((t, r) => t + r.valor, 0)
-      const valorLiquido =
-  Number(compra.valor || 0) -
-  Number(compra.cupomusado || 0) -
-  Number(compra.creditoutilizado || 0)
+  return compras
+    .filter(c =>
+      c.ativo &&
+      c.status !== "CANCELADA" &&
+      c.pagamento.toLowerCase().includes("em aberto")
+    )
+    .map(compra => {
+      const recebido = receitas
+        .filter(r =>
+          r.compraId === compra.id &&
+          r.tipo === "PAGAMENTO_FIADO" &&
+          r.status === "RECEBIDA"
+        )
+        .reduce((total, r) => total + r.valor, 0)
 
-return {
-  compra,
-  recebido,
-  pendente: Math.max(valorLiquido - recebido, 0)
-}
-    }).filter(i => i.pendente > 0)
-  }, [compras, receitas])
+      const valorLiquido = Math.max(
+        Number(compra.valor || 0) -
+          Number(compra.cupomusado || 0) -
+          Number(compra.creditoutilizado || 0),
+        0
+      )
 
-  const totalAReceber = useMemo(() => fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).reduce((t, i) => t + i.pendente, 0), [fiado, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
+      return {
+        compra,
+        recebido,
+        pendente: Math.max(valorLiquido - recebido, 0)
+      }
+    })
+    .filter(item => item.pendente > 0)
+}, [compras, receitas])
 
+const totalAReceber = useMemo(
+  () => fiado.reduce((total, item) => total + item.pendente, 0),
+  [fiado]
+)
+  
   const receitasFiltradas = useMemo(() => {
     return receitasPeriodo.filter(r => filtroStatus === "todos" || r.status === filtroStatus)
   }, [receitasPeriodo, filtroStatus])
@@ -559,7 +591,12 @@ return {
 
       {aba === "fiado" && <ListCard title="Valores a receber" subtitle="Vendas em aberto e saldo ainda não recebido." action={<strong style={fiadoTotal}>{moeda(totalAReceber)}</strong>}>
         <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Cliente</th><th>Venda</th><th className="right">Original</th><th className="right">Recebido</th><th className="right">Pendente</th><th></th></tr></thead><tbody>
-          {fiado.filter(i=>dentroDoPeriodo(i.compra.criadoem)).map(i=><tr key={i.compra.id}><td><strong>{i.compra.cliente||"Cliente"}</strong><div style={muted}>{i.compra.cpf}</div></td><td>{dataBR(i.compra.criadoem)}</td><td className="right">{moeda(i.compra.valor)}</td><td className="right" style={{color:"#5f7f47"}}>{moeda(i.recebido)}</td><td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(i.pendente)}</td><td><button style={btnSmall} onClick={()=>{setFiadoSelecionado(i);setValorPagamentoFiado(0);setModalFiado(true)}}>Receber</button></td></tr>)}
+          {fiado.filter(i=>dentroDoPeriodo(i.compra.criadoem)).map(i=><tr key={i.compra.id}><td><strong>{i.compra.cliente||"Cliente"}</strong><div style={muted}>{i.compra.cpf}</div></td><td>{dataBR(i.compra.criadoem)}</td><td className="right">
+  {moeda(Math.max(
+    i.compra.valor - i.compra.cupomusado - i.compra.creditoutilizado,
+    0
+  ))}
+</td><td className="right" style={{color:"#5f7f47"}}>{moeda(i.recebido)}</td><td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(i.pendente)}</td><td><button style={btnSmall} onClick={()=>{setFiadoSelecionado(i);setValorPagamentoFiado(0);setModalFiado(true)}}>Receber</button></td></tr>)}
         </tbody></table></div>
         {!fiado.filter(i=>dentroDoPeriodo(i.compra.criadoem)).length&&<div style={emptyText}>Nenhum valor pendente no período.</div>}
       </ListCard>}
