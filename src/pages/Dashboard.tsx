@@ -17,6 +17,7 @@ type Compra = {
   criadoem: string
   pagamento?: string | null
   status?: string | null
+  ativo: boolean
 }
 
 type Receita = {
@@ -284,9 +285,10 @@ export default function Dashboard() {
       ] = await Promise.all([
         supabase.from("clientes").select("id,nome,pontos,dataNascimento,celular"),
         supabase
-          .from("compras")
-          .select("id,clienteid,valor,criadoem,pagamento,status")
-          .order("criadoem", { ascending: false }),
+  .from("compras")
+  .select("id,clienteid,valor,criadoem,pagamento,status,ativo")
+  .eq("ativo", true)
+  .order("criadoem", { ascending: false }),
         supabase.from("receitas").select("id,descricao,valor,dataCompetencia,status"),
         supabase.from("despesas").select("id,descricao,valor,dataCompetencia,status"),
         supabase.from("vendaItens").select("*"),
