@@ -2,6 +2,82 @@ import { useEffect, useMemo, useState } from "react"
 import type { CSSProperties, ReactNode } from "react"
 import { supabase } from "../lib/supabase"
 
+// Regras de faturamento (iguais em Vendas, Financeiro e Dashboard):
+// Faturamento = vendas (valor da venda − cupom) + receitas de "Nova receita".
+// Crédito de cliente e pagamento de fiado NÃO somam no faturamento.
+
+type CompraFaturamento = {
+  valor?: number | null
+  cupomusado?: number | null
+  status?: string | null
+  ativo?: boolean | null
+}
+
+type ReceitaFaturamento = {
+  valor?: number | null
+  tipo?: string | null
+  status?: string | null
+  observacao?: string | null
+  descricao?: string | null
+  depositoId?: string | null
+  dataCompetencia?: string | null
+  dataRecebimento?: string | null
+}
+
+/** Arredonda para centavos (evita sobras como 0,00000000001). */
+function centavos(valor: number) {
+  return Math.round(Number(valor || 0) * 100) / 100
+}
+
+/** Quanto uma venda soma no faturamento: valor da venda menos o cupom. */
+function valorFaturadoVenda(compra: CompraFaturamento) {
+  if (compra.ativo === false) return 0
+  if (String(compra.status || "").toUpperCase().startsWith("CANCEL")) return 0
+  return centavos(Math.max(0, Number(compra.valor || 0) - Number(compra.cupomusado || 0)))
+}
+
+/**
+ * Receita que na verdade é crédito de cliente
+ * (sobra de depósito ou pagamento de venda excluída que virou crédito).
+ */
+function ehCreditoDeCliente(receita: ReceitaFaturamento) {
+  if (receita.tipo === "PAGAMENTO_FIADO") return false
+  const observacao = String(receita.observacao || "").toLowerCase()
+  const descricao = String(receita.descricao || "").toLowerCase()
+  return (
+    Boolean(receita.depositoId) ||
+    observacao.includes("não é receita operacional") ||
+    descricao.startsWith("crédito de depósito") ||
+    descricao.startsWith("crédito de estorno")
+  )
+}
+
+/** Receita cadastrada à mão em "Nova receita" (soma no faturamento). */
+function ehReceitaManual(receita: ReceitaFaturamento) {
+  return (
+    String(receita.status || "").toUpperCase() === "RECEBIDA" &&
+    receita.tipo !== "PAGAMENTO_FIADO" &&
+    receita.tipo !== "VENDA" &&
+    !ehCreditoDeCliente(receita)
+  )
+}
+
+/** Data que vale para a receita: recebimento ou, se não tiver, competência. */
+function dataDaReceita(receita: ReceitaFaturamento) {
+  return receita.dataRecebimento || receita.dataCompetencia || ""
+}
+
+/**
+ * Converte texto em data local.
+ * "2026-11-01" vira 01/11 no horário do Brasil (sem cair em 31/10).
+ */
+function paraData(valor: string | null | undefined) {
+  if (!valor) return null
+  const texto = String(valor)
+  const data = texto.length === 10 ? new Date(`${texto}T12:00:00`) : new Date(texto)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
 type Cliente = {
   id: string
   nome: string
@@ -18,6 +94,7 @@ type Compra = {
   pagamento?: string | null
   status?: string | null
   ativo: boolean
+  cupomusado?: number | null
 }
 
 type Receita = {
@@ -25,7 +102,17 @@ type Receita = {
   descricao?: string | null
   valor?: number | null
   dataCompetencia?: string | null
+  dataRecebimento?: string | null
   status?: string | null
+  tipo?: string | null
+  observacao?: string | null
+  depositoId?: string | null
+}
+
+type MetaMensal = {
+  mes: number
+  meta: number | null
+  super_meta: number | null
 }
 
 type Despesa = {
@@ -244,9 +331,14 @@ export default function Dashboard() {
   const [erro, setErro] = useState("")
   const [mensagemSucesso, setMensagemSucesso] = useState("")
 
-  const [metaMensal, setMetaMensal] = useState(10000)
+  // Metas: mesma tabela (metas_mensais) e mesma regra da tela de Vendas
+  const perfil = localStorage.getItem("camiduda_perfil") || ""
+  const isAdm = perfil === "ADM"
+  const [metasAno, setMetasAno] = useState<MetaMensal[]>([])
   const [editandoMeta, setEditandoMeta] = useState(false)
-  const [novaMeta, setNovaMeta] = useState("10000")
+  const [novaMeta, setNovaMeta] = useState("")
+  const [novaSuperMeta, setNovaSuperMeta] = useState("")
+  const [salvandoMeta, setSalvandoMeta] = useState(false)
 
   const [mensagemAniversario, setMensagemAniversario] = useState(
     "Feliz aniversário, {nome}!\n\n" +
@@ -270,6 +362,78 @@ export default function Dashboard() {
     void carregarDados()
   }, [])
 
+  useEffect(() => {
+    void carregarMetas()
+  }, [anoSelecionado])
+
+  async function carregarMetas() {
+    const { data, error } = await supabase
+      .from("metas_mensais")
+      .select("mes,meta,super_meta")
+      .eq("ano", anoSelecionado)
+
+    if (error) {
+      console.error(error)
+      setErro("Não foi possível carregar as metas.")
+      return
+    }
+
+    setMetasAno((data ?? []) as MetaMensal[])
+  }
+
+  async function salvarMeta() {
+    if (!isAdm || todosMeses) return
+
+    const meta = numero(novaMeta)
+    const superMeta = numero(novaSuperMeta)
+
+    if (meta < 0 || superMeta < 0) {
+      setErro("As metas não podem ser negativas.")
+      return
+    }
+
+    setSalvandoMeta(true)
+    setErro("")
+
+    const mes = mesSelecionado + 1
+
+    const { data: registro, error: erroBusca } = await supabase
+      .from("metas_mensais")
+      .select("id")
+      .eq("ano", anoSelecionado)
+      .eq("mes", mes)
+      .maybeSingle()
+
+    if (erroBusca) {
+      setErro("Erro ao consultar metas: " + erroBusca.message)
+      setSalvandoMeta(false)
+      return
+    }
+
+    const valores = {
+      ano: anoSelecionado,
+      mes,
+      meta,
+      super_meta: superMeta,
+      atualizado_em: new Date().toISOString(),
+    }
+
+    const resultado = registro
+      ? await supabase.from("metas_mensais").update(valores).eq("id", registro.id)
+      : await supabase.from("metas_mensais").insert(valores)
+
+    setSalvandoMeta(false)
+
+    if (resultado.error) {
+      setErro("Erro ao salvar metas: " + resultado.error.message)
+      return
+    }
+
+    setEditandoMeta(false)
+    setMensagemSucesso("Metas salvas com sucesso!")
+    await carregarMetas()
+  }
+
   async function carregarDados() {
     try {
       setCarregando(true)
@@ -286,10 +450,10 @@ export default function Dashboard() {
         supabase.from("clientes").select("id,nome,pontos,dataNascimento,celular"),
         supabase
   .from("compras")
-  .select("id,clienteid,valor,criadoem,pagamento,status,ativo")
+  .select("id,clienteid,valor,cupomusado,criadoem,pagamento,status,ativo")
   .eq("ativo", true)
   .order("criadoem", { ascending: false }),
-        supabase.from("receitas").select("id,descricao,valor,dataCompetencia,status"),
+        supabase.from("receitas").select("id,descricao,valor,dataCompetencia,dataRecebimento,status,tipo,observacao,depositoId"),
         supabase.from("despesas").select("id,descricao,valor,dataCompetencia,status"),
         supabase.from("vendaItens").select("*"),
         supabase
@@ -340,10 +504,33 @@ export default function Dashboard() {
     [comprasValidas, anoSelecionado, mesFiltro],
   )
 
-  const faturamento = comprasPeriodo.reduce(
-    (total, compra) => total + numero(compra.valor),
-    0,
+  // Faturamento = vendas (valor − cupom) + receitas de "Nova receita".
+  // Mesma regra de Vendas e Financeiro (regras no topo deste arquivo).
+  const receitasManuais = useMemo(
+    () => receitas.filter(receita => ehReceitaManual(receita)),
+    [receitas],
   )
+
+  const faturamentoNoPeriodo = (ano: number, mes: number | null) => {
+    const vendas = comprasValidas
+      .filter(compra => dentroDoPeriodo(compra.criadoem, ano, mes))
+      .reduce((total, compra) => total + valorFaturadoVenda(compra), 0)
+
+    const outras = receitasManuais
+      .filter(receita => {
+        const data = paraData(dataDaReceita(receita))
+        return (
+          data !== null &&
+          data.getFullYear() === ano &&
+          (mes === null || data.getMonth() === mes)
+        )
+      })
+      .reduce((total, receita) => total + Number(receita.valor || 0), 0)
+
+    return vendas + outras
+  }
+
+  const faturamento = faturamentoNoPeriodo(anoSelecionado, mesFiltro)
   const pedidos = comprasPeriodo.length
   const ticketMedio = pedidos ? faturamento / pedidos : 0
   const clientesAtendidos = new Set(
@@ -393,30 +580,16 @@ export default function Dashboard() {
   const lucroBruto = faturamento - custoProdutosVendidos
   const resultadoEstimado = lucroBruto - despesasPagas
 
-  const comprasAnoAnterior = comprasValidas.filter(compra =>
-    dentroDoPeriodo(compra.criadoem, anoSelecionado - 1, mesFiltro),
-  )
-  const faturamentoAnoAnterior = comprasAnoAnterior.reduce(
-    (total, compra) => total + numero(compra.valor),
-    0,
-  )
+  const faturamentoAnoAnterior = faturamentoNoPeriodo(anoSelecionado - 1, mesFiltro)
   const variacaoComparativo = faturamentoAnoAnterior
     ? ((faturamento - faturamentoAnoAnterior) / faturamentoAnoAnterior) * 100
     : null
 
-  const faturamentoMesAnterior = useMemo(() => {
+  const faturamentoMesAnterior = (() => {
     if (todosMeses) return 0
     const dataAnterior = new Date(anoSelecionado, mesSelecionado - 1, 1)
-    return comprasValidas
-      .filter(compra =>
-        dentroDoPeriodo(
-          compra.criadoem,
-          dataAnterior.getFullYear(),
-          dataAnterior.getMonth(),
-        ),
-      )
-      .reduce((total, compra) => total + numero(compra.valor), 0)
-  }, [comprasValidas, anoSelecionado, mesSelecionado, todosMeses])
+    return faturamentoNoPeriodo(dataAnterior.getFullYear(), dataAnterior.getMonth())
+  })()
 
   const variacaoMensal =
     !todosMeses && faturamentoMesAnterior
@@ -441,12 +614,12 @@ export default function Dashboard() {
 
       const atual = ranking.get(cliente.id)
       if (atual) {
-        atual.total += numero(compra.valor)
+        atual.total += valorFaturadoVenda(compra)
         atual.pedidos += 1
       } else {
         ranking.set(cliente.id, {
           cliente,
-          total: numero(compra.valor),
+          total: valorFaturadoVenda(compra),
           pedidos: 1,
         })
       }
@@ -488,15 +661,12 @@ export default function Dashboard() {
       total: 0,
     }))
 
-    comprasValidas.forEach(compra => {
-      const data = new Date(compra.criadoem)
-      if (data.getFullYear() !== anoSelecionado) return
-      const item = meses[data.getMonth()]
-      if (item) item.total += numero(compra.valor)
+    meses.forEach((item, mes) => {
+      item.total = faturamentoNoPeriodo(anoSelecionado, mes)
     })
 
     return meses
-  }, [comprasValidas, anoSelecionado])
+  }, [comprasValidas, receitasManuais, anoSelecionado])
 
   const maiorVendaMensal = Math.max(...vendasPorMes.map(mes => mes.total), 1)
 
@@ -588,14 +758,16 @@ export default function Dashboard() {
     }
   }
 
-  function salvarMeta() {
-    const valor = numero(novaMeta)
-    if (valor > 0) setMetaMensal(valor)
-    setEditandoMeta(false)
-  }
-
-  const metaPeriodo = todosMeses ? metaMensal * 12 : metaMensal
+  // Meta do mês selecionado, ou a soma dos 12 meses quando "Todos os meses"
+  const metaDoMes = metasAno.find(item => item.mes === mesSelecionado + 1)
+  const metaPeriodo = todosMeses
+    ? metasAno.reduce((total, item) => total + Number(item.meta || 0), 0)
+    : Number(metaDoMes?.meta || 0)
+  const superMetaPeriodo = todosMeses
+    ? metasAno.reduce((total, item) => total + Number(item.super_meta || 0), 0)
+    : Number(metaDoMes?.super_meta || 0)
   const percentualMeta = metaPeriodo > 0 ? (faturamento / metaPeriodo) * 100 : 0
+  const percentualSuperMeta = superMetaPeriodo > 0 ? (faturamento / superMetaPeriodo) * 100 : 0
   const tituloPeriodo = todosMeses
     ? `ano de ${anoSelecionado}`
     : nomeMes(anoSelecionado, mesSelecionado)
@@ -776,52 +948,86 @@ export default function Dashboard() {
           <div style={{ marginTop: 22 }}>
             <div style={styles.flexBetween}>
               <strong style={{ fontSize: 13 }}>
-                {todosMeses ? "Meta anual" : "Meta do mês"}
+                {todosMeses ? "Metas do ano (soma dos meses)" : "Meta e Super Meta do mês"}
               </strong>
-              <button
-                className="dash-btn"
-                onClick={() => {
-                  setNovaMeta(String(metaMensal))
-                  setEditandoMeta(true)
-                }}
-              >
-                Editar meta mensal
-              </button>
+              {isAdm && !todosMeses && !editandoMeta && (
+                <button
+                  className="dash-btn"
+                  onClick={() => {
+                    setNovaMeta(String(Number(metaDoMes?.meta || 0)).replace(".", ","))
+                    setNovaSuperMeta(String(Number(metaDoMes?.super_meta || 0)).replace(".", ","))
+                    setEditandoMeta(true)
+                  }}
+                >
+                  Editar metas
+                </button>
+              )}
             </div>
 
-            <div style={{ ...styles.flexBetween, marginTop: 12 }}>
-              <strong>{moeda(faturamento)}</strong>
-              <span style={styles.muted}>de {moeda(metaPeriodo)}</span>
-            </div>
+            {[
+              { titulo: "Meta", valor: metaPeriodo, percentual: percentualMeta },
+              { titulo: "Super Meta", valor: superMetaPeriodo, percentual: percentualSuperMeta },
+            ].map(item => (
+              <div key={item.titulo} style={{ marginTop: 12 }}>
+                <div style={styles.flexBetween}>
+                  <strong style={{ fontSize: 13 }}>{item.titulo}</strong>
+                  <span style={styles.muted}>
+                    {moeda(faturamento)} de {moeda(item.valor)}
+                  </span>
+                </div>
 
-            <div style={styles.progressBg}>
-              <div
-                style={{
-                  ...styles.progress,
-                  width: `${Math.min(100, percentualMeta)}%`,
-                }}
-              />
-            </div>
+                <div style={styles.progressBg}>
+                  <div
+                    style={{
+                      ...styles.progress,
+                      width: `${Math.min(100, item.percentual)}%`,
+                    }}
+                  />
+                </div>
 
-            <div style={styles.flexBetween}>
-              <span style={styles.muted}>
-                {Math.min(100, percentualMeta).toFixed(0)}% atingido
-              </span>
-              <span style={styles.muted}>
-                Faltam {moeda(Math.max(0, metaPeriodo - faturamento))}
-              </span>
-            </div>
+                <div style={styles.flexBetween}>
+                  <span style={styles.muted}>
+                    {item.valor > 0
+                      ? `${item.percentual.toFixed(1).replace(".", ",")}% atingido`
+                      : "Meta não cadastrada"}
+                  </span>
+                  <span style={styles.muted}>
+                    {item.valor > 0 && faturamento < item.valor
+                      ? `Faltam ${moeda(item.valor - faturamento)}`
+                      : item.valor > 0
+                        ? `${moeda(faturamento - item.valor)} acima`
+                        : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
 
             {editandoMeta && (
               <div style={{ marginTop: 12 }}>
+                <label style={styles.label}>Meta</label>
                 <input
                   value={novaMeta}
                   onChange={e => setNovaMeta(e.target.value)}
                   style={styles.input}
-                  placeholder="Valor da meta mensal"
+                  inputMode="decimal"
+                  placeholder="Valor da meta"
+                />
+                <label style={{ ...styles.label, marginTop: 8 }}>Super Meta</label>
+                <input
+                  value={novaSuperMeta}
+                  onChange={e => setNovaSuperMeta(e.target.value)}
+                  style={styles.input}
+                  inputMode="decimal"
+                  placeholder="Valor da super meta"
                 />
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="dash-btn" onClick={salvarMeta}>Salvar</button>
+                  <button
+                    className="dash-btn"
+                    disabled={salvandoMeta}
+                    onClick={() => void salvarMeta()}
+                  >
+                    {salvandoMeta ? "Salvando..." : "Salvar"}
+                  </button>
                   <button className="dash-btn" onClick={() => setEditandoMeta(false)}>
                     Cancelar
                   </button>
