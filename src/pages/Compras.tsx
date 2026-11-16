@@ -795,7 +795,7 @@ async function salvarMetas() {
     const confirmacao = window.confirm(
       ehReceita
         ? `Deseja inativar esta receita?\n\nDescrição: ${compra.cliente || "Sem descrição"}\nValor: ${moeda(compra.valor)}\n\nO registro será ocultado do aplicativo, mas permanecerá salvo no banco.`
-        : `Deseja inativar esta venda?\n\nCliente: ${compra.cliente || "Sem cliente"}\nValor: ${moeda(compra.valor)}\n\nOs pontos e o crédito usados nesta venda serão devolvidos. O registro será preservado no banco.`
+        : `Deseja inativar esta venda?\n\nCliente: ${compra.cliente || "Sem cliente"}\nValor: ${moeda(compra.valor)}\n\nOs pontos e o crédito usados nesta venda serão devolvidos, e o que a cliente já pagou desta venda vira crédito. O registro será preservado no banco.`
     )
     if (!confirmacao) return
 
@@ -820,63 +820,38 @@ async function salvarMetas() {
       return
     }
 
-    // Busca os valores atuais para devolver pontos e crédito sem sobrescrever valores antigos.
-    const { data: clienteAtual, error: erroBuscaCliente } = await supabase
-      .from("clientes")
-      .select("id,pontos,creditoDisponivel")
-      .eq("id", compra.clienteid)
-      .maybeSingle()
-
-    if (erroBuscaCliente || !clienteAtual) {
-      alert("Não foi possível carregar os dados da cliente para estornar a venda." + (erroBuscaCliente ? " " + erroBuscaCliente.message : ""))
-      setExcluindo(null)
-      return
-    }
-
-    const pontosDevolvidos = Number(compra.pontosutilizados || (compra.cupomusado > 0 ? Math.ceil(compra.cupomusado / VALOR_CUPOM) * PONTOS_POR_CUPOM : 0))
-    const pontosAtualizados = Math.max(0, Number(clienteAtual.pontos || 0) - Number(compra.pontosgerados || 0) + pontosDevolvidos)
-    const creditoAtualizado = Number(clienteAtual.creditoDisponivel || 0) + Number(compra.creditoutilizado || 0)
-
-    const { error: erroInativarVenda } = await supabase
-      .from("compras")
-      .update({ ativo: false })
-      .eq("id", compra.id)
-
-    if (erroInativarVenda) {
-      alert("Erro ao inativar venda: " + erroInativarVenda.message)
-      setExcluindo(null)
-      return
-    }
-
-    const { error: erroEstornoCliente } = await supabase
-      .from("clientes")
-      .update({ pontos: pontosAtualizados, creditoDisponivel: creditoAtualizado })
-      .eq("id", compra.clienteid)
-
-    if (erroEstornoCliente) {
-      // A venda fica ativa novamente se não for possível concluir o estorno do saldo.
-      await supabase.from("compras").update({ ativo: true }).eq("id", compra.id)
-      alert("Não foi possível estornar pontos e crédito: " + erroEstornoCliente.message)
-      setExcluindo(null)
-      return
-    }
-
-    // Preserva os registros de trocas/cupons, apenas marcando-os como inativos.
-    const { error: erroTrocas } = await supabase
-      .from("trocas")
-      .update({ ativo: false })
-      .eq("compraid", compra.id)
+    // Tudo é feito de uma vez pela função do banco (inativar_compra):
+    // pontos, crédito usado, pagamentos de fiado já feitos e cupons.
+    const { data, error } = await supabase.rpc("inativar_compra", {
+      p_compra_id: compra.id
+    })
 
     setExcluindo(null)
+
+    if (error) {
+      alert("Erro ao inativar venda: " + error.message)
+      return
+    }
+
+    const resultado = data as {
+      pontos_devolvidos: number
+      pontos_retirados: number
+      credito_devolvido: number
+      pagamentos_devolvidos: number
+      credito_disponivel: number | null
+    }
+
     await fetchClientes()
     await fetchCompras()
 
-    if (erroTrocas) {
-      alert("Venda inativada e saldos estornados, mas não foi possível inativar os registros de cupons relacionados: " + erroTrocas.message)
-      return
-    }
-
-    alert("Venda inativada. Os pontos e o crédito utilizados foram devolvidos.")
+    alert(
+      "Venda inativada.\n\n" +
+      `Pontos devolvidos (cupom): ${Number(resultado.pontos_devolvidos || 0)}\n` +
+      `Pontos retirados (gerados pela venda): ${Number(resultado.pontos_retirados || 0)}\n` +
+      `Crédito usado devolvido: ${moeda(Number(resultado.credito_devolvido || 0))}\n` +
+      `Pagamentos de fiado convertidos em crédito: ${moeda(Number(resultado.pagamentos_devolvidos || 0))}\n` +
+      `Crédito disponível agora: ${moeda(Number(resultado.credito_disponivel || 0))}`
+    )
   }
 
   /*
