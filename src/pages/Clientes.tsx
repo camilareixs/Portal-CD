@@ -192,13 +192,63 @@ export default function Clientes({
     return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
   }
 
-  async function salvarNovoCredito() {
-    if (!selected) return
-    const valor = Number(novoCredito.replace(/\./g, "").replace(",", "."))
-    if (!novoCredito.trim() || !Number.isFinite(valor) || valor <= 0) {
-      alert("Informe um valor de crédito maior que R$ 0,00.")
-      return
+  
+async function salvarNovoCredito() {
+  if (!selected) return
+
+  const valor = Number(
+    novoCredito.replace(/\./g, "").replace(",", ".")
+  )
+
+  if (!novoCredito.trim() || !Number.isFinite(valor) || valor <= 0) {
+    alert("Informe um valor de depósito maior que R$ 0,00.")
+    return
+  }
+
+  setSalvandoCredito(true)
+
+  // Registra o depósito e distribui automaticamente entre os fiados.
+  const { data, error } = await supabase.rpc(
+    "registrar_deposito_cliente",
+    {
+      p_cliente_id: selected.id,
+      p_valor: valor,
+      p_data_deposito: new Date().toLocaleDateString("en-CA")
     }
+  )
+
+  setSalvandoCredito(false)
+
+  if (error) {
+    alert("Erro ao registrar depósito: " + error.message)
+    return
+  }
+
+  const resultado = data as {
+    valor_depositado: number
+    valor_aplicado_fiado: number
+    credito_gerado: number
+    credito_disponivel: number
+  }
+
+  setSelected({
+    ...selected,
+    creditoDisponivel: Number(resultado.credito_disponivel)
+  })
+
+  setCreditoAberto(false)
+  setNovoCredito("")
+
+  await fetchClientes()
+
+  alert(
+    `Depósito de ${formatarMoeda(resultado.valor_depositado)} registrado!\n\n` +
+    `Aplicado nos fiados: ${formatarMoeda(resultado.valor_aplicado_fiado)}\n` +
+    `Crédito gerado: ${formatarMoeda(resultado.credito_gerado)}\n` +
+    `Crédito disponível: ${formatarMoeda(resultado.credito_disponivel)}`
+  )
+}
+
 
     const saldoAtualizado = Number(selected.creditoDisponivel || 0) + valor
     setSalvandoCredito(true)
