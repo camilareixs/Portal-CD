@@ -565,20 +565,23 @@ export default function Clientes({
       })
     })
 
-    // 3) Pagamentos de fiado feitos fora de depósito:
-    //    os do mesmo dia são juntados em um único pagamento.
-    const avulsosPorDia = new Map<string, Aplicacao[]>()
+    // 3) Pagamentos de fiado que não estão ligados a um depósito carregado acima
+    //    (feitos por fora, ou cujo depósito o app não conseguiu ler).
+    //    Os do mesmo depósito, ou do mesmo dia, viram um único pagamento.
+    const idsDepositos = new Set(depositos.map((d: any) => String(d.id)))
+    const avulsos = new Map<string, { dia: string; aplicacoes: Aplicacao[] }>()
 
     pagamentos
-      .filter((p: any) => !p.depositoId)
+      .filter((p: any) => !p.depositoId || !idsDepositos.has(String(p.depositoId)))
       .forEach((p: any) => {
         const dia = dataMovimento(p.dataRecebimento || p.dataCompetencia || p.criadoem)
-        const lista = avulsosPorDia.get(dia) || []
-        lista.push({ compraId: String(p.compraId || ""), valor: Number(p.valor || 0) })
-        avulsosPorDia.set(dia, lista)
+        const chave = p.depositoId ? `dep-${p.depositoId}` : `dia-${dia}`
+        const grupo = avulsos.get(chave) || { dia, aplicacoes: [] }
+        grupo.aplicacoes.push({ compraId: String(p.compraId || ""), valor: Number(p.valor || 0) })
+        avulsos.set(chave, grupo)
       })
 
-    avulsosPorDia.forEach((aplicacoes, dia) => {
+    avulsos.forEach(({ dia, aplicacoes }) => {
       eventos.push({
         data: dia,
         ordem: 2,
