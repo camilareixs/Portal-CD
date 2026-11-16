@@ -1,6 +1,82 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabase"
 
+// Regras de faturamento (iguais em Vendas, Financeiro e Dashboard):
+// Faturamento = vendas (valor da venda − cupom) + receitas de "Nova receita".
+// Crédito de cliente e pagamento de fiado NÃO somam no faturamento.
+
+type ReceitaFaturamento = {
+  valor?: number | null
+  tipo?: string | null
+  status?: string | null
+  observacao?: string | null
+  descricao?: string | null
+  depositoId?: string | null
+  dataCompetencia?: string | null
+  dataRecebimento?: string | null
+}
+
+type CompraFaturamento = {
+  valor?: number | null
+  cupomusado?: number | null
+  status?: string | null
+  ativo?: boolean | null
+}
+
+/** Arredonda para centavos (evita sobras como 0,00000000001). */
+function centavos(valor: number) {
+  return Math.round(Number(valor || 0) * 100) / 100
+}
+
+/** Quanto uma venda soma no faturamento: valor da venda menos o cupom. */
+function valorFaturadoVenda(compra: CompraFaturamento) {
+  if (compra.ativo === false) return 0
+  if (String(compra.status || "").toUpperCase().startsWith("CANCEL")) return 0
+  return centavos(Math.max(0, Number(compra.valor || 0) - Number(compra.cupomusado || 0)))
+}
+
+/**
+ * Receita que na verdade é crédito de cliente
+ * (sobra de depósito ou pagamento de venda excluída que virou crédito).
+ */
+function ehCreditoDeCliente(receita: ReceitaFaturamento) {
+  if (receita.tipo === "PAGAMENTO_FIADO") return false
+  const observacao = String(receita.observacao || "").toLowerCase()
+  const descricao = String(receita.descricao || "").toLowerCase()
+  return (
+    Boolean(receita.depositoId) ||
+    observacao.includes("não é receita operacional") ||
+    descricao.startsWith("crédito de depósito") ||
+    descricao.startsWith("crédito de estorno")
+  )
+}
+
+/** Receita cadastrada à mão em "Nova receita" (soma no faturamento). */
+function ehReceitaManual(receita: ReceitaFaturamento) {
+  return (
+    String(receita.status || "").toUpperCase() === "RECEBIDA" &&
+    receita.tipo !== "PAGAMENTO_FIADO" &&
+    receita.tipo !== "VENDA" &&
+    !ehCreditoDeCliente(receita)
+  )
+}
+
+/** Data que vale para a receita: recebimento ou, se não tiver, competência. */
+function dataDaReceita(receita: ReceitaFaturamento) {
+  return receita.dataRecebimento || receita.dataCompetencia || ""
+}
+
+/**
+ * Converte texto em data local.
+ * "2026-11-01" vira 01/11 no horário do Brasil (sem cair em 31/10).
+ */
+function paraData(valor: string | null | undefined) {
+  if (!valor) return null
+  const texto = String(valor)
+  const data = texto.length === 10 ? new Date(`${texto}T12:00:00`) : new Date(texto)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
 type Cliente = {
   id: string
   nome: string
@@ -25,6 +101,7 @@ type Compra = {
   cupomusado: number
   creditoutilizado: number
   pontosutilizados: number
+  status: string
   ativo: boolean
 }
 
@@ -76,6 +153,7 @@ export default function Compras({
 }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
+  const [receitas, setReceitas] = useState<ReceitaFaturamento[]>([])
 
   const [modal, setModal] = useState(false)
   const [modalReceita, setModalReceita] = useState(false)
@@ -226,6 +304,8 @@ const [salvandoMetas, setSalvandoMetas] = useState(false)
           pontosutilizados:
             Number(c.pontosutilizados || 0),
 
+          status: c.status || "CONCLUIDA",
+
           ativo: c.ativo !== false
         }))
       )
@@ -238,9 +318,31 @@ const [salvandoMetas, setSalvandoMetas] = useState(false)
    * =========================
    */
 
+  /*
+   * =========================
+   * FETCH RECEITAS
+   * (as cadastradas em "Nova receita" no Financeiro também
+   *  entram no faturamento)
+   * =========================
+   */
+
+  async function fetchReceitas() {
+    const { data, error } = await supabase
+      .from("receitas")
+      .select("valor,tipo,status,observacao,descricao,depositoId,dataCompetencia,dataRecebimento")
+
+    if (error) {
+      alert("Erro ao carregar receitas: " + error.message)
+      return
+    }
+
+    setReceitas((data || []) as ReceitaFaturamento[])
+  }
+
   useEffect(() => {
     fetchClientes()
     fetchCompras()
+    fetchReceitas()
   }, [])
 
   async function fetchMetas() {
@@ -918,10 +1020,42 @@ async function salvarMetas() {
     })
   }, [compras, clientes, buscaVenda, filtroAno, filtroMes, filtroPagamento])
 
-  const totalVendido = comprasFiltradas.reduce(
-  (total, compra) => total + compra.valor,
-  0
-)
+  // Receitas manuais do período (só entram quando não há busca por cliente
+  // e o filtro de pagamento é "Todos" ou "Receita").
+  const receitasManuaisPeriodo = useMemo(() => {
+    if (buscaVenda.trim()) return []
+    if (filtroPagamento !== "todos" && filtroPagamento !== "Receita") return []
+
+    return receitas.filter(receita => {
+      if (!ehReceitaManual(receita)) return false
+      const data = paraData(dataDaReceita(receita))
+      if (!data) return false
+      const anoMatch = filtroAno === "todos" || String(data.getFullYear()) === filtroAno
+      const mesMatch = filtroMes === "todos" || String(data.getMonth() + 1).padStart(2, "0") === filtroMes
+      return anoMatch && mesMatch
+    })
+  }, [receitas, buscaVenda, filtroPagamento, filtroAno, filtroMes])
+
+  // Faturamento = vendas (valor − cupom) + receitas manuais.
+  // Crédito de cliente não é somado aqui: ele só conta quando vira venda.
+  const faturamentoVendas = comprasFiltradas.reduce(
+    (total, compra) => total + valorFaturadoVenda(compra),
+    0
+  )
+
+  const faturamentoReceitas = receitasManuaisPeriodo.reduce(
+    (total, receita) => total + Number(receita.valor || 0),
+    0
+  )
+
+  const totalVendido = faturamentoVendas + faturamentoReceitas
+
+  // Cada cliente conta uma vez só, mesmo com várias compras no período.
+  const clientesUnicos = new Set(
+    comprasFiltradas
+      .map(compra => compra.clienteid)
+      .filter((id): id is string => Boolean(id))
+  ).size
 
 const percentualMeta = meta > 0
   ? (totalVendido / meta) * 100
@@ -1160,14 +1294,7 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
         <Dash
           className="dash-faturamento"
           label="Faturamento"
-          value={moeda(
-            comprasFiltradas.reduce(
-              (total, compra) =>
-                total +
-                compra.valor,
-              0
-            )
-          )}
+          value={moeda(totalVendido)}
         />
 
         <Dash
@@ -1179,19 +1306,7 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
 
         <Dash
           label="Clientes"
-          value={
-            new Set(
-              comprasFiltradas
-                .filter(
-                  c =>
-                    c.clienteid
-                )
-                .map(
-                  c =>
-                    c.clienteid
-                )
-            ).size
-          }
+          value={clientesUnicos}
         />
       </div>
 
@@ -1371,6 +1486,24 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
                     )}
                   </strong>
 
+                  {(compra.creditoutilizado > 0 || compra.cupomusado > 0) && (
+                    <div style={detalheValor}>
+                      {compra.creditoutilizado > 0 && (
+                        <div>− Crédito: {moeda(compra.creditoutilizado)}</div>
+                      )}
+                      {compra.cupomusado > 0 && (
+                        <div>− Cupom: {moeda(compra.cupomusado)}</div>
+                      )}
+                      <div style={detalheValorTotal}>
+                        = {compra.pagamento.toLowerCase().includes("em aberto") ? "Em aberto" : "Pago na hora"}:{" "}
+                        {moeda(Math.max(compra.valor - compra.creditoutilizado - compra.cupomusado, 0))}
+                      </div>
+                      <div style={detalheValorFaturado}>
+                        Faturamento: {moeda(valorFaturadoVenda(compra))}
+                      </div>
+                    </div>
+                  )}
+
                   <div
                     style={muted}
                   >
@@ -1443,15 +1576,11 @@ const faltaSuperMeta = Math.max(superMeta - totalVendido, 0)
                           : "Sem pontos"}
                       </div>
 
-                      {compra.cupomusado >
-                        0 && (
+                      {compra.pontosutilizados > 0 && (
                         <div
                           style={muted}
                         >
-                          Cupom:{" "}
-                          {moeda(
-                            compra.cupomusado
-                          )}
+                          −{compra.pontosutilizados} pts (cupom)
                         </div>
                       )}
                     </>
@@ -2635,6 +2764,23 @@ const muted = {
   fontSize: 12,
   color: "#888",
   marginTop: 3
+}
+
+const detalheValor = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#8a7650",
+  lineHeight: 1.5
+}
+
+const detalheValorTotal = {
+  fontWeight: 600,
+  color: "#555"
+}
+
+const detalheValorFaturado = {
+  fontSize: 11,
+  color: "#999"
 }
 
 const metasContainer = {
