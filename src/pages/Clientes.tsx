@@ -505,52 +505,89 @@ export default function Clientes({
       return formatarMoeda(Number(valor || 0))
     }
 
+    // Mesma regra da função registrar_deposito_cliente do banco
     function ehFiado(compra: any) {
       const pagamento = String(compra.pagamento || "").toLowerCase()
-      return pagamento.includes("aberto") || pagamento.includes("fiado")
+      const cancelada = String(compra.status || "").toUpperCase() === "CANCELADA"
+      return !cancelada && pagamento.includes("em aberto")
     }
 
     const saldoPorCompra = new Map<string, number>()
+    const dataPorCompra = new Map<string, string>()
 
-    const eventos: {
-      data: string
-      ordem: number
-      tipo: "COMPRA" | "DEPOSITO" | "PAGAMENTO"
-      dados: any
-    }[] = []
+    comprasCliente.forEach((compra: any) => {
+      dataPorCompra.set(String(compra.id), compra.criadoem || "")
+    })
 
+    type Aplicacao = { compraId: string; valor: number }
+
+    type Evento =
+      | { data: string; ordem: number; tipo: "COMPRA"; compra: any }
+      | {
+          data: string
+          ordem: number
+          tipo: "PAGAMENTO"
+          valorTotal: number
+          aplicacoes: Aplicacao[]
+          creditoGerado: number
+          creditoDepois: number | null
+        }
+
+    const eventos: Evento[] = []
+
+    // 1) Compras ativas
     comprasCliente.forEach((compra: any) => {
       eventos.push({
         data: dataMovimento(compra.criadoem),
         ordem: 1,
         tipo: "COMPRA",
-        dados: compra
+        compra
       })
     })
 
+    // 2) Depósitos feitos pelo botão "Novo Crédito"
+    //    (cada depósito vira UM pagamento, com as compras em que foi aplicado)
     depositos.forEach((deposito: any) => {
+      const depositoId = String(deposito.id)
+      const aplicacoes = pagamentos
+        .filter((p: any) => String(p.depositoId || "") === depositoId)
+        .map((p: any) => ({ compraId: String(p.compraId || ""), valor: Number(p.valor || 0) }))
+
       eventos.push({
         data: dataMovimento(deposito.data_deposito),
-        ordem: 3,
-        tipo: "DEPOSITO",
-        dados: deposito
+        ordem: 2,
+        tipo: "PAGAMENTO",
+        valorTotal: Number(deposito.valor || 0),
+        aplicacoes,
+        creditoGerado: Number(deposito.valor_credito || 0),
+        creditoDepois:
+          deposito.saldo_credito_depois != null ? Number(deposito.saldo_credito_depois) : null
       })
     })
 
-    // Pagamentos feitos fora de depósitos também entram no histórico.
-    pagamentos.forEach((pagamento: any) => {
-      if (!pagamento.depositoId) {
-        eventos.push({
-          data: dataMovimento(
-            pagamento.dataRecebimento ||
-            pagamento.dataCompetencia ||
-            pagamento.criadoem
-          ),
-          ordem: 2,
-          tipo: "PAGAMENTO",
-          dados: pagamento
-        })
-      }
+    // 3) Pagamentos de fiado feitos fora de depósito:
+    //    os do mesmo dia são juntados em um único pagamento.
+    const avulsosPorDia = new Map<string, Aplicacao[]>()
+
+    pagamentos
+      .filter((p: any) => !p.depositoId)
+      .forEach((p: any) => {
+        const dia = dataMovimento(p.dataRecebimento || p.dataCompetencia || p.criadoem)
+        const lista = avulsosPorDia.get(dia) || []
+        lista.push({ compraId: String(p.compraId || ""), valor: Number(p.valor || 0) })
+        avulsosPorDia.set(dia, lista)
+      })
+
+    avulsosPorDia.forEach((aplicacoes, dia) => {
+      eventos.push({
+        data: dia,
+        ordem: 2,
+        tipo: "PAGAMENTO",
+        valorTotal: aplicacoes.reduce((t, a) => t + a.valor, 0),
+        aplicacoes,
+        creditoGerado: 0,
+        creditoDepois: null
+      })
     })
 
     eventos.sort((a, b) => {
@@ -559,119 +596,69 @@ export default function Clientes({
     })
 
     const historico: string[] = []
-
     let saldoEmAberto = 0
-
-    const primeiroDeposito = [...depositos].sort(
-      (a: any, b: any) =>
-        dataMovimento(a.data_deposito).localeCompare(dataMovimento(b.data_deposito))
-    )[0]
-
-    let creditoAtual = Number(primeiroDeposito?.saldo_credito_antes || 0)
 
     for (const evento of eventos) {
       const dataFormatada = formatarData(evento.data)
 
-      
-if (evento.tipo === "COMPRA") {
-  const compra = evento.dados
+      if (evento.tipo === "COMPRA") {
+        const compra = evento.compra
+        const valor = Number(compra.valor || 0)
+        const creditoUsado = Number(compra.creditoutilizado || 0)
+        const cupomUsado = Number(compra.cupomusado || 0)
 
-  const valorBruto = Number(compra.valor || 0)
-  const creditoUtilizado = Number(compra.creditoutilizado || 0)
-  const cupomUtilizado = Number(compra.cupomusado || 0)
+        const linhasDesconto =
+          (creditoUsado > 0 ? `\n  Crédito utilizado: ${dinheiro(creditoUsado)}` : "") +
+          (cupomUsado > 0 ? `\n  Cupom utilizado: ${dinheiro(cupomUsado)}` : "")
 
-  const valorLiquido = Math.max(
-    0,
-    valorBruto - creditoUtilizado - cupomUtilizado
-  )
+        if (ehFiado(compra)) {
+          // O que fica em aberto é o valor da compra menos crédito e cupom usados
+          const valorFiado = Math.max(0, valor - creditoUsado - cupomUsado)
+          saldoPorCompra.set(String(compra.id), valorFiado)
+          saldoEmAberto += valorFiado
 
-  if (ehFiado(compra)) {
-    saldoPorCompra.set(String(compra.id), valorLiquido)
-    saldoEmAberto += valorLiquido
-
-    historico.push(
-      `${dataFormatada} | COMPRA FIADA | ${dinheiro(valorLiquido)}\n` +
-      (creditoUtilizado > 0
-        ? `  Crédito utilizado: ${dinheiro(creditoUtilizado)}\n`
-        : "") +
-      (cupomUtilizado > 0
-        ? `  Cupom utilizado: ${dinheiro(cupomUtilizado)}\n`
-        : "") +
-      `  Valor em aberto após a compra: ${dinheiro(saldoEmAberto)}`
-    )
-  } else {
-    historico.push(
-      `${dataFormatada} | COMPRA | ${dinheiro(valorBruto)} | ${compra.pagamento || "-"}`
-    )
-  }
-}
-
-
-      if (evento.tipo === "PAGAMENTO") {
-        const pagamento = evento.dados
-        const compraId = String(pagamento.compraId || "")
-        const valor = Number(pagamento.valor || 0)
-        const restante = Number(saldoPorCompra.get(compraId) || 0)
-        const aplicado = Math.min(valor, restante)
-
-        saldoPorCompra.set(compraId, Math.max(0, restante - aplicado))
-        saldoEmAberto = Math.max(0, saldoEmAberto - aplicado)
-
-        historico.push(
-          `${dataFormatada} | PAGAMENTO DE FIADO | ${dinheiro(valor)}\n` +
-          `  Aplicado à compra: ${dinheiro(aplicado)}\n` +
-          `  Valor em aberto após o pagamento: ${dinheiro(saldoEmAberto)}`
-        )
+          historico.push(
+            `${dataFormatada} | COMPRA FIADA | ${dinheiro(valor)}` +
+            linhasDesconto +
+            `\n  Valor em aberto após a compra: ${dinheiro(saldoEmAberto)}`
+          )
+        } else {
+          historico.push(
+            `${dataFormatada} | COMPRA | ${dinheiro(valor)} | ${compra.pagamento || "-"}` +
+            linhasDesconto
+          )
+        }
       }
 
-      if (evento.tipo === "DEPOSITO") {
-        const deposito = evento.dados
-        const depositoId = String(deposito.id)
-
-        const pagamentosDoDeposito = pagamentos.filter(
-          (p: any) => String(p.depositoId || "") === depositoId
-        )
-
-        const valorDepositado = Number(deposito.valor || 0)
-
+      if (evento.tipo === "PAGAMENTO") {
         let totalAplicado = 0
         const detalhes: string[] = []
 
-        pagamentosDoDeposito.forEach((pagamento: any) => {
-          const compraId = String(pagamento.compraId || "")
-          const valor = Number(pagamento.valor || 0)
-          const restante = Number(saldoPorCompra.get(compraId) || 0)
-          const aplicado = Math.min(valor, restante)
+        evento.aplicacoes.forEach(aplicacao => {
+          const restante = Number(saldoPorCompra.get(aplicacao.compraId) || 0)
+          const aplicado = Math.min(aplicacao.valor, restante)
 
-          saldoPorCompra.set(compraId, Math.max(0, restante - aplicado))
-
+          saldoPorCompra.set(aplicacao.compraId, Math.max(0, restante - aplicado))
           saldoEmAberto = Math.max(0, saldoEmAberto - aplicado)
           totalAplicado += aplicado
 
-          const compra = comprasCliente.find(
-            (c: any) => String(c.id) === compraId
-          )
-
           detalhes.push(
-            `  - Compra de ${formatarData(compra?.criadoem || "")}: ${dinheiro(aplicado)}`
+            `  Aplicado à compra de ${formatarData(dataPorCompra.get(aplicacao.compraId) || "")}: ${dinheiro(aplicado)}`
           )
         })
 
-        const creditoGerado = Number(deposito.valor_credito || 0)
-
-        creditoAtual = Number(
-          deposito.saldo_credito_depois ?? creditoAtual + creditoGerado
-        )
+        const titulo = totalAplicado > 0 ? "PAGAMENTO DE FIADO" : "CRÉDITO ADICIONADO"
 
         historico.push(
-          `${dataFormatada} | DEPÓSITO | ${dinheiro(valorDepositado)}\n` +
-          (detalhes.length
-            ? `  Utilização do depósito:\n${detalhes.join("\n")}\n`
+          `${dataFormatada} | ${titulo} | ${dinheiro(evento.valorTotal)}` +
+          (detalhes.length ? `\n${detalhes.join("\n")}` : "") +
+          (evento.creditoGerado > 0
+            ? `\n  Crédito gerado: ${dinheiro(evento.creditoGerado)}`
             : "") +
-          `  Total aplicado nos fiados: ${dinheiro(totalAplicado)}\n` +
-          `  Crédito gerado: ${dinheiro(creditoGerado)}\n` +
-          `  Valor em aberto após o depósito: ${dinheiro(saldoEmAberto)}\n` +
-          `  Crédito disponível após o depósito: ${dinheiro(creditoAtual)}`
+          (evento.creditoGerado > 0 && evento.creditoDepois != null
+            ? `\n  Crédito disponível após: ${dinheiro(evento.creditoDepois)}`
+            : "") +
+          `\n  Valor em aberto após o pagamento: ${dinheiro(saldoEmAberto)}`
         )
       }
     }
