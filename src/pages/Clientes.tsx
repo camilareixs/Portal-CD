@@ -490,40 +490,350 @@ Pontos atuais: ${cliente.pontos}
 Cupons disponíveis: ${calc(cliente.pontos).cupons}
 Pontos para próximo cupom: ${calc(cliente.pontos).resto}/10
 
+
+async function gerarRelatorio(cliente: Cliente): Promise<string | null> {
+  const [clienteResult, comprasResult, depositosResult] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", cliente.id)
+      .single(),
+
+    supabase
+      .from("compras")
+      .select("*")
+      .eq("clienteid", cliente.id)
+      .eq("ativo", true),
+
+    supabase
+      .from("depositos_clientes")
+      .select("*")
+      .eq("cliente_id", cliente.id)
+      .eq("status", "RECEBIDO")
+  ])
+
+  if (clienteResult.error || comprasResult.error || depositosResult.error) {
+    const erro =
+      clienteResult.error ||
+      comprasResult.error ||
+      depositosResult.error
+
+    alert("Erro ao buscar histórico financeiro: " + erro.message)
+    return null
+  }
+
+  const dadosCliente = clienteResult.data
+  const comprasCliente = comprasResult.data || []
+  const depositos = depositosResult.data || []
+
+  const idsCompras = comprasCliente.map((c: any) => String(c.id))
+
+  let pagamentos: any[] = []
+
+  if (idsCompras.length > 0) {
+    const { data, error } = await supabase
+      .from("receitas")
+      .select("*")
+      .in("compraId", idsCompras)
+      .eq("tipo", "PAGAMENTO_FIADO")
+      .eq("status", "RECEBIDA")
+
+    if (error) {
+      alert("Erro ao buscar pagamentos: " + error.message)
+      return null
+    }
+
+    pagamentos = data || []
+  }
+
+  function dataMovimento(data: string | null | undefined) {
+    if (!data) return ""
+    return data.substring(0, 10)
+  }
+
+  function dinheiro(valor: number) {
+    return formatarMoeda(Number(valor || 0))
+  }
+
+  function ehFiado(compra: any) {
+    const pagamento = String(compra.pagamento || "").toLowerCase()
+    return pagamento.includes("aberto") || pagamento.includes("fiado")
+  }
+
+  const saldoPorCompra = new Map<string, number>()
+
+  const eventos: {
+    data: string
+    ordem: number
+    tipo: "COMPRA" | "DEPOSITO" | "PAGAMENTO"
+    dados: any
+  }[] = []
+
+  comprasCliente.forEach((compra: any) => {
+    eventos.push({
+      data: dataMovimento(compra.criadoem),
+      ordem: 1,
+      tipo: "COMPRA",
+      dados: compra
+    })
+  })
+
+  depositos.forEach((deposito: any) => {
+    eventos.push({
+      data: dataMovimento(deposito.data_deposito),
+      ordem: 3,
+      tipo: "DEPOSITO",
+      dados: deposito
+    })
+  })
+
+  // Pagamentos feitos fora de depósitos também entram no histórico.
+  pagamentos.forEach((pagamento: any) => {
+    if (!pagamento.depositoId) {
+      eventos.push({
+        data: dataMovimento(
+          pagamento.dataRecebimento ||
+          pagamento.dataCompetencia ||
+          pagamento.criadoem
+        ),
+        ordem: 2,
+        tipo: "PAGAMENTO",
+        dados: pagamento
+      })
+    }
+  })
+
+  eventos.sort((a, b) => {
+    const comparacao = a.data.localeCompare(b.data)
+    return comparacao !== 0 ? comparacao : a.ordem - b.ordem
+  })
+
+  const historico: string[] = []
+
+  let saldoEmAberto = 0
+
+  const primeiroDeposito = [...depositos].sort(
+    (a: any, b: any) =>
+      dataMovimento(a.data_deposito).localeCompare(
+        dataMovimento(b.data_deposito)
+      )
+  )[0]
+
+  let creditoAtual = Number(
+    primeiroDeposito?.saldo_credito_antes || 0
+  )
+
+  for (const evento of eventos) {
+    const dataFormatada = formatarData(evento.data)
+
+    if (evento.tipo === "COMPRA") {
+      const compra = evento.dados
+      const valor = Number(compra.valor || 0)
+
+      if (ehFiado(compra)) {
+        saldoPorCompra.set(String(compra.id), valor)
+        saldoEmAberto += valor
+
+        historico.push(
+          `${dataFormatada} | COMPRA FIADA | ${dinheiro(valor)}\n` +
+          `  Valor em aberto após a compra: ${dinheiro(saldoEmAberto)}`
+        )
+      } else {
+        historico.push(
+          `${dataFormatada} | COMPRA | ${dinheiro(valor)} | ${compra.pagamento || "-"}`
+        )
+      }
+    }
+
+    if (evento.tipo === "PAGAMENTO") {
+      const pagamento = evento.dados
+      const compraId = String(pagamento.compraId || "")
+      const valor = Number(pagamento.valor || 0)
+      const restante = Number(saldoPorCompra.get(compraId) || 0)
+      const aplicado = Math.min(valor, restante)
+
+      saldoPorCompra.set(compraId, Math.max(0, restante - aplicado))
+      saldoEmAberto = Math.max(0, saldoEmAberto - aplicado)
+
+      historico.push(
+        `${dataFormatada} | PAGAMENTO DE FIADO | ${dinheiro(valor)}\n` +
+        `  Aplicado à compra: ${dinheiro(aplicado)}\n` +
+        `  Valor em aberto após o pagamento: ${dinheiro(saldoEmAberto)}`
+      )
+    }
+
+    if (evento.tipo === "DEPOSITO") {
+      const deposito = evento.dados
+      const depositoId = String(deposito.id)
+
+      const pagamentosDoDeposito = pagamentos.filter(
+        (p: any) => String(p.depositoId || "") === depositoId
+      )
+
+      const valorDepositado = Number(deposito.valor || 0)
+
+      let totalAplicado = 0
+      const detalhes: string[] = []
+
+      pagamentosDoDeposito.forEach((pagamento: any) => {
+        const compraId = String(pagamento.compraId || "")
+        const valor = Number(pagamento.valor || 0)
+        const restante = Number(saldoPorCompra.get(compraId) || 0)
+        const aplicado = Math.min(valor, restante)
+
+        saldoPorCompra.set(
+          compraId,
+          Math.max(0, restante - aplicado)
+        )
+
+        saldoEmAberto = Math.max(0, saldoEmAberto - aplicado)
+        totalAplicado += aplicado
+
+        const compra = comprasCliente.find(
+          (c: any) => String(c.id) === compraId
+        )
+
+        detalhes.push(
+          `  - Compra de ${formatarData(compra?.criadoem || "")}: ${dinheiro(aplicado)}`
+        )
+      })
+
+      const creditoGerado = Number(deposito.valor_credito || 0)
+
+      creditoAtual = Number(
+        deposito.saldo_credito_depois ??
+        creditoAtual + creditoGerado
+      )
+
+      historico.push(
+        `${dataFormatada} | DEPÓSITO | ${dinheiro(valorDepositado)}\n` +
+        (detalhes.length
+          ? `  Utilização do depósito:\n${detalhes.join("\n")}\n`
+          : "") +
+        `  Total aplicado nos fiados: ${dinheiro(totalAplicado)}\n` +
+        `  Crédito gerado: ${dinheiro(creditoGerado)}\n` +
+        `  Valor em aberto após o depósito: ${dinheiro(saldoEmAberto)}\n` +
+        `  Crédito disponível após o depósito: ${dinheiro(creditoAtual)}`
+      )
+    }
+  }
+
+  const totalGasto = comprasCliente.reduce(
+    (total: number, compra: any) => total + Number(compra.valor || 0),
+    0
+  )
+
+  const totalCompras = comprasCliente.length
+
+  const ticketMedio = totalCompras > 0
+    ? totalGasto / totalCompras
+    : 0
+
+  const cuponsUsados = comprasCliente.reduce(
+    (total: number, compra: any) =>
+      total + Number(compra.cupomusado || 0),
+    0
+  )
+
+  const pontosGerados = comprasCliente.reduce(
+    (total: number, compra: any) =>
+      total + Number(compra.pontosgerados || 0),
+    0
+  )
+
+  const comprasOrdenadas = [...comprasCliente].sort(
+    (a: any, b: any) =>
+      new Date(b.criadoem).getTime() -
+      new Date(a.criadoem).getTime()
+  )
+
+  const creditoFinal = Number(
+    dadosCliente.creditoDisponivel || 0
+  )
+
+  return `RELATÓRIO CAMIDUDA
+
+CLIENTE
+Nome: ${dadosCliente.nome || "-"}
+CPF: ${dadosCliente.cpf || "-"}
+Celular: ${dadosCliente.celular || "-"}
+Referência: ${dadosCliente.clienteRef || "-"}
+Crédito disponível atual: ${dinheiro(creditoFinal)}
+Observação: ${dadosCliente.observacao || "-"}
+Data de nascimento: ${dadosCliente.dataNascimento ? formatarData(dadosCliente.dataNascimento) : "-"}
+
+ENDEREÇO
+Rua: ${dadosCliente.rua || "-"}
+Número: -
+Complemento: ${dadosCliente.complemento || "-"}
+CEP: ${dadosCliente.cep || "-"}
+Cidade: ${dadosCliente.cidade || "-"}
+Estado: ${dadosCliente.estado || "-"}
+
+Cliente desde: ${formatarData(dadosCliente.criadoem || "")}
+
+------------------------------
+RESUMO DE FIDELIDADE
+------------------------------
+Pontos atuais: ${Number(dadosCliente.pontos || 0)}
+Cupons disponíveis: ${Math.floor(Number(dadosCliente.pontos || 0) / 10)}
+Pontos para próximo cupom: ${Number(dadosCliente.pontos || 0) % 10}/10
+
 ------------------------------
 RESUMO DE COMPRAS
 ------------------------------
-Total gasto: R$ ${totalGasto.toFixed(2)}
+Total gasto: ${dinheiro(totalGasto)}
 Compras realizadas: ${totalCompras}
-Ticket médio: R$ ${ticketMedio.toFixed(2)}
-Última compra: ${ultimaCompra}
-Valor em cupons utilizados: R$ ${cuponsUsados.toFixed(2)}
+Ticket médio: ${dinheiro(ticketMedio)}
+Última compra: ${comprasOrdenadas.length ? formatarData(comprasOrdenadas[0].criadoem) : "Nenhuma"}
+Valor em cupons utilizados: ${dinheiro(cuponsUsados)}
 Pontos gerados: ${pontosGerados}
 
 ------------------------------
-HISTÓRICO
+HISTÓRICO FINANCEIRO
 ------------------------------
-${comprasCliente.length
-  ? comprasCliente.map(c => `${formatarData(c.criadoem)} | R$ ${c.valor.toFixed(2)} | ${c.pagamento || "-"}`).join("\n")
-  : "Nenhuma compra registrada."}`
-  }
+${historico.length ? historico.join("\n\n") : "Nenhuma movimentação registrada."}
 
-  function visualizarRelatorio(cliente: Cliente) {
-    setRelatorioTexto(gerarRelatorio(cliente))
-    setRelatorioAberto(true)
-  }
+------------------------------
+SALDO ATUAL
+------------------------------
+Valor em aberto: ${dinheiro(saldoEmAberto)}
+Crédito disponível: ${dinheiro(creditoFinal)}
+`
+}
 
-  function baixarRelatorio(cliente: Cliente) {
-    const blob = new Blob([gerarRelatorio(cliente)], { type: "text/plain;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `relatorio-${cliente.nome.replace(/\s+/g, "-").toLowerCase()}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+
+ async function visualizarRelatorio(cliente: Cliente) {
+  const texto = await gerarRelatorio(cliente)
+
+  if (!texto) return
+
+  setRelatorioTexto(texto)
+  setRelatorioAberto(true)
+}
+
+  async function baixarRelatorio(cliente: Cliente) {
+  const texto = await gerarRelatorio(cliente)
+
+  if (!texto) return
+
+  const blob = new Blob(
+    [texto],
+    { type: "text/plain;charset=utf-8" }
+  )
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+
+  a.href = url
+  a.download = `relatorio-${cliente.nome.replace(/\s+/g, "-").toLowerCase()}.txt`
+
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+
+  URL.revokeObjectURL(url)
+}
 
   function fecharModal() {
     setSelected(null)
