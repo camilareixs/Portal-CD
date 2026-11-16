@@ -1,6 +1,66 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { supabase } from "../lib/supabase"
 
+// Regras de faturamento (iguais em Vendas, Financeiro e Dashboard):
+// Faturamento = vendas (valor da venda − cupom) + receitas de "Nova receita".
+// Crédito de cliente e pagamento de fiado NÃO somam no faturamento.
+
+type CompraFaturamento = {
+  valor?: number | null
+  cupomusado?: number | null
+  status?: string | null
+  ativo?: boolean | null
+}
+
+type ReceitaFaturamento = {
+  valor?: number | null
+  tipo?: string | null
+  status?: string | null
+  observacao?: string | null
+  descricao?: string | null
+  depositoId?: string | null
+  dataCompetencia?: string | null
+  dataRecebimento?: string | null
+}
+
+/** Arredonda para centavos (evita sobras como 0,00000000001). */
+function centavos(valor: number) {
+  return Math.round(Number(valor || 0) * 100) / 100
+}
+
+/** Quanto uma venda soma no faturamento: valor da venda menos o cupom. */
+function valorFaturadoVenda(compra: CompraFaturamento) {
+  if (compra.ativo === false) return 0
+  if (String(compra.status || "").toUpperCase().startsWith("CANCEL")) return 0
+  return centavos(Math.max(0, Number(compra.valor || 0) - Number(compra.cupomusado || 0)))
+}
+
+/**
+ * Receita que na verdade é crédito de cliente
+ * (sobra de depósito ou pagamento de venda excluída que virou crédito).
+ */
+function ehCreditoDeCliente(receita: ReceitaFaturamento) {
+  if (receita.tipo === "PAGAMENTO_FIADO") return false
+  const observacao = String(receita.observacao || "").toLowerCase()
+  const descricao = String(receita.descricao || "").toLowerCase()
+  return (
+    Boolean(receita.depositoId) ||
+    observacao.includes("não é receita operacional") ||
+    descricao.startsWith("crédito de depósito") ||
+    descricao.startsWith("crédito de estorno")
+  )
+}
+
+/** Receita cadastrada à mão em "Nova receita" (soma no faturamento). */
+function ehReceitaManual(receita: ReceitaFaturamento) {
+  return (
+    String(receita.status || "").toUpperCase() === "RECEBIDA" &&
+    receita.tipo !== "PAGAMENTO_FIADO" &&
+    receita.tipo !== "VENDA" &&
+    !ehCreditoDeCliente(receita)
+  )
+}
+
 type Receita = {
   id: string
   tipo: "VENDA" | "PAGAMENTO_FIADO" | "OUTRA_RECEITA" | "OUTROS"
@@ -8,10 +68,11 @@ type Receita = {
   valor: number
   dataCompetencia: string
   dataRecebimento: string | null
-  status: "PENDENTE" | "RECEBIDA" | "CANCELADA"
+  status: "PENDENTE" | "RECEBIDA" | "CANCELADA" | "ESTORNADA"
   observacao: string
   criadoem: string
   compraId: string | null
+  depositoId: string | null
 }
 
 type Despesa = {
@@ -147,7 +208,8 @@ function anosDisponiveis(receitas: Receita[], despesas: Despesa[], compras: Comp
   return [...anos].sort((a, b) => b - a)
 }
 
-function tipoReceitaLabel(tipo: Receita["tipo"]) {
+function tipoReceitaLabel(tipo: Receita["tipo"], receita?: Receita) {
+  if (receita && ehCreditoDeCliente(receita)) return "Crédito de cliente (não soma)"
   switch (tipo) {
     case "VENDA": return "Venda"
     case "PAGAMENTO_FIADO": return "Pagamento de fiado"
@@ -214,7 +276,8 @@ export default function Financeiro() {
         id: String(r.id), tipo: r.tipo, descricao: r.descricao || "", valor: Number(r.valor || 0),
         dataCompetencia: r.dataCompetencia || "", dataRecebimento: r.dataRecebimento || null,
         status: r.status, observacao: r.observacao || "", criadoem: r.criadoem || "",
-        compraId: r.compraId ? String(r.compraId) : null
+        compraId: r.compraId ? String(r.compraId) : null,
+        depositoId: r.depositoId ? String(r.depositoId) : null
       })))
     }
     if (despesasResult.data) {
@@ -267,11 +330,18 @@ export default function Financeiro() {
   const vendasValidas = useMemo(() => compras.filter(c => c.status === "CONCLUIDA"), [compras])
   const vendasPeriodo = useMemo(() => vendasValidas.filter(c => dentroDoPeriodo(c.criadoem)), [vendasValidas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
 
-  const faturamento = useMemo(() => vendasPeriodo.reduce((t, c) => t + c.valor, 0), [vendasPeriodo])
+  // Crédito de cliente (depósito adiantado) não é receita: fica fora de todos os totais.
+  const receitasSemCredito = useMemo(() => receitas.filter(r => !ehCreditoDeCliente(r)), [receitas])
+
+  // Faturamento = vendas (valor − cupom) + receitas cadastradas em "Nova receita".
+  // Mesma regra de Vendas e do Dashboard (regras no topo deste arquivo).
+  const faturamentoVendas = useMemo(() => vendasPeriodo.reduce((t, c) => t + valorFaturadoVenda(c), 0), [vendasPeriodo])
+  const receitasManuaisPeriodo = useMemo(() => receitas.filter(r => ehReceitaManual(r) && dentroDoPeriodo(r.dataRecebimento || r.dataCompetencia)), [receitas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
+  const totalReceitasExtras = useMemo(() => receitasManuaisPeriodo.reduce((t, r) => t + r.valor, 0), [receitasManuaisPeriodo])
+  const faturamento = faturamentoVendas + totalReceitasExtras
 
   const receitasPeriodo = useMemo(() => receitas.filter(r => dentroDoPeriodo(r.dataCompetencia)), [receitas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
-  const receitasRecebidas = useMemo(() => receitas.filter(r => r.status === "RECEBIDA" && dentroDoPeriodo(r.dataRecebimento || r.dataCompetencia)), [receitas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
-  const totalReceitasExtras = useMemo(() => receitasRecebidas.filter(r => r.tipo !== "VENDA" && r.tipo !== "PAGAMENTO_FIADO").reduce((t, r) => t + r.valor, 0), [receitasRecebidas])
+  const receitasRecebidas = useMemo(() => receitasSemCredito.filter(r => r.status === "RECEBIDA" && dentroDoPeriodo(r.dataRecebimento || r.dataCompetencia)), [receitasSemCredito, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
   const totalRecebido = useMemo(() => receitasRecebidas.reduce((t, r) => t + r.valor, 0), [receitasRecebidas])
 
   const despesasPeriodo = useMemo(() => despesas.filter(d => dentroDoPeriodo(d.dataCompetencia)), [despesas, filtroAno, filtroMes, periodoPersonalizado, dataInicio, dataFim])
@@ -286,7 +356,7 @@ export default function Financeiro() {
 
   const lucroBruto = faturamento - custoProdutosVendidos
   const resultadoOperacional = lucroBruto - totalDespesas
-  const resultadoLiquido = resultadoOperacional + totalReceitasExtras
+  const resultadoLiquido = resultadoOperacional
 
   // Saldo acumulado até o dia anterior ao início do período selecionado.
   // O valor positivo funciona como crédito trazido do mês anterior.
@@ -294,14 +364,14 @@ export default function Financeiro() {
     ? dataInicio
     : `${filtroAno === "todos" ? new Date().getFullYear() : filtroAno}-${filtroMes === "todos" ? "01" : filtroMes}-01`
   const creditoMesAnterior = useMemo(() => {
-    const receitasAnteriores = receitas
+    const receitasAnteriores = receitasSemCredito
       .filter(r => r.status === "RECEBIDA" && (r.dataRecebimento || r.dataCompetencia) && String(r.dataRecebimento || r.dataCompetencia).slice(0, 10) < inicioPeriodoISO)
       .reduce((total, r) => total + r.valor, 0)
     const despesasAnteriores = despesas
       .filter(d => d.status === "PAGA" && (d.dataPagamento || d.dataCompetencia) && String(d.dataPagamento || d.dataCompetencia).slice(0, 10) < inicioPeriodoISO)
       .reduce((total, d) => total + d.valor, 0)
     return receitasAnteriores - despesasAnteriores
-  }, [receitas, despesas, inicioPeriodoISO])
+  }, [receitasSemCredito, despesas, inicioPeriodoISO])
   const saldoComCreditoAnterior = creditoMesAnterior + totalRecebido - totalDespesas
   const margemBruta = faturamento > 0 ? (lucroBruto / faturamento) * 100 : 0
   const margemLiquida = faturamento > 0 ? (resultadoLiquido / faturamento) * 100 : 0
@@ -331,11 +401,12 @@ export default function Financeiro() {
 
       return {
         compra,
-        recebido,
-        pendente: Math.max(valorLiquido - recebido, 0)
+        recebido: centavos(recebido),
+        // Arredonda para centavos: venda quitada fica com 0 e sai de "A receber"
+        pendente: centavos(Math.max(valorLiquido - recebido, 0))
       }
     })
-    .filter(item => item.pendente > 0)
+    .filter(item => item.pendente >= 0.01)
 }, [compras, receitas])
 
 const totalAReceber = useMemo(
@@ -355,11 +426,12 @@ const totalAReceber = useMemo(
   const mesesDoAno = useMemo(() => {
     const ano = Number(filtroAno) || new Date().getFullYear()
     return meses.map(m => {
-      const vendas = vendasValidas.filter(v => anoDaData(v.criadoem) === ano && mesDaData(v.criadoem) === m.value).reduce((t, v) => t + v.valor, 0)
+      const vendas = vendasValidas.filter(v => anoDaData(v.criadoem) === ano && mesDaData(v.criadoem) === m.value).reduce((t, v) => t + valorFaturadoVenda(v), 0)
+        + receitas.filter(r => ehReceitaManual(r) && anoDaData(r.dataRecebimento || r.dataCompetencia) === ano && mesDaData(r.dataRecebimento || r.dataCompetencia) === m.value).reduce((t, r) => t + r.valor, 0)
       const despesasMes = despesas.filter(d => d.status === "PAGA" && anoDaData(d.dataPagamento || d.dataCompetencia) === ano && mesDaData(d.dataPagamento || d.dataCompetencia) === m.value).reduce((t, d) => t + d.valor, 0)
       return { ...m, vendas, despesas: despesasMes, saldo: vendas - despesasMes }
     })
-  }, [filtroAno, vendasValidas, despesas])
+  }, [filtroAno, vendasValidas, despesas, receitas])
 
   async function criarReceita() {
     if (!descricaoReceita.trim() || valorReceita <= 0) {
@@ -441,6 +513,8 @@ const totalAReceber = useMemo(
       `Emitido em: ${dataBR(hojeISO())}`,
       "",
       "RESUMO FINANCEIRO",
+      `Vendas (valor − cupom): ${moeda(faturamentoVendas)}`,
+      `Outras receitas: ${moeda(totalReceitasExtras)}`,
       `Faturamento: ${moeda(faturamento)}`,
       `Total recebido: ${moeda(totalRecebido)}`,
       `Crédito do mês anterior: ${moeda(creditoMesAnterior)}`,
@@ -451,7 +525,7 @@ const totalAReceber = useMemo(
       "RECEITAS RECEBIDAS",
       "Data | Tipo | Descrição | Valor",
       ...(receitasRecebidas.length
-        ? receitasRecebidas.map(r => `${dataBR(r.dataRecebimento || r.dataCompetencia)} | ${tipoReceitaLabel(r.tipo)} | ${r.descricao} | ${moeda(r.valor)}`)
+        ? receitasRecebidas.map(r => `${dataBR(r.dataRecebimento || r.dataCompetencia)} | ${tipoReceitaLabel(r.tipo, r)} | ${r.descricao} | ${moeda(r.valor)}`)
         : ["Nenhuma receita recebida no período."]),
       "",
       "DESPESAS PAGAS",
@@ -530,8 +604,8 @@ const totalAReceber = useMemo(
       </div>
 
       <div className="fin-grid" style={{marginBottom:16}}>
-        <Kpi label="Faturamento" value={moeda(faturamento)} detail={`${vendasPeriodo.length} venda(s)`} />
-        <Kpi label="Recebido" value={moeda(totalRecebido)} detail={`Caixa de entradas`} />
+        <Kpi label="Faturamento" value={moeda(faturamento)} detail={`${vendasPeriodo.length} venda(s)${totalReceitasExtras > 0 ? ` + ${moeda(totalReceitasExtras)} outras receitas` : ""}`} />
+        <Kpi label="Recebido" value={moeda(totalRecebido)} detail={`Fiados pagos e outras receitas (sem crédito de cliente)`} />
         <Kpi label="A receber" value={moeda(totalAReceber)} detail={`${fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).length} venda(s) em aberto`} />
         <Kpi label="Despesas pagas" value={moeda(totalDespesas)} detail={`${despesasPagas.length} lançamento(s)`} />
         <Kpi label="Lucro bruto" value={moeda(lucroBruto)} detail={`Margem ${margemBruta.toFixed(1)}%`} />
@@ -551,10 +625,11 @@ const totalAReceber = useMemo(
           <div className="fin-two">
             <section className="fin-card" style={section}>
               <div style={sectionHeader}><div><h3 style={sectionTitleNoMargin}>Demonstrativo do resultado</h3><div style={muted}>{periodoTexto}</div></div><button type="button" style={btnSecondary} onClick={gerarRelatorio}>Baixar relatório</button></div>
+              <ResumoLinha label="Vendas (valor − cupom)" valor={moeda(faturamentoVendas)} />
+              <ResumoLinha label="(+) Outras receitas" valor={moeda(totalReceitasExtras)} />
               <ResumoLinha label="Faturamento" valor={moeda(faturamento)} />
               <ResumoLinha label="Lucro bruto" valor={moeda(lucroBruto)} />
               <ResumoLinha label="(-) Despesas operacionais pagas" valor={moeda(totalDespesas)} />
-              <ResumoLinha label="(+) Outras receitas recebidas" valor={moeda(totalReceitasExtras)} />
               <ResumoLinha label="Resultado líquido" valor={moeda(resultadoLiquido)} destaque />
             </section>
           </div>
@@ -577,7 +652,7 @@ const totalAReceber = useMemo(
 
       {aba === "receitas" && <ListCard title="Receitas" subtitle="Entradas financeiras registradas no período." action={<button style={btnSmall} onClick={()=>setModalReceita(true)}>+ Nova receita</button>}>
         <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Descrição</th><th>Tipo</th><th>Competência</th><th>Recebimento</th><th>Status</th><th className="right">Valor</th><th></th></tr></thead><tbody>
-          {receitasFiltradas.map(r=><tr key={r.id}><td><strong>{r.descricao}</strong>{r.observacao&&<div style={muted}>{r.observacao}</div>}</td><td>{tipoReceitaLabel(r.tipo)}</td><td>{dataBR(r.dataCompetencia)}</td><td>{dataBR(r.dataRecebimento)}</td><td><StatusBadge status={r.status}/></td><td className="right" style={{color:"#5f7f47",fontWeight:700}}>{moeda(r.valor)}</td><td><button style={deleteBtn} disabled={r.status==="CANCELADA"} onClick={()=>cancelarReceita(r)}>Cancelar</button></td></tr>)}
+          {receitasFiltradas.map(r=><tr key={r.id}><td><strong>{r.descricao}</strong>{r.observacao&&<div style={muted}>{r.observacao}</div>}</td><td>{tipoReceitaLabel(r.tipo, r)}</td><td>{dataBR(r.dataCompetencia)}</td><td>{dataBR(r.dataRecebimento)}</td><td><StatusBadge status={r.status}/></td><td className="right" style={{color:"#5f7f47",fontWeight:700}}>{moeda(r.valor)}</td><td><button style={deleteBtn} disabled={r.status==="CANCELADA"} onClick={()=>cancelarReceita(r)}>Cancelar</button></td></tr>)}
         </tbody></table></div>
         {!receitasFiltradas.length && <div style={emptyText}>Nenhuma receita encontrada.</div>}
       </ListCard>}
@@ -640,8 +715,8 @@ function ResumoLinha({label,valor,destaque=false}:{label:string,valor:string,des
 }
 
 function StatusBadge({status}:{status:string}) {
-  const cancelado=status==="CANCELADA", pendente=status==="PENDENTE"
-  return <span style={{...statusBadge,...(cancelado?statusCancelado:pendente?statusPendente:statusRecebido)}}>{status==="RECEBIDA"?"Recebida":status==="PAGA"?"Paga":status==="PENDENTE"?"Pendente":"Cancelada"}</span>
+  const cancelado=status==="CANCELADA"||status==="ESTORNADA", pendente=status==="PENDENTE"
+  return <span style={{...statusBadge,...(cancelado?statusCancelado:pendente?statusPendente:statusRecebido)}}>{status==="RECEBIDA"?"Recebida":status==="PAGA"?"Paga":status==="PENDENTE"?"Pendente":status==="ESTORNADA"?"Estornada":"Cancelada"}</span>
 }
 
 function ListCard({title,subtitle,action,children}:{title:string,subtitle:string,action:ReactNode,children:ReactNode}) {
