@@ -572,24 +572,40 @@ export default function Clientes({
     for (const evento of eventos) {
       const dataFormatada = formatarData(evento.data)
 
-      if (evento.tipo === "COMPRA") {
-        const compra = evento.dados
-        const valor = Number(compra.valor || 0)
+      
+if (evento.tipo === "COMPRA") {
+  const compra = evento.dados
 
-        if (ehFiado(compra)) {
-          saldoPorCompra.set(String(compra.id), valor)
-          saldoEmAberto += valor
+  const valorBruto = Number(compra.valor || 0)
+  const creditoUtilizado = Number(compra.creditoutilizado || 0)
+  const cupomUtilizado = Number(compra.cupomusado || 0)
 
-          historico.push(
-            `${dataFormatada} | COMPRA FIADA | ${dinheiro(valor)}\n` +
-            `  Valor em aberto após a compra: ${dinheiro(saldoEmAberto)}`
-          )
-        } else {
-          historico.push(
-            `${dataFormatada} | COMPRA | ${dinheiro(valor)} | ${compra.pagamento || "-"}`
-          )
-        }
-      }
+  const valorLiquido = Math.max(
+    0,
+    valorBruto - creditoUtilizado - cupomUtilizado
+  )
+
+  if (ehFiado(compra)) {
+    saldoPorCompra.set(String(compra.id), valorLiquido)
+    saldoEmAberto += valorLiquido
+
+    historico.push(
+      `${dataFormatada} | COMPRA FIADA | ${dinheiro(valorLiquido)}\n` +
+      (creditoUtilizado > 0
+        ? `  Crédito utilizado: ${dinheiro(creditoUtilizado)}\n`
+        : "") +
+      (cupomUtilizado > 0
+        ? `  Cupom utilizado: ${dinheiro(cupomUtilizado)}\n`
+        : "") +
+      `  Valor em aberto após a compra: ${dinheiro(saldoEmAberto)}`
+    )
+  } else {
+    historico.push(
+      `${dataFormatada} | COMPRA | ${dinheiro(valorBruto)} | ${compra.pagamento || "-"}`
+    )
+  }
+}
+
 
       if (evento.tipo === "PAGAMENTO") {
         const pagamento = evento.dados
