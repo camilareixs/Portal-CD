@@ -91,9 +91,10 @@ export default function Clientes({
 
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const [relatorioTexto, setRelatorioTexto] = useState("")
-  const [creditoAberto, setCreditoAberto] = useState(false)
-  const [novoCredito, setNovoCredito] = useState("")
-  const [salvandoCredito, setSalvandoCredito] = useState(false)
+const [creditoAberto, setCreditoAberto] = useState(false)
+const [confirmacaoCreditoAberta, setConfirmacaoCreditoAberta] = useState(false)
+const [novoCredito, setNovoCredito] = useState("")
+const [salvandoCredito, setSalvandoCredito] = useState(false)
   const [inativosAberto, setInativosAberto] = useState(false)
   const [clienteInativoWhats, setClienteInativoWhats] = useState<Cliente | null>(null)
   const [mensagemInativo, setMensagemInativo] = useState("")
@@ -193,7 +194,7 @@ export default function Clientes({
   }
 
   
-async function salvarNovoCredito() {
+function validarNovoCredito() {
   if (!selected) return
 
   const valor = Number(
@@ -205,9 +206,24 @@ async function salvarNovoCredito() {
     return
   }
 
+  setConfirmacaoCreditoAberta(true)
+}
+
+async function confirmarNovoCredito() {
+  if (!selected) return
+
+  const valor = Number(
+    novoCredito.replace(/\./g, "").replace(",", ".")
+  )
+
+  if (!Number.isFinite(valor) || valor <= 0) {
+    alert("Informe um valor de depósito válido.")
+    setConfirmacaoCreditoAberta(false)
+    return
+  }
+
   setSalvandoCredito(true)
 
-  // Registra o depósito e distribui automaticamente entre os fiados.
   const { data, error } = await supabase.rpc(
     "registrar_deposito_cliente",
     {
@@ -236,8 +252,9 @@ async function salvarNovoCredito() {
     creditoDisponivel: Number(resultado.credito_disponivel)
   })
 
-  setCreditoAberto(false)
-  setNovoCredito("")
+ setCreditoAberto(false)
+setConfirmacaoCreditoAberta(false)
+setNovoCredito("")
 
   await fetchClientes()
 
@@ -873,18 +890,112 @@ ${comprasCliente.length
                 placeholder="Ex.: 25,00"
                 value={novoCredito}
                 onChange={e => setNovoCredito(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") void salvarNovoCredito() }}
+                onKeyDown={e => {
+  if (e.key === "Enter") validarNovoCredito()
+}}
               />
             </Campo>
-            <div style={styles.helperText}>O valor informado será somado ao crédito já disponível. Depois, esse saldo poderá ser descontado de uma venda.</div>
+            <div style={styles.helperText}>
+  Após a confirmação, o depósito será utilizado primeiro para quitar os fiados em aberto, começando pelos mais antigos. Se sobrar algum valor, ele será convertido em crédito disponível.
+</div>
             <div className="clientes-modal-actions">
-              <button style={styles.secondaryBtn} disabled={salvandoCredito} onClick={() => setCreditoAberto(false)}>Cancelar</button>
-              <button style={styles.primaryBtnSmall} disabled={salvandoCredito} onClick={() => void salvarNovoCredito()}>{salvandoCredito ? "Salvando..." : "Adicionar crédito"}</button>
-            </div>
+  <button
+    type="button"
+    style={styles.secondaryBtn}
+    onClick={() => {
+      setCreditoAberto(false)
+      setNovoCredito("")
+    }}
+  >
+    Cancelar
+  </button>
+
+  <button
+    type="button"
+    style={styles.primaryBtnSmall}
+    onClick={validarNovoCredito}
+  >
+    Continuar
+  </button>
+</div>
           </div>
         </div>
       )}
+{confirmacaoCreditoAberta && selected && (
+  <div
+    className="cliente-modal-overlay"
+    style={{ ...styles.overlay, zIndex: 3300 }}
+    onClick={() => {
+      if (!salvandoCredito) setConfirmacaoCreditoAberta(false)
+    }}
+  >
+    <div
+      className="cliente-modal"
+      style={{ ...styles.modal, maxWidth: 420 }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div style={styles.modalHeader}>
+        <div>
+          <h2 className="cliente-modal-title" style={styles.modalTitle}>
+            Confirmar depósito
+          </h2>
+          <div style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
+            Confira os dados antes de continuar.
+          </div>
+        </div>
 
+        <button
+          type="button"
+          style={styles.closeBtn}
+          disabled={salvandoCredito}
+          onClick={() => setConfirmacaoCreditoAberta(false)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div style={{ ...styles.creditBalanceBox, marginBottom: 12 }}>
+        <div style={styles.creditLabel}>Cliente</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "#333", marginTop: 5 }}>
+          {selected.nome}
+        </div>
+      </div>
+
+      <div style={{ ...styles.creditBalanceBox, marginBottom: 16 }}>
+        <div style={styles.creditLabel}>Valor do depósito</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: "#8f7131", marginTop: 5 }}>
+          {formatarMoeda(
+            Number(novoCredito.replace(/\./g, "").replace(",", "."))
+          )}
+        </div>
+      </div>
+
+      <div style={styles.helperText}>
+        Ao confirmar, o sistema registrará o depósito e utilizará o valor primeiro para quitar os fiados em aberto, dos mais antigos para os mais recentes. Caso reste algum valor, ele será acrescentado ao crédito disponível da cliente.
+      </div>
+
+      <div className="clientes-modal-actions">
+        <button
+          type="button"
+          style={styles.secondaryBtn}
+          disabled={salvandoCredito}
+          onClick={() => setConfirmacaoCreditoAberta(false)}
+        >
+          Voltar
+        </button>
+
+        <button
+          type="button"
+          style={styles.primaryBtnSmall}
+          disabled={salvandoCredito}
+          onClick={() => void confirmarNovoCredito()}
+        >
+          {salvandoCredito ? "Registrando..." : "Confirmar depósito"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {clienteWhats && (
         <div className="cliente-modal-overlay" style={{ ...styles.overlay, zIndex: 3100 }} onClick={() => setClienteWhats(null)}>
           <div className="cliente-modal" style={{ ...styles.modal, maxWidth: 480 }} onClick={e => e.stopPropagation()}>
