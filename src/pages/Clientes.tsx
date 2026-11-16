@@ -250,25 +250,7 @@ async function salvarNovoCredito() {
 }
 
 
-    const saldoAtualizado = Number(selected.creditoDisponivel || 0) + valor
-    setSalvandoCredito(true)
-    const { error } = await supabase
-      .from("clientes")
-      .update({ creditoDisponivel: saldoAtualizado })
-      .eq("id", selected.id)
-    setSalvandoCredito(false)
-
-    if (error) {
-      alert("Erro ao adicionar crédito: " + error.message)
-      return
-    }
-
-    setSelected({ ...selected, creditoDisponivel: saldoAtualizado })
-    setCreditoAberto(false)
-    setNovoCredito("")
-    await fetchClientes()
-    alert(`Crédito de ${formatarMoeda(valor)} adicionado para ${selected.nome}.`)
-  }
+    
 
   function abrirWhats(cliente: Cliente) {
     if (!cliente.celular?.trim()) {
