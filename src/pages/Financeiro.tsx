@@ -111,6 +111,19 @@ type VendaItem = {
 
 type Fiado = {
   compra: Compra
+  original: number
+  recebido: number
+  pendente: number
+}
+
+// Resumo de uma cliente em "A receber": todas as vendas em aberto dela juntas
+type Devedor = {
+  chave: string
+  clienteid: string | null
+  cliente: string
+  cpf: string
+  vendas: Fiado[]
+  original: number
   recebido: number
   pendente: number
 }
@@ -145,18 +158,11 @@ function moeda(valor: number) {
   })
 }
 
+// Campo de dinheiro no jeito normal do Brasil: a pessoa digita só os números
+// e o valor se ajeita sozinho (digitar 1 5 0 0 0 vira R$ 150,00).
 function numeroMoeda(texto: string) {
-  const limpo = texto.replace(/[^\d,.-]/g, "").trim()
-  if (!limpo) return 0
-  const ultimoVirgula = limpo.lastIndexOf(",")
-  const ultimoPonto = limpo.lastIndexOf(".")
-  let normalizado = limpo
-  if (ultimoVirgula > ultimoPonto) {
-    normalizado = limpo.replace(/\./g, "").replace(",", ".")
-  } else if (ultimoPonto > ultimoVirgula && ultimoVirgula !== -1) {
-    normalizado = limpo.replace(/,/g, "")
-  }
-  return Number(normalizado) || 0
+  const digitos = texto.replace(/\D/g, "")
+  return digitos ? Number(digitos) / 100 : 0
 }
 
 function moedaInput(valor: number) {
@@ -234,9 +240,9 @@ export default function Financeiro() {
 
   const [modalReceita, setModalReceita] = useState(false)
   const [modalDespesa, setModalDespesa] = useState(false)
-  const [modalFiado, setModalFiado] = useState(false)
-  const [fiadoSelecionado, setFiadoSelecionado] = useState<Fiado | null>(null)
+  const [devedorAberto, setDevedorAberto] = useState<string | null>(null)
   const [valorPagamentoFiado, setValorPagamentoFiado] = useState(0)
+  const [recebendoFiado, setRecebendoFiado] = useState(false)
 
   const [descricaoReceita, setDescricaoReceita] = useState("")
   const [valorReceita, setValorReceita] = useState(0)
@@ -401,6 +407,7 @@ export default function Financeiro() {
 
       return {
         compra,
+        original: centavos(valorLiquido),
         recebido: centavos(recebido),
         // Arredonda para centavos: venda quitada fica com 0 e sai de "A receber"
         pendente: centavos(Math.max(valorLiquido - recebido, 0))
@@ -410,9 +417,44 @@ export default function Financeiro() {
 }, [compras, receitas])
 
 const totalAReceber = useMemo(
-  () => fiado.reduce((total, item) => total + item.pendente, 0),
+  () => centavos(fiado.reduce((total, item) => total + item.pendente, 0)),
   [fiado]
 )
+
+// Uma linha por cliente, somando todas as vendas em aberto dela
+const devedores = useMemo(() => {
+  const mapa = new Map<string, Devedor>()
+
+  fiado.forEach(item => {
+    const chave = item.compra.clienteid || `sem-cadastro-${item.compra.cliente}`
+    const atual = mapa.get(chave) || {
+      chave,
+      clienteid: item.compra.clienteid,
+      cliente: item.compra.cliente || "Cliente",
+      cpf: item.compra.cpf,
+      vendas: [],
+      original: 0,
+      recebido: 0,
+      pendente: 0
+    }
+
+    atual.vendas.push(item)
+    atual.original = centavos(atual.original + item.original)
+    atual.recebido = centavos(atual.recebido + item.recebido)
+    atual.pendente = centavos(atual.pendente + item.pendente)
+    mapa.set(chave, atual)
+  })
+
+  return [...mapa.values()]
+    .map(devedor => ({
+      ...devedor,
+      // Da venda mais antiga para a mais nova (mesma ordem em que o pagamento é aplicado)
+      vendas: [...devedor.vendas].sort((a, b) => String(a.compra.criadoem).localeCompare(String(b.compra.criadoem)))
+    }))
+    .sort((a, b) => b.pendente - a.pendente)
+}, [fiado])
+
+const devedorSelecionado = devedores.find(devedor => devedor.chave === devedorAberto) || null
   
   const receitasFiltradas = useMemo(() => {
     return receitasPeriodo.filter(r => filtroStatus === "todos" || r.status === filtroStatus)
@@ -467,22 +509,49 @@ const totalAReceber = useMemo(
     await fetchFinanceiro()
   }
 
-  async function registrarPagamentoFiado() {
-    if (!fiadoSelecionado || valorPagamentoFiado <= 0 || valorPagamentoFiado > fiadoSelecionado.pendente) {
-      alert("Informe um valor válido, sem ultrapassar o saldo pendente.")
+  // Recebe um valor da cliente e abate das dívidas dela, da venda mais antiga
+  // para a mais nova. Usa a mesma função do banco do botão "Novo Crédito"
+  // (registrar_deposito_cliente), então o histórico da cliente fica igual.
+  async function receberDoDevedor() {
+    if (!devedorSelecionado) return
+
+    if (!devedorSelecionado.clienteid) {
+      alert("Esta venda não está ligada a um cadastro de cliente, então não é possível receber por aqui.")
       return
     }
-    const hoje = hojeISO()
-    const { error } = await supabase.from("receitas").insert({
-      tipo: "PAGAMENTO_FIADO",
-      descricao: `Pagamento de fiado - ${fiadoSelecionado.compra.cliente || "Cliente"}`,
-      valor: valorPagamentoFiado, dataCompetencia: hoje, dataRecebimento: hoje,
-      status: "RECEBIDA", observacao: `Pagamento referente à venda ${fiadoSelecionado.compra.id}`,
-      compraId: fiadoSelecionado.compra.id
+
+    if (valorPagamentoFiado <= 0 || valorPagamentoFiado > devedorSelecionado.pendente) {
+      alert(`Informe um valor entre R$ 0,01 e ${moeda(devedorSelecionado.pendente)}.`)
+      return
+    }
+
+    const confirmar = window.confirm(
+      `Receber ${moeda(valorPagamentoFiado)} de ${devedorSelecionado.cliente}?\n\n` +
+      "O valor será abatido primeiro da venda mais antiga."
+    )
+    if (!confirmar) return
+
+    setRecebendoFiado(true)
+
+    const { data, error } = await supabase.rpc("registrar_deposito_cliente", {
+      p_cliente_id: devedorSelecionado.clienteid,
+      p_valor: valorPagamentoFiado,
+      p_data_deposito: hojeISO()
     })
-    if (error) { alert("Erro ao registrar pagamento: " + error.message); return }
-    setModalFiado(false); setFiadoSelecionado(null); setValorPagamentoFiado(0)
+
+    setRecebendoFiado(false)
+
+    if (error) {
+      alert("Erro ao registrar pagamento: " + error.message)
+      return
+    }
+
+    const resultado = data as { valor_aplicado_fiado: number }
+
+    setValorPagamentoFiado(0)
     await fetchFinanceiro()
+
+    alert(`Pagamento registrado! ${moeda(Number(resultado?.valor_aplicado_fiado || 0))} abatidos das vendas em aberto.`)
   }
 
   async function cancelarReceita(receita: Receita) {
@@ -606,7 +675,7 @@ const totalAReceber = useMemo(
       <div className="fin-grid" style={{marginBottom:16}}>
         <Kpi label="Faturamento" value={moeda(faturamento)} detail={`${vendasPeriodo.length} venda(s)${totalReceitasExtras > 0 ? ` + ${moeda(totalReceitasExtras)} outras receitas` : ""}`} />
         <Kpi label="Recebido" value={moeda(totalRecebido)} detail={`Fiados pagos e outras receitas (sem crédito de cliente)`} />
-        <Kpi label="A receber" value={moeda(totalAReceber)} detail={`${fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).length} venda(s) em aberto`} />
+        <Kpi label="A receber" value={moeda(totalAReceber)} detail={`${devedores.length} cliente(s) · ${fiado.length} venda(s) em aberto`} />
         <Kpi label="Despesas pagas" value={moeda(totalDespesas)} detail={`${despesasPagas.length} lançamento(s)`} />
         <Kpi label="Lucro bruto" value={moeda(lucroBruto)} detail={`Margem ${margemBruta.toFixed(1)}%`} />
         <Kpi label="Resultado líquido" value={moeda(resultadoLiquido)} detail={`Margem ${margemLiquida.toFixed(1)}%`} destaque />
@@ -617,7 +686,7 @@ const totalAReceber = useMemo(
       <div className="fin-tabs" style={tabs}>
         {[
           ["resumo","Visão geral"],["receitas","Receitas"],["despesas","Despesas"],["fiado","A receber"]
-        ].map(([value,label]) => <button key={value} style={aba === value ? tabAtiva : tab} onClick={() => setAba(value as typeof aba)}>{label}{value === "fiado" && totalAReceber > 0 ? <span style={tabBadge}>{fiado.filter(i => dentroDoPeriodo(i.compra.criadoem)).length}</span> : null}</button>)}
+        ].map(([value,label]) => <button key={value} style={aba === value ? tabAtiva : tab} onClick={() => setAba(value as typeof aba)}>{label}{value === "fiado" && totalAReceber > 0 ? <span style={tabBadge}>{devedores.length}</span> : null}</button>)}
       </div>
 
       {aba === "resumo" && (
@@ -664,16 +733,18 @@ const totalAReceber = useMemo(
         {!despesasFiltradas.length && <div style={emptyText}>Nenhuma despesa encontrada.</div>}
       </ListCard>}
 
-      {aba === "fiado" && <ListCard title="Valores a receber" subtitle="Vendas em aberto e saldo ainda não recebido." action={<strong style={fiadoTotal}>{moeda(totalAReceber)}</strong>}>
-        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Cliente</th><th>Venda</th><th className="right">Original</th><th className="right">Recebido</th><th className="right">Pendente</th><th></th></tr></thead><tbody>
-          {fiado.filter(i=>dentroDoPeriodo(i.compra.criadoem)).map(i=><tr key={i.compra.id}><td><strong>{i.compra.cliente||"Cliente"}</strong><div style={muted}>{i.compra.cpf}</div></td><td>{dataBR(i.compra.criadoem)}</td><td className="right">
-  {moeda(Math.max(
-    i.compra.valor - i.compra.cupomusado - i.compra.creditoutilizado,
-    0
-  ))}
-</td><td className="right" style={{color:"#5f7f47"}}>{moeda(i.recebido)}</td><td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(i.pendente)}</td><td><button style={btnSmall} onClick={()=>{setFiadoSelecionado(i);setValorPagamentoFiado(0);setModalFiado(true)}}>Receber</button></td></tr>)}
+      {aba === "fiado" && <ListCard title="Valores a receber" subtitle="Clientes com vendas em aberto (todas as datas)." action={<strong style={fiadoTotal}>{moeda(totalAReceber)}</strong>}>
+        <div className="fin-scroll"><table className="fin-table"><thead><tr><th>Cliente</th><th>Vendas em aberto</th><th className="right">Original</th><th className="right">Recebido</th><th className="right">Pendente</th><th></th></tr></thead><tbody>
+          {devedores.map(d=><tr key={d.chave}>
+            <td><strong>{d.cliente}</strong><div style={muted}>{d.cpf}</div></td>
+            <td>{d.vendas.length} venda(s)</td>
+            <td className="right">{moeda(d.original)}</td>
+            <td className="right" style={{color:"#5f7f47"}}>{moeda(d.recebido)}</td>
+            <td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(d.pendente)}</td>
+            <td><button style={btnSmall} onClick={()=>{setDevedorAberto(d.chave);setValorPagamentoFiado(0)}}>Ver pendentes</button></td>
+          </tr>)}
         </tbody></table></div>
-        {!fiado.filter(i=>dentroDoPeriodo(i.compra.criadoem)).length&&<div style={emptyText}>Nenhum valor pendente no período.</div>}
+        {!devedores.length&&<div style={emptyText}>Nenhum valor pendente.</div>}
       </ListCard>}
 
       {modalReceita && <Modal titulo="Nova receita" subtitulo="Registre uma entrada financeira." onClose={()=>setModalReceita(false)}>
@@ -696,10 +767,15 @@ const totalAReceber = useMemo(
         <div style={resumo}>Saída: <strong>{moeda(valorDespesa)}</strong></div><button type="button" style={btnExpensePrimary} onClick={criarDespesa} disabled={carregando}>Cadastrar despesa</button>
       </Modal>}
 
-      {modalFiado&&fiadoSelecionado&&<Modal titulo="Receber fiado" subtitulo={`Venda de ${fiadoSelecionado.compra.cliente||"cliente"}`} onClose={()=>{setModalFiado(false);setFiadoSelecionado(null)}}>
-        <div style={clienteSelecionado}><div><strong>{fiadoSelecionado.compra.cliente||"Cliente"}</strong><div style={muted}>{fiadoSelecionado.compra.cpf}</div></div><div style={clientePontos}>Pendente: {moeda(fiadoSelecionado.pendente)}</div></div>
-        <label style={fieldLabel}>Valor recebido</label><input style={input} inputMode="decimal" value={moedaInput(valorPagamentoFiado)} placeholder="R$ 0,00" onChange={e=>setValorPagamentoFiado(numeroMoeda(e.target.value))}/>
-        <button style={btnPrimary} onClick={registrarPagamentoFiado}>Registrar pagamento</button>
+      {devedorSelecionado&&<Modal titulo="Vendas em aberto" subtitulo={devedorSelecionado.cliente} onClose={()=>{setDevedorAberto(null);setValorPagamentoFiado(0)}}>
+        <div style={clienteSelecionado}><div><strong>{devedorSelecionado.cliente}</strong><div style={muted}>{devedorSelecionado.cpf}</div></div><div style={clientePontos}>Total pendente: {moeda(devedorSelecionado.pendente)}</div></div>
+        <label style={fieldLabel}>Valor recebido</label>
+        <input style={input} inputMode="numeric" value={moedaInput(valorPagamentoFiado)} placeholder="R$ 0,00" onChange={e=>setValorPagamentoFiado(numeroMoeda(e.target.value))}/>
+        <div style={{...muted,marginTop:6}}>O valor é abatido primeiro da venda mais antiga. Para deixar crédito adiantado, use "Novo Crédito" na tela de Clientes.</div>
+        <button style={btnPrimary} disabled={recebendoFiado} onClick={()=>void receberDoDevedor()}>{recebendoFiado?"Registrando...":"Receber"}</button>
+        <div className="fin-scroll" style={{marginTop:16}}><table className="fin-table" style={{minWidth:0}}><thead><tr><th>Venda</th><th className="right">Original</th><th className="right">Recebido</th><th className="right">Pendente</th></tr></thead><tbody>
+          {devedorSelecionado.vendas.map(v=><tr key={v.compra.id}><td>{dataBR(v.compra.criadoem)}</td><td className="right">{moeda(v.original)}</td><td className="right" style={{color:"#5f7f47"}}>{moeda(v.recebido)}</td><td className="right" style={{color:"#b35a5a",fontWeight:700}}>{moeda(v.pendente)}</td></tr>)}
+        </tbody></table></div>
       </Modal>}
     </div>
   )
